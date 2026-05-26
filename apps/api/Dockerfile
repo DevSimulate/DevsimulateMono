@@ -1,6 +1,8 @@
 FROM node:20-slim AS base
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # Copy workspace manifests so npm can resolve workspaces
 COPY package.json package-lock.json ./
 COPY packages/ ./packages/
@@ -21,6 +23,8 @@ RUN npm run build --workspace=apps/api
 # ── Production image ─────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 
