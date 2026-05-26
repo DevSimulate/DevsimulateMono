@@ -1,0 +1,10 @@
+**
+!README.md
+!LICENSE
+!package.json
+!media/**
+!out/extension.js
+!out/types.js
+!out/commands/**
+!out/services/**
+!out/views/**
