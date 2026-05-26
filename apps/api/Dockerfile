@@ -13,7 +13,7 @@ RUN npm ci --workspace=apps/api --include-workspace-root
 COPY apps/api/ ./apps/api/
 
 # Generate Prisma client
-RUN npx --prefix apps/api prisma generate
+RUN cd apps/api && npx prisma generate
 
 # Build TypeScript
 RUN npm run build --workspace=apps/api
