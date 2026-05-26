@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg: #F7F6F3;
+  --bg2: #EEECEA;
+  --surface: #FFFFFF;
+  --border: #E4E2DD;
+  --text: #1A1A1A;
+  --text2: #6B6B6B;
+  --indigo: #5B5BD6;
+  --indigo-light: #EBEBFF;
+  --teal: #0D9488;
+  --teal-light: #CCFBF1;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Subtle dot grid ── */
+.bg-grid {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle, #C8C4BC 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── Gradient text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #5B5BD6 0%, #0D9488 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.06);
+  border-color: #C4C2DB;
+}
+
+/* ── Glow border card (Pro) ── */
+.card-glow {
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1.5px solid #5B5BD6;
+  box-shadow: 0 0 0 4px rgba(91,91,214,0.08), 0 8px 32px rgba(91,91,214,0.12);
+  transition: box-shadow 0.3s;
+}
+.card-glow:hover {
+  box-shadow: 0 0 0 6px rgba(91,91,214,0.12), 0 12px 40px rgba(91,91,214,0.18);
+}
+
+/* ── Nav ── */
+.nav-glass {
+  background: rgba(247, 246, 243, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Buttons ── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #5B5BD6, #4747B8);
+  color: white;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 11px 24px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(91, 91, 214, 0.35);
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(91, 91, 214, 0.45);
+  background: linear-gradient(135deg, #6A6ADF, #5B5BD6);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 11px 24px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.btn-outline:hover {
+  background: #F0EFFF;
+  border-color: #5B5BD6;
+  color: #5B5BD6;
+  transform: translateY(-2px);
+}
+
+/* ── Score card float ── */
+@keyframes scoreFloat {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-10px) rotate(-1.5deg); }
+}
+.score-float { animation: scoreFloat 5s ease-in-out infinite; }
+
+/* ── Fade in up ── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+.delay-100 { animation-delay: 0.1s; opacity: 0; }
+.delay-200 { animation-delay: 0.2s; opacity: 0; }
+.delay-300 { animation-delay: 0.3s; opacity: 0; }
+.delay-400 { animation-delay: 0.4s; opacity: 0; }
+.delay-500 { animation-delay: 0.5s; opacity: 0; }
+
+/* ── Shine on hover ── */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -75%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.6) 50%, transparent 60%);
+  transform: skewX(-20deg);
+  transition: left 0.5s ease;
+}
+.shine:hover::after { left: 125%; }
+
+/* ── Score bar ── */
+.score-bar-fill {
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #5B5BD6, #0D9488);
+  transition: width 0.8s ease-out;
+}
+
+/* ── Section label ── */
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #5B5BD6;
+  background: #EBEBFF;
+  border-radius: 99px;
+  padding: 4px 12px;
+  margin-bottom: 16px;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #C4C2DB; }

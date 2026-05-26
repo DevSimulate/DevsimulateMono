@@ -1,0 +1,110 @@
+import "dotenv/config";
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import authRouter from "./routes/auth";
+import ticketsRouter from "./routes/tickets";
+import submissionsRouter from "./routes/submissions";
+import webhooksRouter from "./routes/webhooks";
+import usersRouter from "./routes/users";
+import billingRouter from "./routes/billing";
+import employerRouter from "./routes/employer";
+import employerDemoRouter from "./routes/employer-demo";
+import { startReviewWorker } from "./lib/queue";
+
+const app = express();
+const PORT = Number(process.env.PORT ?? 3001);
+
+// ---------------------------------------------------------------------------
+// Raw body capture for GitHub webhook signature verification.
+// Must run BEFORE express.json() so the raw buffer is preserved.
+// ---------------------------------------------------------------------------
+app.use(
+  (req: Request & { rawBody?: Buffer }, _res: Response, next: NextFunction) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      req.rawBody = Buffer.concat(chunks);
+    });
+    next();
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Security & parsing
+// ---------------------------------------------------------------------------
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+    credentials: true,
+  })
+);
+app.use(express.json());
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
+app.use("/auth", authRouter);
+app.use("/tickets", ticketsRouter);
+app.use("/submissions", submissionsRouter);
+app.use("/webhooks", webhooksRouter);
+app.use("/users", usersRouter);
+app.use("/billing", billingRouter);
+app.use("/", employerDemoRouter);
+app.use("/", employerRouter);
+
+// ---------------------------------------------------------------------------
+// 404 handler
+// ---------------------------------------------------------------------------
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+// ---------------------------------------------------------------------------
+// Global error handler
+// ---------------------------------------------------------------------------
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("[unhandled-error]", err.message, err.stack);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+app.listen(PORT, () => {
+  console.log(`DevSimulate API running on http://localhost:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV ?? "development"}`);
+});
+
+// Start background review worker only when Redis is available
+if (process.env.REDIS_URL || process.env.NODE_ENV === "production") {
+  startReviewWorker();
+  console.log("[queue] PR review worker started");
+} else {
+  // Try to connect; log a single warning if Redis isn't running
+  import("ioredis").then(({ default: IORedis }) => {
+    const testRedis = new IORedis("redis://localhost:6379", {
+      maxRetriesPerRequest: 1,
+      retryStrategy: () => null,
+    });
+    testRedis.once("ready", () => {
+      testRedis.disconnect();
+      startReviewWorker();
+      console.log("[queue] PR review worker started");
+    });
+    testRedis.once("error", () => {
+      testRedis.disconnect();
+      console.warn("[queue] Redis not available — review worker disabled. Start Redis to enable PR scoring.");
+    });
+  });
+}
+
+export default app;

@@ -1,0 +1,221 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Stack {
+  DOTNET
+  NODE
+  ANGULAR
+  REACT
+}
+
+enum Difficulty {
+  JUNIOR
+  MID
+  SENIOR
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  COMPANY
+}
+
+enum SubmissionStatus {
+  PENDING
+  REVIEWED
+  VOID
+}
+
+enum AIUsageDeclaration {
+  NO_AI_USED
+  AI_USED_FOR_PHRASING
+  AI_USED_FOR_UNDERSTANDING
+  AI_USED_FOR_ANSWER
+}
+
+model User {
+  id               String           @id @default(uuid())
+  githubId         String           @unique
+  githubUsername   String           @unique
+  email            String?
+  primaryStack     Stack            @default(NODE)
+  subscriptionTier SubscriptionTier @default(FREE)
+  skillScore       Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  submissions      Submission[]
+  assignments      TicketAssignment[]
+  subscription     Subscription?
+  orgMemberships   OrgMember[]
+  applications     Application[]
+}
+
+model Codebase {
+  id          String   @id @default(uuid())
+  name        String
+  stack       Stack
+  repoUrl     String
+  description String
+  companyLore String   @db.Text
+  createdAt   DateTime @default(now())
+  tickets     Ticket[]
+}
+
+model Ticket {
+  id              String      @id @default(uuid())
+  title           String
+  description     String      @db.Text
+  stack           Stack
+  difficulty      Difficulty  @default(JUNIOR)
+  filesInvolved   String[]
+  rubric          Json
+  expectedMinutes Int         @default(60)
+  codebaseId      String
+  codebase        Codebase    @relation(fields: [codebaseId], references: [id])
+  createdAt       DateTime    @default(now())
+  submissions     Submission[]
+  assignments     TicketAssignment[]
+  jobPosts        JobPost[]
+}
+
+model TicketAssignment {
+  id         String   @id @default(uuid())
+  userId     String
+  ticketId   String
+  branchName String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+  ticket     Ticket   @relation(fields: [ticketId], references: [id])
+
+  @@unique([userId, ticketId])
+}
+
+enum OrgPlan {
+  HIRING
+  TRAINING
+  ENTERPRISE
+}
+
+enum OrgRole {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+enum ApplicationStatus {
+  INVITED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+}
+
+model Subscription {
+  id                   String           @id @default(uuid())
+  userId               String           @unique
+  stripeCustomerId     String           @unique
+  stripeSubscriptionId String?
+  tier                 SubscriptionTier @default(FREE)
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  user                 User             @relation(fields: [userId], references: [id])
+}
+
+model Submission {
+  id                 String           @id @default(uuid())
+  userId             String
+  ticketId           String
+  prUrl              String
+  prDescription      String           @db.Text
+  branchName         String
+  status             SubmissionStatus @default(PENDING)
+  scoreTotal         Int?
+  scoreDiagnosis     Int?
+  scoreDesign        Int?
+  scoreCommunication Int?
+  scoreExecution     Int?
+  claudeReview       Json?
+  riskScore          Int              @default(0)
+  submittedAt        DateTime         @default(now())
+  reviewedAt         DateTime?
+  user               User             @relation(fields: [userId], references: [id])
+  ticket             Ticket           @relation(fields: [ticketId], references: [id])
+  applications       Application[]
+  followUp           FollowUpQuestion?
+}
+
+model FollowUpQuestion {
+  id                  String                @id @default(uuid())
+  submissionId        String                @unique
+  submission          Submission            @relation(fields: [submissionId], references: [id])
+  question1           String                @db.Text
+  question2           String                @db.Text
+  answer1             String?               @db.Text
+  answer2             String?               @db.Text
+  scoreBonus          Int?
+  claudeFeedback      String?               @db.Text
+  aiDeclaration       AIUsageDeclaration?
+  declarationMismatch Boolean               @default(false)
+  employerSummary     String?               @db.Text
+  answeredAt          DateTime?
+  createdAt           DateTime              @default(now())
+}
+
+model Organisation {
+  id        String      @id @default(uuid())
+  name      String
+  domain    String?
+  plan      OrgPlan     @default(HIRING)
+  stripeId  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  members   OrgMember[]
+  jobPosts  JobPost[]
+}
+
+model OrgMember {
+  id       String   @id @default(uuid())
+  orgId    String
+  userId   String
+  role     OrgRole  @default(MEMBER)
+  joinedAt DateTime @default(now())
+  org      Organisation @relation(fields: [orgId], references: [id])
+  user     User         @relation(fields: [userId], references: [id])
+
+  @@unique([orgId, userId])
+}
+
+model JobPost {
+  id           String        @id @default(uuid())
+  orgId        String
+  ticketId     String
+  title        String
+  description  String?       @db.Text
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  org          Organisation  @relation(fields: [orgId], references: [id])
+  ticket       Ticket        @relation(fields: [ticketId], references: [id])
+  applications Application[]
+}
+
+model Application {
+  id           String            @id @default(uuid())
+  jobPostId    String
+  userId       String
+  submissionId String?
+  status       ApplicationStatus @default(INVITED)
+  invitedAt    DateTime          @default(now())
+  completedAt  DateTime?
+  jobPost      JobPost     @relation(fields: [jobPostId], references: [id])
+  user         User        @relation(fields: [userId], references: [id])
+  submission   Submission? @relation(fields: [submissionId], references: [id])
+
+  @@unique([jobPostId, userId])
+}

@@ -1,0 +1,81 @@
+{
+  "name": "devsimulate",
+  "displayName": "DevSimulate",
+  "description": "Developer training platform — solve real tickets, get scored by AI",
+  "version": "0.1.0",
+  "publisher": "devsimulate",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "icon": "media/icon.png",
+  "scripts": {
+    "build": "tsc -p ./",
+    "dev": "tsc -p ./ --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "devsimulate",
+          "title": "DevSimulate",
+          "icon": "media/activitybar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "devsimulate": [
+        {
+          "type": "webview",
+          "id": "devsimulate.sidebar",
+          "name": "DevSimulate",
+          "icon": "media/activitybar-icon.svg",
+          "contextualTitle": "DevSimulate"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "devsimulate.login",
+        "title": "DevSimulate: Login with GitHub"
+      },
+      {
+        "command": "devsimulate.cloneCodebase",
+        "title": "DevSimulate: Clone Codebase"
+      },
+      {
+        "command": "devsimulate.submitPR",
+        "title": "DevSimulate: Submit PR for Review"
+      },
+      {
+        "command": "devsimulate.viewScore",
+        "title": "DevSimulate: View Score"
+      }
+    ],
+    "configuration": {
+      "title": "DevSimulate",
+      "properties": {
+        "devsimulate.apiUrl": {
+          "type": "string",
+          "default": "https://api.devsimulate.io",
+          "description": "DevSimulate API base URL"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "simple-git": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.26.0",
+    "typescript": "^5.4.0"
+  }
+}
