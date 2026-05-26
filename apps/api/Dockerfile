@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 WORKDIR /app
 
 # Copy workspace manifests so npm can resolve workspaces
@@ -19,7 +19,7 @@ RUN cd apps/api && npx prisma generate
 RUN npm run build --workspace=apps/api
 
 # ── Production image ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
