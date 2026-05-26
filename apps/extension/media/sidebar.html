@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{{NONCE}}';" />
+    <title>DevSimulate</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: var(--vscode-font-family);
+        font-size: var(--vscode-font-size);
+        color: var(--vscode-editor-foreground);
+        background: var(--vscode-editor-background);
+        padding: 12px;
+        line-height: 1.5;
+      }
+
+      h2 {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: var(--vscode-editor-foreground);
+        opacity: 0.7;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .section {
+        margin-bottom: 16px;
+      }
+
+      /* ---- User profile ---- */
+      .profile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: var(--vscode-sideBar-background);
+        border-radius: 6px;
+        border: 1px solid var(--vscode-panel-border);
+      }
+
+      .profile-username {
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      .profile-score {
+        font-size: 11px;
+        opacity: 0.7;
+      }
+
+      .score-badge {
+        margin-left: auto;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-radius: 12px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      /* ---- Ticket card ---- */
+      .ticket-card {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .ticket-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .ticket-title {
+        font-weight: 600;
+        font-size: 13px;
+        flex: 1;
+      }
+
+      .difficulty-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 4px;
+        white-space: nowrap;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .difficulty-badge.JUNIOR { background: #1e7e34; color: #fff; }
+      .difficulty-badge.MID    { background: #b45309; color: #fff; }
+      .difficulty-badge.SENIOR { background: #991b1b; color: #fff; }
+
+      .ticket-description {
+        font-size: 12px;
+        opacity: 0.85;
+        margin-bottom: 10px;
+        max-height: 100px;
+        overflow-y: auto;
+      }
+
+      .files-label {
+        font-size: 11px;
+        font-weight: 600;
+        opacity: 0.6;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .file-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .file-list li {
+        font-size: 11px;
+        font-family: var(--vscode-editor-font-family, monospace);
+        color: var(--vscode-textLink-foreground);
+        opacity: 0.9;
+        padding: 2px 4px;
+        background: var(--vscode-editor-background);
+        border-radius: 3px;
+      }
+
+      /* ---- Buttons ---- */
+      button {
+        width: 100%;
+        padding: 7px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: var(--vscode-font-family);
+        font-size: 12px;
+        font-weight: 600;
+        transition: opacity 0.1s;
+      }
+
+      button:hover { opacity: 0.85; }
+      button:active { opacity: 0.7; }
+
+      .btn-primary {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+      }
+
+      .btn-secondary {
+        background: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+        margin-top: 6px;
+      }
+
+      .btn-login {
+        background: #24292e;
+        color: #fff;
+        padding: 9px 12px;
+      }
+
+      /* ---- Score bars ---- */
+      .score-section {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 6px;
+        padding: 12px;
+      }
+
+      .score-total {
+        font-size: 28px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 12px;
+        color: var(--vscode-button-background);
+      }
+
+      .score-total span {
+        font-size: 14px;
+        font-weight: 400;
+        opacity: 0.6;
+      }
+
+      .score-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .score-label {
+        font-size: 11px;
+        width: 80px;
+        flex-shrink: 0;
+        opacity: 0.8;
+      }
+
+      .score-bar-bg {
+        flex: 1;
+        height: 6px;
+        background: var(--vscode-editor-background);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .score-bar-fill {
+        height: 100%;
+        border-radius: 3px;
+        background: var(--vscode-button-background);
+        transition: width 0.4s ease;
+      }
+
+      .score-value {
+        font-size: 11px;
+        font-weight: 600;
+        width: 28px;
+        text-align: right;
+        flex-shrink: 0;
+      }
+
+      /* ---- Status message ---- */
+      .status-msg {
+        font-size: 11px;
+        opacity: 0.6;
+        text-align: center;
+        padding: 8px 0;
+      }
+
+      /* ---- Hidden ---- */
+      .hidden { display: none !important; }
+
+      /* ---- Separator ---- */
+      hr {
+        border: none;
+        border-top: 1px solid var(--vscode-panel-border);
+        margin: 12px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login view (shown when not authenticated) -->
+    <div id="view-login">
+      <div style="text-align:center; padding: 24px 0 16px;">
+        <div style="font-size:24px; margin-bottom:8px;">⚡</div>
+        <div style="font-weight:700; font-size:15px; margin-bottom:4px;">DevSimulate</div>
+        <div style="font-size:12px; opacity:0.6; margin-bottom:20px;">
+          Solve real tickets. Get scored by AI.
+        </div>
+        <button class="btn-login" id="btn-login">Login with GitHub</button>
+      </div>
+    </div>
+
+    <!-- Authenticated view -->
+    <div id="view-main" class="hidden">
+
+      <!-- User profile -->
+      <div class="section">
+        <div class="profile">
+          <div>
+            <div class="profile-username" id="profile-username">—</div>
+            <div class="profile-score">Skill Score</div>
+          </div>
+          <div class="score-badge" id="profile-score">0</div>
+        </div>
+      </div>
+
+      <!-- Current ticket -->
+      <div class="section" id="section-ticket">
+        <h2>Current Ticket</h2>
+        <div class="ticket-card" id="ticket-card">
+          <div class="ticket-header">
+            <div class="ticket-title" id="ticket-title">Loading...</div>
+            <span class="difficulty-badge" id="ticket-difficulty"></span>
+          </div>
+          <div class="ticket-description" id="ticket-description"></div>
+          <div class="files-label">Files to investigate</div>
+          <ul class="file-list" id="ticket-files"></ul>
+        </div>
+
+        <div style="margin-top: 10px;">
+          <button class="btn-primary" id="btn-clone">Clone Codebase</button>
+          <button class="btn-secondary" id="btn-submit">Submit PR for Review</button>
+        </div>
+      </div>
+
+      <!-- No ticket assigned -->
+      <div id="section-no-ticket" class="hidden">
+        <div class="status-msg">No ticket assigned yet.<br/>Check the web dashboard to get started.</div>
+      </div>
+
+      <hr />
+
+      <!-- Latest review scores -->
+      <div class="section" id="section-scores" class="hidden">
+        <h2>Latest Review</h2>
+        <div class="score-section">
+          <div class="score-total" id="score-total">—<span>/100</span></div>
+          <div class="score-row">
+            <div class="score-label">Diagnosis</div>
+            <div class="score-bar-bg">
+              <div class="score-bar-fill" id="bar-diagnosis" style="width:0%"></div>
+            </div>
+            <div class="score-value" id="val-diagnosis">—</div>
+          </div>
+          <div class="score-row">
+            <div class="score-label">Design</div>
+            <div class="score-bar-bg">
+              <div class="score-bar-fill" id="bar-design" style="width:0%"></div>
+            </div>
+            <div class="score-value" id="val-design">—</div>
+          </div>
+          <div class="score-row">
+            <div class="score-label">Comms</div>
+            <div class="score-bar-bg">
+              <div class="score-bar-fill" id="bar-comms" style="width:0%"></div>
+            </div>
+            <div class="score-value" id="val-comms">—</div>
+          </div>
+          <div class="score-row">
+            <div class="score-label">Execution</div>
+            <div class="score-bar-bg">
+              <div class="score-bar-fill" id="bar-execution" style="width:0%"></div>
+            </div>
+            <div class="score-value" id="val-execution">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="section-pending-review" class="hidden">
+        <div class="status-msg">⏳ Review pending — Claude is scoring your PR...</div>
+      </div>
+    </div>
+
+    <script nonce="{{NONCE}}">
+      const vscode = acquireVsCodeApi();
+
+      // Tell the extension host the webview JS is ready to receive state
+      vscode.postMessage({ command: 'ready' });
+
+      // Button handlers — post messages to the extension host
+      document.getElementById('btn-login').addEventListener('click', () => {
+        vscode.postMessage({ command: 'login' });
+      });
+
+      document.getElementById('btn-clone').addEventListener('click', () => {
+        vscode.postMessage({ command: 'cloneCodebase' });
+      });
+
+      document.getElementById('btn-submit').addEventListener('click', () => {
+        vscode.postMessage({ command: 'submitPR' });
+      });
+
+      // Receive state updates from the extension host
+      window.addEventListener('message', (event) => {
+        const message = event.data;
+
+        if (message.type === 'update') {
+          renderState(message.state);
+        }
+      });
+
+      function renderState(state) {
+        const isLoggedIn = !!state.user;
+
+        document.getElementById('view-login').classList.toggle('hidden', isLoggedIn);
+        document.getElementById('view-main').classList.toggle('hidden', !isLoggedIn);
+
+        if (!isLoggedIn) return;
+
+        // Profile
+        document.getElementById('profile-username').textContent = state.user.githubUsername;
+        document.getElementById('profile-score').textContent = state.user.skillScore;
+
+        // Ticket
+        const hasTicket = !!state.assignment;
+        document.getElementById('section-ticket').classList.toggle('hidden', !hasTicket);
+        document.getElementById('section-no-ticket').classList.toggle('hidden', hasTicket);
+
+        if (hasTicket) {
+          const ticket = state.assignment.ticket;
+          document.getElementById('ticket-title').textContent = ticket.title;
+          document.getElementById('ticket-description').textContent = ticket.description;
+
+          const diffEl = document.getElementById('ticket-difficulty');
+          diffEl.textContent = ticket.difficulty;
+          diffEl.className = 'difficulty-badge ' + ticket.difficulty;
+
+          const fileList = document.getElementById('ticket-files');
+          fileList.innerHTML = ticket.filesInvolved
+            .map(f => '<li>' + escapeHtml(f) + '</li>')
+            .join('');
+        }
+
+        // Scores
+        const hasReview = state.submission && state.submission.status === 'REVIEWED';
+        const isPending = state.submission && state.submission.status === 'PENDING';
+
+        document.getElementById('section-scores').classList.toggle('hidden', !hasReview);
+        document.getElementById('section-pending-review').classList.toggle('hidden', !isPending);
+
+        if (hasReview) {
+          const s = state.submission;
+          document.getElementById('score-total').innerHTML = s.scoreTotal + '<span>/100</span>';
+          setBar('diagnosis', s.scoreDiagnosis, 40);
+          setBar('design', s.scoreDesign, 30);
+          setBar('comms', s.scoreCommunication, 20);
+          setBar('execution', s.scoreExecution, 10);
+        }
+      }
+
+      function setBar(id, value, max) {
+        document.getElementById('bar-' + id).style.width = (value / max * 100) + '%';
+        document.getElementById('val-' + id).textContent = value ?? '—';
+      }
+
+      function escapeHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+    </script>
+  </body>
+</html>

@@ -2,13 +2,17 @@
   "name": "devsimulate",
   "displayName": "DevSimulate",
   "description": "Developer training platform — solve real tickets, get scored by AI",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "publisher": "devsimulate-app",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "icon": "media/icon.png",
   "repository": {
@@ -16,8 +20,8 @@
     "url": "https://github.com/OSSAMA-prog-droid/DevsimulateMono"
   },
   "scripts": {
-    "build": "tsc -p ./",
-    "dev": "tsc -p ./ --watch",
+    "build": "node esbuild.js",
+    "dev": "node esbuild.js --watch",
     "typecheck": "tsc --noEmit",
     "package": "vsce package"
   },
@@ -79,6 +83,7 @@
     "@types/node": "^20.12.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^2.26.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.4.0"
   }
 }

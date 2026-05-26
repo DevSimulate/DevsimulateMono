@@ -46,21 +46,23 @@ export async function loginWithGitHub(
   context: vscode.ExtensionContext
 ): Promise<User | undefined> {
   const apiUrl = getApiUrl();
-  const clientId = "YOUR_GITHUB_OAUTH_APP_CLIENT_ID";
+  const clientId = "Iv23lijpalkZyKAPJP5E";
+
+  const redirectUri = "https://devsimulate-mono-web.vercel.app/auth/vscode";
 
   const authUrl =
     `https://github.com/login/oauth/authorize` +
     `?client_id=${clientId}` +
     `&scope=read:user,user:email` +
-    `&redirect_uri=vscode://devsimulate/auth-callback`;
+    `&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
   await vscode.env.openExternal(vscode.Uri.parse(authUrl));
 
   const code = await vscode.window.showInputBox({
     prompt:
-      "Paste the GitHub OAuth code from your browser (shown after authorizing)",
+      "A page opened in your browser showing a code. Copy that code and paste it here.",
     ignoreFocusOut: true,
-    placeHolder: "GitHub OAuth code",
+    placeHolder: "Paste the code from the browser page",
   });
 
   if (!code) {

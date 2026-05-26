@@ -4,7 +4,4 @@
 !package.json
 !media/**
 !out/extension.js
-!out/types.js
-!out/commands/**
-!out/services/**
-!out/views/**
+!out/extension.js.map
