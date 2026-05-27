@@ -6,11 +6,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{{NONCE}}';" />
     <title>DevSimulate</title>
     <style>
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
         font-family: var(--vscode-font-family);
@@ -22,123 +18,116 @@
       }
 
       h2 {
-        font-size: 13px;
-        font-weight: 600;
-        margin-bottom: 8px;
-        color: var(--vscode-editor-foreground);
-        opacity: 0.7;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-
-      .section {
-        margin-bottom: 16px;
-      }
-
-      /* ---- User profile ---- */
-      .profile {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px;
-        background: var(--vscode-sideBar-background);
-        border-radius: 6px;
-        border: 1px solid var(--vscode-panel-border);
-      }
-
-      .profile-username {
-        font-weight: 600;
-        font-size: 13px;
-      }
-
-      .profile-score {
         font-size: 11px;
-        opacity: 0.7;
-      }
-
-      .score-badge {
-        margin-left: auto;
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border-radius: 12px;
-        padding: 2px 10px;
-        font-size: 12px;
-        font-weight: 700;
-      }
-
-      /* ---- Ticket card ---- */
-      .ticket-card {
-        background: var(--vscode-sideBar-background);
-        border: 1px solid var(--vscode-panel-border);
-        border-radius: 6px;
-        padding: 12px;
-      }
-
-      .ticket-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-
-      .ticket-title {
         font-weight: 600;
-        font-size: 13px;
-        flex: 1;
-      }
-
-      .difficulty-badge {
-        font-size: 10px;
-        font-weight: 700;
-        padding: 2px 7px;
-        border-radius: 4px;
-        white-space: nowrap;
+        margin-bottom: 8px;
+        opacity: 0.6;
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
 
+      .section { margin-bottom: 14px; }
+
+      /* ── Profile bar ── */
+      .profile {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 6px;
+      }
+      .profile-username { font-weight: 600; font-size: 13px; flex: 1; }
+      .profile-score {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-radius: 12px;
+        padding: 2px 9px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .btn-refresh-icon {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--vscode-editor-foreground);
+        opacity: 0.6;
+        font-size: 14px;
+        padding: 2px 4px;
+        border-radius: 4px;
+        width: auto;
+        transition: opacity 0.15s;
+      }
+      .btn-refresh-icon:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
+      .btn-refresh-icon.spinning { animation: spin 0.8s linear infinite; opacity: 0.9; }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+      /* ── Ticket cards ── */
+      .ticket-card {
+        background: var(--vscode-sideBar-background);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+      }
+      .ticket-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+      .ticket-title { font-weight: 600; font-size: 12px; flex: 1; }
+      .difficulty-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+      }
       .difficulty-badge.JUNIOR { background: #1e7e34; color: #fff; }
       .difficulty-badge.MID    { background: #b45309; color: #fff; }
       .difficulty-badge.SENIOR { background: #991b1b; color: #fff; }
 
-      .ticket-description {
-        font-size: 12px;
-        opacity: 0.85;
-        margin-bottom: 10px;
-        max-height: 100px;
-        overflow-y: auto;
+      .codebase-name {
+        font-size: 11px;
+        opacity: 0.55;
+        margin-bottom: 5px;
       }
 
-      .files-label {
+      .ticket-description {
         font-size: 11px;
+        opacity: 0.8;
+        margin-bottom: 8px;
+        max-height: 80px;
+        overflow-y: auto;
+      }
+      .files-label {
+        font-size: 10px;
         font-weight: 600;
-        opacity: 0.6;
-        margin-bottom: 4px;
+        opacity: 0.55;
+        margin-bottom: 3px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
-
-      .file-list {
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
+      .file-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
       .file-list li {
-        font-size: 11px;
+        font-size: 10px;
         font-family: var(--vscode-editor-font-family, monospace);
         color: var(--vscode-textLink-foreground);
-        opacity: 0.9;
-        padding: 2px 4px;
+        padding: 1px 4px;
         background: var(--vscode-editor-background);
         border-radius: 3px;
       }
+      .ticket-actions { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
 
-      /* ---- Buttons ---- */
+      /* ── Buttons ── */
       button {
         width: 100%;
-        padding: 7px 12px;
+        padding: 6px 10px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
@@ -147,114 +136,66 @@
         font-weight: 600;
         transition: opacity 0.1s;
       }
-
       button:hover { opacity: 0.85; }
       button:active { opacity: 0.7; }
+      .btn-primary   { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+      .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+      .btn-login     { background: #24292e; color: #fff; padding: 9px 12px; }
 
-      .btn-primary {
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-      }
-
-      .btn-secondary {
-        background: var(--vscode-button-secondaryBackground);
-        color: var(--vscode-button-secondaryForeground);
-        margin-top: 6px;
-      }
-
-      .btn-login {
-        background: #24292e;
-        color: #fff;
-        padding: 9px 12px;
-      }
-
-      /* ---- Score bars ---- */
+      /* ── Score bars ── */
       .score-section {
         background: var(--vscode-sideBar-background);
         border: 1px solid var(--vscode-panel-border);
         border-radius: 6px;
-        padding: 12px;
+        padding: 10px 12px;
       }
-
       .score-total {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 700;
         text-align: center;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         color: var(--vscode-button-background);
       }
-
-      .score-total span {
-        font-size: 14px;
-        font-weight: 400;
-        opacity: 0.6;
-      }
-
-      .score-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 6px;
-      }
-
-      .score-label {
-        font-size: 11px;
-        width: 80px;
-        flex-shrink: 0;
-        opacity: 0.8;
-      }
-
+      .score-total span { font-size: 13px; font-weight: 400; opacity: 0.6; }
+      .score-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+      .score-label { font-size: 11px; width: 76px; flex-shrink: 0; opacity: 0.8; }
       .score-bar-bg {
-        flex: 1;
-        height: 6px;
+        flex: 1; height: 5px;
         background: var(--vscode-editor-background);
-        border-radius: 3px;
-        overflow: hidden;
+        border-radius: 3px; overflow: hidden;
       }
-
       .score-bar-fill {
-        height: 100%;
-        border-radius: 3px;
+        height: 100%; border-radius: 3px;
         background: var(--vscode-button-background);
         transition: width 0.4s ease;
       }
+      .score-value { font-size: 11px; font-weight: 600; width: 26px; text-align: right; flex-shrink: 0; }
 
-      .score-value {
-        font-size: 11px;
-        font-weight: 600;
-        width: 28px;
-        text-align: right;
-        flex-shrink: 0;
-      }
-
-      /* ---- Status message ---- */
-      .status-msg {
-        font-size: 11px;
-        opacity: 0.6;
-        text-align: center;
-        padding: 8px 0;
-      }
-
-      /* ---- Hidden ---- */
+      /* ── Misc ── */
+      .status-msg { font-size: 11px; opacity: 0.6; text-align: center; padding: 20px 0; }
       .hidden { display: none !important; }
-
-      /* ---- Separator ---- */
-      hr {
-        border: none;
-        border-top: 1px solid var(--vscode-panel-border);
-        margin: 12px 0;
+      hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 10px 0; }
+      .ticket-count {
+        display: inline-block;
+        margin-left: 5px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-radius: 10px;
+        padding: 0 6px;
+        font-size: 10px;
+        font-weight: 700;
+        vertical-align: middle;
       }
     </style>
   </head>
   <body>
-    <!-- Login view (shown when not authenticated) -->
+
+    <!-- Login view -->
     <div id="view-login">
       <div style="text-align:center; padding: 24px 0 16px;">
         <div style="font-size:24px; margin-bottom:8px;">⚡</div>
         <div style="font-weight:700; font-size:15px; margin-bottom:4px;">DevSimulate</div>
-        <div style="font-size:12px; opacity:0.6; margin-bottom:20px;">
-          Solve real tickets. Get scored by AI.
-        </div>
+        <div style="font-size:12px; opacity:0.6; margin-bottom:20px;">Solve real tickets. Get scored by AI.</div>
         <button class="btn-login" id="btn-login">Login with GitHub</button>
       </div>
     </div>
@@ -262,39 +203,22 @@
     <!-- Authenticated view -->
     <div id="view-main" class="hidden">
 
-      <!-- User profile -->
+      <!-- Profile + refresh -->
       <div class="section">
         <div class="profile">
-          <div>
-            <div class="profile-username" id="profile-username">—</div>
-            <div class="profile-score">Skill Score</div>
-          </div>
-          <div class="score-badge" id="profile-score">0</div>
+          <div class="profile-username" id="profile-username">—</div>
+          <div class="profile-score" id="profile-score">0</div>
+          <button class="btn-refresh-icon" id="btn-refresh" title="Refresh tickets">↻</button>
         </div>
       </div>
 
-      <!-- Current ticket -->
-      <div class="section" id="section-ticket">
-        <h2>Current Ticket</h2>
-        <div class="ticket-card" id="ticket-card">
-          <div class="ticket-header">
-            <div class="ticket-title" id="ticket-title">Loading...</div>
-            <span class="difficulty-badge" id="ticket-difficulty"></span>
-          </div>
-          <div class="ticket-description" id="ticket-description"></div>
-          <div class="files-label">Files to investigate</div>
-          <ul class="file-list" id="ticket-files"></ul>
+      <!-- Active tickets -->
+      <div class="section">
+        <h2>Active Tickets <span id="ticket-count-badge" class="ticket-count hidden"></span></h2>
+        <div id="tickets-list"></div>
+        <div id="section-no-ticket" class="hidden">
+          <div class="status-msg">No active tickets.<br/>Assign one from the web dashboard.</div>
         </div>
-
-        <div style="margin-top: 10px;">
-          <button class="btn-primary" id="btn-clone">Clone Codebase</button>
-          <button class="btn-secondary" id="btn-submit">Submit PR for Review</button>
-        </div>
-      </div>
-
-      <!-- No ticket assigned -->
-      <div id="section-no-ticket" class="hidden">
-        <div class="status-msg">No ticket assigned yet.<br/>Check the web dashboard to get started.</div>
       </div>
 
       <hr />
@@ -306,30 +230,22 @@
           <div class="score-total" id="score-total">—<span>/100</span></div>
           <div class="score-row">
             <div class="score-label">Diagnosis</div>
-            <div class="score-bar-bg">
-              <div class="score-bar-fill" id="bar-diagnosis" style="width:0%"></div>
-            </div>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="bar-diagnosis" style="width:0%"></div></div>
             <div class="score-value" id="val-diagnosis">—</div>
           </div>
           <div class="score-row">
             <div class="score-label">Design</div>
-            <div class="score-bar-bg">
-              <div class="score-bar-fill" id="bar-design" style="width:0%"></div>
-            </div>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="bar-design" style="width:0%"></div></div>
             <div class="score-value" id="val-design">—</div>
           </div>
           <div class="score-row">
             <div class="score-label">Comms</div>
-            <div class="score-bar-bg">
-              <div class="score-bar-fill" id="bar-comms" style="width:0%"></div>
-            </div>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="bar-comms" style="width:0%"></div></div>
             <div class="score-value" id="val-comms">—</div>
           </div>
           <div class="score-row">
             <div class="score-label">Execution</div>
-            <div class="score-bar-bg">
-              <div class="score-bar-fill" id="bar-execution" style="width:0%"></div>
-            </div>
+            <div class="score-bar-bg"><div class="score-bar-fill" id="bar-execution" style="width:0%"></div></div>
             <div class="score-value" id="val-execution">—</div>
           </div>
         </div>
@@ -338,72 +254,69 @@
       <div id="section-pending-review" class="hidden">
         <div class="status-msg">⏳ Review pending — Claude is scoring your PR...</div>
       </div>
+
     </div>
 
     <script nonce="{{NONCE}}">
       const vscode = acquireVsCodeApi();
 
-      // Tell the extension host the webview JS is ready to receive state
       vscode.postMessage({ command: 'ready' });
 
-      // Button handlers — post messages to the extension host
       document.getElementById('btn-login').addEventListener('click', () => {
         vscode.postMessage({ command: 'login' });
       });
 
-      document.getElementById('btn-clone').addEventListener('click', () => {
-        vscode.postMessage({ command: 'cloneCodebase' });
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        vscode.postMessage({ command: 'refresh' });
       });
 
-      document.getElementById('btn-submit').addEventListener('click', () => {
-        vscode.postMessage({ command: 'submitPR' });
-      });
-
-      // Receive state updates from the extension host
       window.addEventListener('message', (event) => {
-        const message = event.data;
-
-        if (message.type === 'update') {
-          renderState(message.state);
-        }
+        if (event.data.type === 'update') renderState(event.data.state);
       });
 
       function renderState(state) {
         const isLoggedIn = !!state.user;
-
         document.getElementById('view-login').classList.toggle('hidden', isLoggedIn);
         document.getElementById('view-main').classList.toggle('hidden', !isLoggedIn);
-
         if (!isLoggedIn) return;
 
         // Profile
-        document.getElementById('profile-username').textContent = state.user.githubUsername;
-        document.getElementById('profile-score').textContent = state.user.skillScore;
+        document.getElementById('profile-username').textContent = '@' + state.user.githubUsername;
+        document.getElementById('profile-score').textContent = state.user.skillScore + ' pts';
 
-        // Ticket
-        const hasTicket = !!state.assignment;
-        document.getElementById('section-ticket').classList.toggle('hidden', !hasTicket);
-        document.getElementById('section-no-ticket').classList.toggle('hidden', hasTicket);
+        // Refresh spinner
+        const refreshBtn = document.getElementById('btn-refresh');
+        refreshBtn.classList.toggle('spinning', !!state.refreshing);
+        refreshBtn.disabled = !!state.refreshing;
 
-        if (hasTicket) {
-          const ticket = state.assignment.ticket;
-          document.getElementById('ticket-title').textContent = ticket.title;
-          document.getElementById('ticket-description').textContent = ticket.description;
+        // Tickets
+        const assignments = state.assignments || [];
+        const ticketsList = document.getElementById('tickets-list');
+        const noTicket = document.getElementById('section-no-ticket');
+        const badge = document.getElementById('ticket-count-badge');
 
-          const diffEl = document.getElementById('ticket-difficulty');
-          diffEl.textContent = ticket.difficulty;
-          diffEl.className = 'difficulty-badge ' + ticket.difficulty;
+        if (assignments.length === 0) {
+          ticketsList.innerHTML = '';
+          noTicket.classList.remove('hidden');
+          badge.classList.add('hidden');
+        } else {
+          noTicket.classList.add('hidden');
+          badge.classList.remove('hidden');
+          badge.textContent = assignments.length;
+          ticketsList.innerHTML = assignments.map((a, i) => buildTicketCard(a, i)).join('');
 
-          const fileList = document.getElementById('ticket-files');
-          fileList.innerHTML = ticket.filesInvolved
-            .map(f => '<li>' + escapeHtml(f) + '</li>')
-            .join('');
+          // Wire up per-ticket buttons
+          assignments.forEach((a, i) => {
+            const cloneBtn = document.getElementById('btn-clone-' + i);
+            const submitBtn = document.getElementById('btn-submit-' + i);
+            if (cloneBtn) cloneBtn.addEventListener('click', () => vscode.postMessage({ command: 'cloneCodebase', assignmentId: a.id }));
+            if (submitBtn) submitBtn.addEventListener('click', () => vscode.postMessage({ command: 'submitPR', assignmentId: a.id }));
+          });
         }
 
         // Scores
         const hasReview = state.submission && state.submission.status === 'REVIEWED';
         const isPending = state.submission && state.submission.status === 'PENDING';
-
         document.getElementById('section-scores').classList.toggle('hidden', !hasReview);
         document.getElementById('section-pending-review').classList.toggle('hidden', !isPending);
 
@@ -417,13 +330,36 @@
         }
       }
 
+      function buildTicketCard(a, i) {
+        const t = a.ticket || {};
+        const files = (t.filesInvolved || []).map(f => '<li>' + esc(f) + '</li>').join('');
+        const codebaseName = t.codebase ? esc(t.codebase.name) : '';
+        return `
+          <div class="ticket-card">
+            <div class="ticket-header">
+              <div class="ticket-title">${esc(t.title || 'Untitled')}</div>
+              <span class="difficulty-badge ${t.difficulty || ''}">${t.difficulty || ''}</span>
+            </div>
+            ${codebaseName ? `<div class="codebase-name">${codebaseName}</div>` : ''}
+            <div class="ticket-description">${esc(t.description || '')}</div>
+            <div class="files-label">Files to investigate</div>
+            <ul class="file-list">${files}</ul>
+            <div class="ticket-actions">
+              <button class="btn-primary" id="btn-clone-${i}">Clone Codebase</button>
+              <button class="btn-secondary" id="btn-submit-${i}">Submit PR for Review</button>
+            </div>
+          </div>`;
+      }
+
       function setBar(id, value, max) {
         document.getElementById('bar-' + id).style.width = (value / max * 100) + '%';
         document.getElementById('val-' + id).textContent = value ?? '—';
       }
 
-      function escapeHtml(str) {
-        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      function esc(str) {
+        return String(str)
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
       }
     </script>
   </body>

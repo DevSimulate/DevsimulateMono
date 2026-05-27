@@ -4,30 +4,22 @@ import { TicketAssignment } from "../types";
 import { getToken, getApiUrl } from "./auth.service";
 
 /**
- * Fetches the active ticket assignment for the authenticated user.
- * Returns null if no assignment exists.
+ * Fetches all active (unreviewed) ticket assignments for the authenticated user.
  */
-export async function getAssignedTicket(
+export async function getAssignedTickets(
   context: vscode.ExtensionContext
-): Promise<TicketAssignment | null> {
+): Promise<TicketAssignment[]> {
   const token = await getToken(context);
 
   if (!token) {
     throw new Error("Not authenticated");
   }
 
-  try {
-    const response = await axios.get<{ data: TicketAssignment }>(
-      `${getApiUrl()}/tickets/assigned`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data.data;
-  } catch (err) {
-    if (axios.isAxiosError(err) && err.response?.status === 404) {
-      return null;
-    }
-    throw err;
-  }
+  const response = await axios.get<{ data: TicketAssignment[] }>(
+    `${getApiUrl()}/tickets/assigned`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data.data ?? [];
 }
 
 /**

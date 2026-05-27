@@ -6,8 +6,9 @@ import { User, TicketAssignment, Submission } from "../types";
 
 export interface SidebarState {
   user: User | null;
-  assignment: TicketAssignment | null;
+  assignments: TicketAssignment[];
   submission: Submission | null;
+  refreshing: boolean;
 }
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -15,8 +16,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _extensionUri: vscode.Uri;
   private _state: SidebarState = {
     user: null,
-    assignment: null,
+    assignments: [],
     submission: null,
+    refreshing: false,
   };
 
   constructor(extensionUri: vscode.Uri) {
@@ -51,6 +53,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           break;
         case "submitPR":
           vscode.commands.executeCommand("devsimulate.submitPR");
+          break;
+        case "refresh":
+          vscode.commands.executeCommand("devsimulate.refresh");
           break;
       }
     });

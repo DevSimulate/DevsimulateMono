@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import axios from "axios";
 import { getToken, getApiUrl } from "../services/auth.service";
-import { getAssignedTicket } from "../services/ticket.service";
+import { getAssignedTickets } from "../services/ticket.service";
 import { getCurrentBranch, getRemoteUrl } from "../services/git.service";
 import { pollForReview } from "../services/review.service";
 import { SidebarProvider } from "../views/sidebar";
@@ -30,13 +30,25 @@ export async function submitCommand(
   }
 
   try {
-    const assignment = await getAssignedTicket(context);
+    const assignments = await getAssignedTickets(context);
 
-    if (!assignment) {
-      vscode.window.showWarningMessage(
-        "DevSimulate: No active ticket assignment found."
-      );
+    if (assignments.length === 0) {
+      vscode.window.showWarningMessage("DevSimulate: No active ticket assignment found.");
       return;
+    }
+
+    let assignment = assignments[0];
+    if (assignments.length > 1) {
+      const currentBranch = await getCurrentBranch();
+      const match = assignments.find((a) => a.branchName === currentBranch);
+      if (match) {
+        assignment = match;
+      } else {
+        const items = assignments.map((a) => ({ label: (a as any).ticket?.title ?? a.ticketId, assignment: a }));
+        const choice = await vscode.window.showQuickPick(items, { placeHolder: "Select the ticket you are submitting" });
+        if (!choice) return;
+        assignment = choice.assignment;
+      }
     }
 
     const currentBranch = await getCurrentBranch();

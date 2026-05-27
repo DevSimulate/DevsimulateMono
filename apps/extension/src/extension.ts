@@ -4,7 +4,7 @@ import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
 import { getCurrentUser } from "./services/auth.service";
-import { getAssignedTicket } from "./services/ticket.service";
+import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
 
 /**
@@ -55,6 +55,14 @@ export async function activate(
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("devsimulate.refresh", async () => {
+      sidebar.update({ refreshing: true });
+      await hydrateInitialState(context, sidebar);
+      sidebar.update({ refreshing: false });
+    })
+  );
+
   // Hydrate sidebar on startup if already logged in
   await hydrateInitialState(context, sidebar);
 }
@@ -74,14 +82,14 @@ async function hydrateInitialState(
       return;
     }
 
-    const [assignment, submission] = await Promise.all([
-      getAssignedTicket(context),
+    const [assignments, submission] = await Promise.all([
+      getAssignedTickets(context),
       getLatestReview(context),
     ]);
 
     sidebar.update({
       user,
-      assignment: assignment ?? null,
+      assignments,
       submission: submission ?? null,
     });
   } catch {
