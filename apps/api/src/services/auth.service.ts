@@ -12,12 +12,16 @@ export async function exchangeGitHubCode(code: string): Promise<{
   accessToken: string;
   githubUser: GitHubUser;
 }> {
+  const appUrl =
+    process.env.APP_URL ?? "https://devsimulate-mono-web.vercel.app";
+
   const tokenRes = await axios.post<GitHubTokenResponse>(
     "https://github.com/login/oauth/access_token",
     {
-      client_id: process.env.GITHUB_CLIENT_ID,
+      client_id:    process.env.GITHUB_CLIENT_ID,
       client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
+      redirect_uri: `${appUrl}/auth/callback`,
     },
     { headers: { Accept: "application/json" } }
   );
