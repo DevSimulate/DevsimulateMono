@@ -5,3 +5,11 @@
 !media/**
 !out/extension.js
 !out/extension.js.map
+
+# Explicitly block monorepo parent paths that vsce tries to crawl
+../**
+node_modules/**
+src/**
+*.vsix
+esbuild.js
+tsconfig.json
