@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
-import { AuthenticatedRequest } from "../types/index";
+import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
+import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers } from "../services/review.service";
 
 const router = Router();
@@ -32,6 +33,14 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
+    const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl);
+    if (!prUrlMatch) {
+      res.status(400).json({ error: "Invalid PR URL — must be a GitHub PR link" });
+      return;
+    }
+    const [, repoOwner, repoName, prNumberStr] = prUrlMatch;
+    const prNumber = parseInt(prNumberStr, 10);
+
     const submission = await prisma.submission.create({
       data: {
         userId,
@@ -43,6 +52,23 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       },
       include: { ticket: true },
     });
+
+    const jobData: ReviewJobData = {
+      submissionId: submission.id,
+      prUrl,
+      prDescription,
+      branchName,
+      ticketId,
+      repoOwner,
+      repoName,
+      prNumber,
+    };
+
+    await reviewQueue.add("review-pr", jobData, {
+      jobId: `review-${submission.id}`,
+    });
+
+    console.log(`[submissions] Queued review job for submission ${submission.id} (PR #${prNumber})`);
 
     res.status(201).json({ data: submission });
   } catch (err) {
