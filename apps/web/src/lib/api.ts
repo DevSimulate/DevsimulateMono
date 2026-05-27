@@ -45,19 +45,19 @@ export async function getLatestSubmission(
 }
 
 /**
- * Fetches the current ticket assignment for the authenticated user.
+ * Fetches all active ticket assignments for the authenticated user.
  */
-export async function getAssignment(
+export async function getAssignments(
   token: string
-): Promise<TicketAssignment | null> {
+): Promise<TicketAssignment[]> {
   try {
     const client = createClient(token);
-    const res = await client.get<{ data: TicketAssignment }>(
+    const res = await client.get<{ data: TicketAssignment[] }>(
       "/tickets/assigned"
     );
-    return res.data.data;
+    return res.data.data ?? [];
   } catch {
-    return null;
+    return [];
   }
 }
 

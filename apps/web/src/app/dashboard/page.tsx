@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken, clearToken } from "@/lib/auth";
-import { getMe, getSubmissions, getAssignment, getScoreHistory, ScoreHistoryPoint } from "@/lib/api";
+import { getMe, getSubmissions, getAssignments, getScoreHistory, ScoreHistoryPoint } from "@/lib/api";
 import { User, Submission, TicketAssignment, ClaudeReview, Difficulty } from "@devsimulate/shared";
 import clsx from "clsx";
 import { format } from "date-fns";
@@ -407,7 +407,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [assignment, setAssignment] = useState<TicketAssignment | null>(null);
+  const [assignments, setAssignments] = useState<TicketAssignment[]>([]);
   const [history, setHistory] = useState<ScoreHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -415,11 +415,11 @@ export default function DashboardPage() {
     const token = getToken();
     if (!token) { router.push("/"); return; }
 
-    Promise.all([getMe(token), getSubmissions(token), getAssignment(token), getScoreHistory(token)])
-      .then(([me, subs, assign, hist]) => {
+    Promise.all([getMe(token), getSubmissions(token), getAssignments(token), getScoreHistory(token)])
+      .then(([me, subs, assigns, hist]) => {
         setUser(me);
         setSubmissions(subs);
-        setAssignment(assign);
+        setAssignments(assigns);
         setHistory(hist);
       })
       .catch(() => { clearToken(); router.push("/"); })
@@ -495,58 +495,24 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* ── Current Ticket ── */}
+        {/* ── Active Tickets ── */}
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4">
-            <div className="section-label">Current Ticket</div>
+            <div className="section-label">
+              Active Tickets
+              {assignments.length > 0 && (
+                <span className="ml-2 text-xs font-bold rounded-full px-2 py-0.5"
+                  style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
+                  {assignments.length}
+                </span>
+              )}
+            </div>
             <Link href="/tickets" className="text-xs font-semibold" style={{ color: "#5B5BD6" }}>
               Browse all →
             </Link>
           </div>
 
-          {assignment && (assignment as any).ticket ? (
-            <div className="card-glow p-6">
-              <div className="flex items-start gap-3 mb-3">
-                <Link
-                  href={`/tickets/${(assignment as any).ticket.id}`}
-                  className="font-bold text-base flex-1 transition-colors"
-                  style={{ color: "#1A1A1A" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#5B5BD6")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "#1A1A1A")}
-                >
-                  {(assignment as any).ticket.title}
-                </Link>
-                <span className={clsx(
-                  "text-xs font-bold rounded-full px-3 py-1 shrink-0",
-                  DIFFICULTY_COLOR[(assignment as any).ticket.difficulty as Difficulty]
-                )}>
-                  {(assignment as any).ticket.difficulty}
-                </span>
-              </div>
-
-              <p className="text-sm leading-relaxed mb-4" style={{ color: "#6B6B6B" }}>
-                {(assignment as any).ticket.description}
-              </p>
-
-              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>
-                Files to investigate
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {(assignment as any).ticket.filesInvolved.map((f: string) => (
-                  <code key={f} className="text-xs rounded-lg px-2.5 py-1 font-mono"
-                    style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
-                    {f}
-                  </code>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 text-xs" style={{ color: "#6B6B6B" }}>
-                <span>Branch: <code className="font-mono" style={{ color: "#1A1A1A" }}>{assignment.branchName}</code></span>
-                <span>·</span>
-                <span>Est. {(assignment as any).ticket.expectedMinutes} min</span>
-              </div>
-            </div>
-          ) : (
+          {assignments.length === 0 ? (
             <div className="card p-10 text-center">
               <div className="text-4xl mb-3">🎉</div>
               <div className="font-bold text-base mb-1" style={{ color: "#1A1A1A" }}>All caught up!</div>
@@ -554,6 +520,62 @@ export default function DashboardPage() {
                 You have no active tickets. Pick a new one to keep building.
               </div>
               <Link href="/tickets" className="btn-primary text-sm">Browse tickets →</Link>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {assignments.map((a) => {
+                const ticket = (a as any).ticket;
+                if (!ticket) return null;
+                return (
+                  <div key={a.id} className="card-glow p-6">
+                    <div className="flex items-start gap-3 mb-3">
+                      <Link
+                        href={`/tickets/${ticket.id}`}
+                        className="font-bold text-base flex-1 transition-colors"
+                        style={{ color: "#1A1A1A" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "#5B5BD6")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "#1A1A1A")}
+                      >
+                        {ticket.title}
+                      </Link>
+                      <span className={clsx(
+                        "text-xs font-bold rounded-full px-3 py-1 shrink-0",
+                        DIFFICULTY_COLOR[ticket.difficulty as Difficulty]
+                      )}>
+                        {ticket.difficulty}
+                      </span>
+                    </div>
+
+                    {ticket.codebase && (
+                      <div className="text-xs font-semibold mb-2" style={{ color: "#5B5BD6" }}>
+                        {ticket.codebase.name} — <span style={{ color: "#6B6B6B", fontWeight: 400 }}>{ticket.codebase.description}</span>
+                      </div>
+                    )}
+
+                    <p className="text-sm leading-relaxed mb-4" style={{ color: "#6B6B6B" }}>
+                      {ticket.description}
+                    </p>
+
+                    <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>
+                      Files to investigate
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {ticket.filesInvolved.map((f: string) => (
+                        <code key={f} className="text-xs rounded-lg px-2.5 py-1 font-mono"
+                          style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
+                          {f}
+                        </code>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs" style={{ color: "#6B6B6B" }}>
+                      <span>Branch: <code className="font-mono" style={{ color: "#1A1A1A" }}>{a.branchName}</code></span>
+                      <span>·</span>
+                      <span>Est. {ticket.expectedMinutes} min</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

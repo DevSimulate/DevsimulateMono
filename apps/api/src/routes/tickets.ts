@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import {
   getAssignedTicket,
+  getAssignedTickets,
   assignTicket,
   listTickets,
   getTicketById,
@@ -16,22 +17,16 @@ router.use(requireAuth as (req: Request, res: Response, next: () => void) => voi
 
 /**
  * GET /tickets/assigned
- * Returns the current user's active ticket assignment with ticket + codebase.
+ * Returns ALL of the current user's active (unreviewed) ticket assignments.
  */
 router.get("/assigned", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
 
   try {
-    const assignment = await getAssignedTicket(userId);
-
-    if (!assignment) {
-      res.status(404).json({ error: "No active ticket assignment found" });
-      return;
-    }
-
-    res.json({ data: assignment });
+    const assignments = await getAssignedTickets(userId);
+    res.json({ data: assignments });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to fetch assignment";
+    const message = err instanceof Error ? err.message : "Failed to fetch assignments";
     console.error("[tickets] getAssigned error:", message);
     res.status(500).json({ error: message });
   }

@@ -6,28 +6,38 @@ type TicketWithCodebase = Ticket & { codebase: Codebase };
 type AssignmentWithTicket = TicketAssignment & { ticket: TicketWithCodebase };
 
 /**
- * Returns the active ticket assignment for the given user, including the
- * ticket and its parent codebase. Returns null if no assignment exists.
+ * Returns ALL active ticket assignments for the given user — i.e. every
+ * assigned ticket that has not yet been reviewed. Ordered newest first.
  */
-export async function getAssignedTicket(
+export async function getAssignedTickets(
   userId: string
-): Promise<AssignmentWithTicket | null> {
-  // Find the most recently assigned ticket that has no reviewed submission yet
+): Promise<AssignmentWithTicket[]> {
   const assignments = await prisma.ticketAssignment.findMany({
     where: { userId },
     include: { ticket: { include: { codebase: true } } },
     orderBy: { assignedAt: "desc" },
   });
 
+  const active: AssignmentWithTicket[] = [];
   for (const assignment of assignments) {
     const reviewed = await prisma.submission.findFirst({
       where: { userId, ticketId: assignment.ticketId, status: "REVIEWED" },
     });
-    if (!reviewed) return assignment;
+    if (!reviewed) active.push(assignment);
   }
 
-  // All tickets reviewed — no active assignment
-  return null;
+  return active;
+}
+
+/**
+ * @deprecated Use getAssignedTickets (plural). Kept for backward compat.
+ * Returns the most recently assigned unreviewed ticket, or null.
+ */
+export async function getAssignedTicket(
+  userId: string
+): Promise<AssignmentWithTicket | null> {
+  const all = await getAssignedTickets(userId);
+  return all[0] ?? null;
 }
 
 /**

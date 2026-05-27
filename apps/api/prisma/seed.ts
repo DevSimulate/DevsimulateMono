@@ -123,7 +123,128 @@ Key facts engineers must know:
     },
   });
 
-  console.log("Seed complete. Created NovaTech CRM codebase with 3 tickets.");
+  // Ticket 4 — NOVA-61
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-61-seed-id-004" },
+    update: {},
+    create: {
+      id: "ticket-nova-61-seed-id-004",
+      title: "NOVA-61: Inventory Over-Commitment Under Load",
+      description:
+        "During last week's flash sale, 340 units of SKU-8821 were sold but we only had 200 in stock. Fulfilment is furious. Orders are going out with a backorder status that customers were never told about. It only seems to happen when traffic spikes. Normal single-user testing works fine. Find the root cause and fix it so we can't sell stock we don't have.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/InventoryService.cs",
+        "src/NovaTechCRM.Repositories/InventoryRepository.cs",
+        "src/NovaTechCRM.Domain/Models/Inventory.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify the read-check-write race condition in ReserveAsync? Did they understand that two concurrent requests both read QuantityAvailable before either writes, allowing both to pass the stock check against the same stale snapshot?",
+        design:
+          "Did they choose a correct fix — optimistic concurrency (RowVersion/ETag), a database-level atomic update, pessimistic locking, or a serialised reservation queue? Did they consider the trade-offs of each approach for a high-throughput sale scenario?",
+        communication:
+          "Did they explain why the bug is invisible in single-user testing but surfaces under concurrent load? Did they describe the race window clearly in the PR?",
+        execution:
+          "Does the fix actually prevent over-commitment? Is the solution deadlock-safe? Does it handle the retry/conflict path correctly?",
+      },
+      expectedMinutes: 90,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 5 — NOVA-74
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-74-seed-id-005" },
+    update: {},
+    create: {
+      id: "ticket-nova-74-seed-id-005",
+      title: "NOVA-74: API Memory Usage Grows Over Time",
+      description:
+        "Ops is restarting the API every 48 hours because memory climbs from ~300 MB at startup to over 2 GB. It never comes back down. A heap dump shows thousands of ReportService instances still reachable even though the requests that created them finished long ago. The service is registered as Scoped in DI so each request should get a fresh instance — yet they are not being collected. Find out why and fix it.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/ReportService.cs",
+        "src/NovaTechCRM.Api/Program.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find the static event handler list or static dictionary in ReportService that accumulates a reference to every instance ever constructed? Did they understand that static fields in a Scoped service pin instances in memory permanently, defeating GC?",
+        design:
+          "Did they propose the correct fix — removing the static state, using weak references, or moving the shared state to a Singleton service? Did they consider thread safety of any replacement?",
+        communication:
+          "Did they clearly explain why Scoped lifetime does not protect against static field leaks? Did they quantify the growth rate and connect it to request volume?",
+        execution:
+          "Does the fix eliminate the static reference? Does memory stabilise after the fix is applied under load?",
+      },
+      expectedMinutes: 75,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 6 — NOVA-83
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-83-seed-id-006" },
+    update: {},
+    create: {
+      id: "ticket-nova-83-seed-id-006",
+      title: "NOVA-83: Payment Method Details Exposed to Wrong Users",
+      description:
+        "A customer emailed us saying they could see another customer's saved card details in the mobile app. Our security team has confirmed it is reproducible. Any authenticated user can retrieve the full card metadata for any payment method in the system just by knowing — or guessing — the payment method ID. The IDs are UUIDs so guessing is hard, but the exposure is real and we need it fixed before legal finds out.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.MID,
+      filesInvolved: [
+        "src/NovaTechCRM.Api/Controllers/PaymentsController.cs",
+        "src/NovaTechCRM.Services/PaymentService.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify the missing ownership check on GET /api/payments/methods/{id}/details? Did they see that the endpoint fetches all payment methods across all customers and returns whichever matches the ID, with no check that the authenticated user owns it?",
+        design:
+          "Did they add the correct ownership check — verifying the payment method's CustomerId matches the authenticated user's customer ID before returning it? Did they consider whether the service layer or controller layer is the right place for this check?",
+        communication:
+          "Did they classify this as an IDOR (Insecure Direct Object Reference) vulnerability? Did they assess the impact — full card metadata exposure for all customers?",
+        execution:
+          "Does the fix correctly prevent cross-customer access? Does it return 403 (not 404) for unauthorised access to another user's payment method?",
+      },
+      expectedMinutes: 45,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 7 — NOVA-91
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-91-seed-id-007" },
+    update: {},
+    create: {
+      id: "ticket-nova-91-seed-id-007",
+      title: "NOVA-91: Shipment Report Shows Wrong Date Range in Some Regions",
+      description:
+        "Customers in the UAE and Singapore are complaining that the 'last 30 days' shipment report is missing shipments from the most recent day and including shipments from 31 days ago. UK and EU customers report it correctly. It works fine on the developer machines in the Dublin office. We deploy to servers in UTC+0 and the bug only appears for tenants in UTC+4 and UTC+8 timezones. Find it and fix it.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/ShipmentService.cs",
+        "src/NovaTechCRM.Domain/ValueObjects/DateRange.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find that DateRange.LastNDays uses DateTime.Now (local server time) instead of DateTime.UtcNow? Did they understand that on UTC+0 servers the bug is invisible but shifts the window by the tenant's UTC offset in other regions?",
+        design:
+          "Did they fix it by replacing DateTime.Now with DateTime.UtcNow throughout the date range calculation? Did they consider whether tenant timezone conversion is needed at the display layer vs the query layer?",
+        communication:
+          "Did they explain why the bug is invisible on UTC servers? Did they link the symptom (wrong day boundary) to the root cause (local time vs UTC)?",
+        execution:
+          "Does the fix use UTC consistently? Does it pass a test that runs in a non-UTC timezone without drift?",
+      },
+      expectedMinutes: 30,
+      codebaseId: codebase.id,
+    },
+  });
+
+  console.log("Seed complete. Created NovaTech CRM codebase with 7 tickets.");
 }
 
 main()

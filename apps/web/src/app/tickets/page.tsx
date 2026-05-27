@@ -13,7 +13,7 @@ interface Ticket {
   description: string;
   filesInvolved: string[];
   expectedMinutes: number;
-  codebase: { name: string; repoUrl: string };
+  codebase: { name: string; repoUrl: string; description: string };
 }
 
 const DIFF_COLOR: Record<string, string> = {
@@ -109,6 +109,7 @@ export default function TicketsPage(): React.ReactElement {
                   <span className="text-xs text-slate-500">{ticket.codebase.name}</span>
                   <span className="text-xs text-slate-600">· {ticket.expectedMinutes} min</span>
                 </div>
+                <p className="text-xs text-slate-500 mb-1">{ticket.codebase.description}</p>
                 <Link href={`/tickets/${ticket.id}`} className="font-bold text-white hover:text-cyan-400 transition-colors">
                   {ticket.title}
                 </Link>
