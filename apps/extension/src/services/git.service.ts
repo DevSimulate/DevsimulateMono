@@ -7,73 +7,71 @@ import { Ticket, Codebase } from "../types";
 type TicketWithCodebase = Ticket & { codebase: Codebase };
 
 /**
- * Resolves the git binary path using multiple strategies so the extension
- * works regardless of how VS Code was launched (app icon, terminal, etc.).
+ * Finds the directory that contains the git executable and patches it into
+ * process.env.PATH so that `spawn("git", ...)` resolves without needing a
+ * custom binary path (which simple-git rejects if it contains spaces).
  *
- * Order of precedence:
- *  1. VS Code built-in git extension API (most reliable when activated)
- *  2. user's git.path VS Code setting
- *  3. Common Windows installation paths (covers most Windows users)
- *  4. `where git` / `which git` shell lookup
- *  5. Plain "git" fallback
+ * Call this once at extension activation before any simpleGit() usage.
  */
-function resolveGitBinary(): string {
-  // 1. VS Code built-in git extension
+export function ensureGitOnPath(): void {
+  // Already on PATH — nothing to do
+  try {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    execFileSync("git", ["--version"], { timeout: 2000 });
+    return;
+  } catch { /* not on PATH yet */ }
+
+  const gitDir = findGitDir();
+  if (!gitDir) return;
+
+  const sep = process.platform === "win32" ? ";" : ":";
+  const current = process.env["PATH"] ?? "";
+  if (!current.includes(gitDir)) {
+    process.env["PATH"] = `${gitDir}${sep}${current}`;
+  }
+}
+
+function findGitDir(): string | undefined {
+  // 1. VS Code built-in git extension API
   try {
     const ext = vscode.extensions.getExtension("vscode.git");
     const api = ext?.exports?.getAPI?.(1);
     if (api?.git?.path) {
-      return api.git.path as string;
+      return path.dirname(api.git.path as string);
     }
   } catch { /* ignore */ }
 
-  // 2. User-configured git.path setting
+  // 2. VS Code git.path setting
   try {
     const cfg = vscode.workspace.getConfiguration("git");
     const cfgPath = cfg.get<string | string[]>("path");
     if (cfgPath) {
-      return Array.isArray(cfgPath) ? cfgPath[0] : cfgPath;
+      const p = Array.isArray(cfgPath) ? cfgPath[0] : cfgPath;
+      return path.dirname(p);
     }
   } catch { /* ignore */ }
 
   // 3. Common Windows install locations
   if (process.platform === "win32") {
     const candidates = [
-      "C:\\Program Files\\Git\\cmd\\git.exe",
-      "C:\\Program Files\\Git\\bin\\git.exe",
-      "C:\\Program Files (x86)\\Git\\cmd\\git.exe",
-      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd\\git.exe`,
-      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd\\git.exe`,
+      "C:\\Program Files\\Git\\cmd",
+      "C:\\Program Files\\Git\\bin",
+      "C:\\Program Files (x86)\\Git\\cmd",
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd`,
+      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd`,
     ];
-    for (const p of candidates) {
-      if (p && fs.existsSync(p)) {
-        return p;
+    for (const dir of candidates) {
+      if (dir && fs.existsSync(path.join(dir, "git.exe"))) {
+        return dir;
       }
     }
   }
 
-  // 4. Shell lookup — where (Windows) / which (Unix)
-  try {
-    const { execFileSync } = require("child_process") as typeof import("child_process");
-    const cmd = process.platform === "win32" ? "where" : "which";
-    const result = execFileSync(cmd, ["git"], { encoding: "utf8", timeout: 3000 }).trim();
-    const first = result.split(/\r?\n/)[0].trim();
-    if (first) {
-      return first;
-    }
-  } catch { /* ignore */ }
-
-  return "git";
+  return undefined;
 }
 
 function makeGit(baseDir?: string): SimpleGit {
-  const binary = resolveGitBinary();
-  const opts = {
-    ...(baseDir ? { baseDir } : {}),
-    binary,
-    unsafe: { allowUnsafeCustomBinary: true },
-  };
-  return simpleGit(opts);
+  return baseDir ? simpleGit(baseDir) : simpleGit();
 }
 
 /**

@@ -6,6 +6,7 @@ import { submitCommand } from "./commands/submit";
 import { getCurrentUser } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
+import { ensureGitOnPath } from "./services/git.service";
 
 /**
  * Extension activation entry point.
@@ -14,6 +15,8 @@ import { getLatestReview } from "./services/review.service";
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
+  ensureGitOnPath();
+
   const sidebar = new SidebarProvider(context.extensionUri);
 
   // Register the sidebar webview view provider
