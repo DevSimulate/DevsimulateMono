@@ -7,36 +7,68 @@ import { Ticket, Codebase } from "../types";
 type TicketWithCodebase = Ticket & { codebase: Codebase };
 
 /**
- * Returns the git binary path by asking VS Code's built-in git extension.
- * Falls back to the user's git.path setting, then plain "git".
- * This prevents "spawn git ENOENT" on systems where git is not on the
- * Node.js child-process PATH (common on Windows and macOS app installs).
+ * Resolves the git binary path using multiple strategies so the extension
+ * works regardless of how VS Code was launched (app icon, terminal, etc.).
+ *
+ * Order of precedence:
+ *  1. VS Code built-in git extension API (most reliable when activated)
+ *  2. user's git.path VS Code setting
+ *  3. Common Windows installation paths (covers most Windows users)
+ *  4. `where git` / `which git` shell lookup
+ *  5. Plain "git" fallback
  */
 function resolveGitBinary(): string {
-  // 1. VS Code built-in git extension exposes the resolved path via its API
+  // 1. VS Code built-in git extension
   try {
     const ext = vscode.extensions.getExtension("vscode.git");
     const api = ext?.exports?.getAPI?.(1);
     if (api?.git?.path) {
-      return api.git.path;
+      return api.git.path as string;
     }
-  } catch {
-    // ignore — fall through
-  }
+  } catch { /* ignore */ }
 
   // 2. User-configured git.path setting
-  const cfg = vscode.workspace.getConfiguration("git");
-  const cfgPath = cfg.get<string | string[]>("path");
-  if (cfgPath) {
-    return Array.isArray(cfgPath) ? cfgPath[0] : cfgPath;
+  try {
+    const cfg = vscode.workspace.getConfiguration("git");
+    const cfgPath = cfg.get<string | string[]>("path");
+    if (cfgPath) {
+      return Array.isArray(cfgPath) ? cfgPath[0] : cfgPath;
+    }
+  } catch { /* ignore */ }
+
+  // 3. Common Windows install locations
+  if (process.platform === "win32") {
+    const candidates = [
+      "C:\\Program Files\\Git\\cmd\\git.exe",
+      "C:\\Program Files\\Git\\bin\\git.exe",
+      "C:\\Program Files (x86)\\Git\\cmd\\git.exe",
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd\\git.exe`,
+      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd\\git.exe`,
+    ];
+    for (const p of candidates) {
+      if (p && fs.existsSync(p)) {
+        return p;
+      }
+    }
   }
 
-  // 3. Last resort — hope it is on PATH
+  // 4. Shell lookup — where (Windows) / which (Unix)
+  try {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const result = execFileSync(cmd, ["git"], { encoding: "utf8", timeout: 3000 }).trim();
+    const first = result.split(/\r?\n/)[0].trim();
+    if (first) {
+      return first;
+    }
+  } catch { /* ignore */ }
+
   return "git";
 }
 
 function makeGit(baseDir?: string): SimpleGit {
-  return simpleGit(baseDir ? { baseDir } : {}, { binary: resolveGitBinary() });
+  const binary = resolveGitBinary();
+  return simpleGit(baseDir ? { baseDir, binary } : { binary });
 }
 
 /**
