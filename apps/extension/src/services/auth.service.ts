@@ -46,7 +46,7 @@ export async function loginWithGitHub(
   context: vscode.ExtensionContext
 ): Promise<User | undefined> {
   const apiUrl = getApiUrl();
-  const clientId = "Iv23lijpalkZyKAPJP5E";
+  const clientId = "e32b15a84a5333ab95f9";
 
   const authUrl =
     `https://github.com/login/oauth/authorize` +
@@ -116,5 +116,5 @@ export async function getCurrentUser(
  */
 export function getApiUrl(): string {
   const config = vscode.workspace.getConfiguration("devsimulate");
-  return config.get<string>("apiUrl") ?? "https://api.devsimulate.io";
+  return config.get<string>("apiUrl") ?? "https://devsimulateapi-production.up.railway.app";
 }
