@@ -48,13 +48,11 @@ export async function loginWithGitHub(
   const apiUrl = getApiUrl();
   const clientId = "Iv23lijpalkZyKAPJP5E";
 
-  const redirectUri = "https://devsimulate-mono-web.vercel.app/auth/vscode";
-
   const authUrl =
     `https://github.com/login/oauth/authorize` +
     `?client_id=${clientId}` +
     `&scope=read:user,user:email` +
-    `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    `&state=vscode`;
 
   await vscode.env.openExternal(vscode.Uri.parse(authUrl));
 
