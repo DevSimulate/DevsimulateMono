@@ -68,7 +68,12 @@ function resolveGitBinary(): string {
 
 function makeGit(baseDir?: string): SimpleGit {
   const binary = resolveGitBinary();
-  return simpleGit(baseDir ? { baseDir, binary } : { binary });
+  const opts = {
+    ...(baseDir ? { baseDir } : {}),
+    binary,
+    unsafe: { allowUnsafeCustomBinary: true },
+  };
+  return simpleGit(opts);
 }
 
 /**
