@@ -30,6 +30,7 @@ interface ReviewResult {
   scoreBonus: number;
   declarationMismatch: boolean;
   mismatchPenalty: number;
+  bonusNote: string | null;
 }
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -311,6 +312,7 @@ function SubmitPageInner() {
         scoreBonus:          data.data.scoreBonus   ?? 0,
         declarationMismatch: data.data.declarationMismatch ?? false,
         mismatchPenalty:     data.data.mismatchPenalty     ?? 0,
+        bonusNote:           data.data.bonusNote           ?? null,
       });
       setStage("score");
     } catch (err) {
@@ -593,6 +595,12 @@ function SubmitPageInner() {
                   +{result.scoreBonus} pts from follow-up answers
                 </div>
               )}
+              {result.scoreBonus === 0 && !result.declarationMismatch && (
+                <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
+                  style={{ background: "#F3F4F6", color: "#6B6B6B" }}>
+                  No follow-up bonus
+                </div>
+              )}
             </div>
 
             <div className="card p-6">
@@ -632,9 +640,17 @@ function SubmitPageInner() {
                 </div>
                 <div style={{ color: "#1A1A1A" }}>
                   Your answers show signs of AI generation but you declared little or no AI use.
-                  Your follow-up bonus was forfeited and {result.mismatchPenalty} points were deducted from your score.
+                  Your follow-up bonus was forfeited and {result.mismatchPenalty} points were deducted.
                   Honest declarations always give better long-term results.
                 </div>
+              </div>
+            )}
+
+            {result.bonusNote && !result.declarationMismatch && (
+              <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
+                style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}>
+                <span className="font-bold" style={{ color: "#D97706" }}>AI Usage: </span>
+                <span style={{ color: "#1A1A1A" }}>{result.bonusNote}</span>
               </div>
             )}
 

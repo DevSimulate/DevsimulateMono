@@ -284,11 +284,22 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       aiDeclaration!
     );
 
-    // If developer declared no/minor AI use but answers look AI-generated:
-    // forfeit the follow-up bonus and apply a 20-point penalty.
+    // Tiered bonus based on declared AI usage level.
+    // Mismatch penalty only applies when NO_AI / PHRASING is declared but answers look AI-generated.
     const MISMATCH_PENALTY = 20;
-    const effectiveBonus   = scored.declarationMismatch ? 0 : scored.scoreBonus;
-    const mismatchPenalty  = scored.declarationMismatch ? MISMATCH_PENALTY : 0;
+    const BONUS_MULTIPLIER: Record<string, number> = {
+      NO_AI_USED:                1.0,
+      AI_USED_FOR_PHRASING:      1.0,
+      AI_USED_FOR_UNDERSTANDING: 0.5,
+      AI_USED_FOR_ANSWER:        0.0,
+    };
+    const HONESTY_REWARD = aiDeclaration === "AI_USED_FOR_ANSWER" ? 3 : 0;
+    const multiplier     = BONUS_MULTIPLIER[aiDeclaration!] ?? 1.0;
+
+    const mismatchPenalty = scored.declarationMismatch ? MISMATCH_PENALTY : 0;
+    const effectiveBonus  = scored.declarationMismatch
+      ? 0
+      : Math.round(scored.scoreBonus * multiplier) + HONESTY_REWARD;
 
     const updated = await prisma.followUpQuestion.update({
       where: { id: followUp.id },
@@ -311,6 +322,15 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     });
     await updateUserSkillScore(submission.userId, finalScore);
 
+    const bonusNote =
+      scored.declarationMismatch
+        ? `Declaration mismatch detected — bonus forfeited and ${MISMATCH_PENALTY} pts deducted.`
+        : aiDeclaration === "AI_USED_FOR_ANSWER"
+        ? `You honestly declared AI wrote your answers. No follow-up bonus, but +${HONESTY_REWARD} pts for transparency.`
+        : aiDeclaration === "AI_USED_FOR_UNDERSTANDING"
+        ? `You used AI to understand the concepts. Bonus reduced to 50% (${effectiveBonus} pts) to reflect partial independent work.`
+        : null;
+
     res.json({
       data: {
         scoreBonus: effectiveBonus,
@@ -318,6 +338,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
         followUp: updated,
         declarationMismatch: scored.declarationMismatch,
         mismatchPenalty,
+        bonusNote,
       },
     });
   } catch (err) {
