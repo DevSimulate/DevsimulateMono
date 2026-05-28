@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, fetchPrDiff } from "../services/review.service";
 import { updateUserSkillScore } from "../services/score.service";
+import { reviewEvents } from "../lib/review-events";
 
 const router = Router();
 
@@ -310,6 +311,51 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     const message = err instanceof Error ? err.message : "Failed to submit follow-up";
     res.status(500).json({ error: message });
   }
+});
+
+/**
+ * GET /submissions/:id/stream
+ *
+ * Server-Sent Events endpoint. Sends a single "reviewed" event the moment
+ * the BullMQ worker finishes scoring. Client holds one persistent connection
+ * instead of polling every 3 seconds.
+ */
+router.get("/:id/stream", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const subId = req.params.id;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  // If already reviewed, send event immediately and close
+  try {
+    const existing = await prisma.submission.findFirst({ where: { id: subId, userId } });
+    if (existing?.status === "REVIEWED") {
+      res.write("data: reviewed\n\n");
+      res.end();
+      return;
+    }
+  } catch { /* proceed to listen */ }
+
+  const heartbeat = setInterval(() => res.write(": ping\n\n"), 20_000);
+
+  const onReviewed = (id: string) => {
+    if (id === subId) {
+      res.write("data: reviewed\n\n");
+      res.end();
+      cleanup();
+    }
+  };
+
+  const cleanup = () => {
+    reviewEvents.off("reviewed", onReviewed);
+    clearInterval(heartbeat);
+  };
+
+  reviewEvents.on("reviewed", onReviewed);
+  req.on("close", cleanup);
 });
 
 /**

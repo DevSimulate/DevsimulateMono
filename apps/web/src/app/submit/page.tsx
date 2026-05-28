@@ -90,9 +90,6 @@ function ScoreBar({ label, value, max }: { label: string; value: number | null; 
   );
 }
 
-function sleep(ms: number) {
-  return new Promise<void>((r) => setTimeout(r, ms));
-}
 
 function SubmitPageInner() {
   const router = useRouter();
@@ -177,24 +174,50 @@ function SubmitPageInner() {
   }
 
   async function pollForQ1(sid: string, token: string) {
-    for (let i = 0; i < 60; i++) {
-      await sleep(3000);
-      try {
-        const qr = await fetch(`${API_URL}/submissions/${sid}/followup`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (qr.ok) {
-          const qdata = await qr.json();
-          if (qdata.data?.question1) {
-            setQuestion1(qdata.data.question1);
-            setStage("q1");
-            return;
-          }
-        }
-      } catch { /* keep polling */ }
+    // Wait for the SSE "reviewed" event, then fetch Q1
+    await waitForReviewSSE(sid, token);
+
+    const qr = await fetch(`${API_URL}/submissions/${sid}/followup`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (qr.ok) {
+      const qdata = await qr.json();
+      if (qdata.data?.question1) {
+        setQuestion1(qdata.data.question1);
+        setStage("q1");
+        return;
+      }
     }
-    setError("Review is taking longer than expected. Check your dashboard or try again.");
+    setError("Review completed but questions not available. Check your dashboard.");
     setStage("describe");
+  }
+
+  async function waitForReviewSSE(sid: string, token: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Review is taking longer than expected. Try again or check your dashboard."));
+      }, 5 * 60 * 1000);
+
+      fetch(`${API_URL}/submissions/${sid}/stream`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (response) => {
+          if (!response.body) { reject(new Error("No stream available")); return; }
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (decoder.decode(value, { stream: true }).includes("reviewed")) {
+              clearTimeout(timeout);
+              resolve();
+              return;
+            }
+          }
+          reject(new Error("Stream ended before review completed"));
+        })
+        .catch((err) => { clearTimeout(timeout); reject(err); });
+    });
   }
 
   async function handleA1Submit() {
