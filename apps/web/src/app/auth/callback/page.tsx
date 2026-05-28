@@ -31,7 +31,13 @@ function CallbackHandler(): React.ReactElement {
       .post<{ data: LoginResponse }>(`${apiUrl}/auth/github`, { code })
       .then((res) => {
         storeToken(res.data.data.token);
-        router.push("/dashboard");
+        const returnUrl = localStorage.getItem("ds_submit_return");
+        if (returnUrl) {
+          localStorage.removeItem("ds_submit_return");
+          window.location.replace(returnUrl);
+        } else {
+          router.push("/dashboard");
+        }
       })
       .catch(() => {
         setError(
