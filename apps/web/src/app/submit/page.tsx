@@ -28,6 +28,8 @@ interface ReviewResult {
   } | null;
   followUpFeedback: string | null;
   scoreBonus: number;
+  declarationMismatch: boolean;
+  mismatchPenalty: number;
 }
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -299,14 +301,16 @@ function SubmitPageInner() {
       const sub = sdata.data;
 
       setResult({
-        scoreTotal:         sub.scoreTotal         ?? 0,
-        scoreDiagnosis:     sub.scoreDiagnosis     ?? 0,
-        scoreDesign:        sub.scoreDesign        ?? 0,
-        scoreCommunication: sub.scoreCommunication ?? 0,
-        scoreExecution:     sub.scoreExecution     ?? 0,
-        claudeReview:       sub.claudeReview       ?? null,
-        followUpFeedback:   data.data.feedback     ?? null,
-        scoreBonus:         data.data.scoreBonus   ?? 0,
+        scoreTotal:          sub.scoreTotal         ?? 0,
+        scoreDiagnosis:      sub.scoreDiagnosis     ?? 0,
+        scoreDesign:         sub.scoreDesign        ?? 0,
+        scoreCommunication:  sub.scoreCommunication ?? 0,
+        scoreExecution:      sub.scoreExecution     ?? 0,
+        claudeReview:        sub.claudeReview       ?? null,
+        followUpFeedback:    data.data.feedback     ?? null,
+        scoreBonus:          data.data.scoreBonus   ?? 0,
+        declarationMismatch: data.data.declarationMismatch ?? false,
+        mismatchPenalty:     data.data.mismatchPenalty     ?? 0,
       });
       setStage("score");
     } catch (err) {
@@ -616,6 +620,20 @@ function SubmitPageInner() {
                     <div className="text-xs font-bold mb-2" style={{ color: "#D97706" }}>Top improvement</div>
                     <div className="text-sm" style={{ color: "#1A1A1A" }}>{result.claudeReview.topImprovement}</div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {result.declarationMismatch && (
+              <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
+                style={{ background: "#FFF5F5", border: "1px solid #FCA5A5" }}>
+                <div className="font-bold mb-1" style={{ color: "#DC2626" }}>
+                  Declaration Mismatch — {result.mismatchPenalty} pts penalty applied
+                </div>
+                <div style={{ color: "#1A1A1A" }}>
+                  Your answers show signs of AI generation but you declared little or no AI use.
+                  Your follow-up bonus was forfeited and {result.mismatchPenalty} points were deducted from your score.
+                  Honest declarations always give better long-term results.
                 </div>
               </div>
             )}

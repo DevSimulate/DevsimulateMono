@@ -284,12 +284,18 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       aiDeclaration!
     );
 
+    // If developer declared no/minor AI use but answers look AI-generated:
+    // forfeit the follow-up bonus and apply a 20-point penalty.
+    const MISMATCH_PENALTY = 20;
+    const effectiveBonus   = scored.declarationMismatch ? 0 : scored.scoreBonus;
+    const mismatchPenalty  = scored.declarationMismatch ? MISMATCH_PENALTY : 0;
+
     const updated = await prisma.followUpQuestion.update({
       where: { id: followUp.id },
       data: {
         answer1,
         answer2,
-        scoreBonus: scored.scoreBonus,
+        scoreBonus: effectiveBonus,
         claudeFeedback: scored.feedback,
         aiDeclaration: aiDeclaration as any,
         declarationMismatch: scored.declarationMismatch,
@@ -298,15 +304,22 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       },
     });
 
-    // Add bonus to submission scoreTotal then update EMA with final combined score
-    const finalScore = Math.min((submission.scoreTotal ?? 0) + scored.scoreBonus, 100);
+    const finalScore = Math.max(0, Math.min((submission.scoreTotal ?? 0) + effectiveBonus - mismatchPenalty, 100));
     await prisma.submission.update({
       where: { id: req.params.id },
       data: { scoreTotal: finalScore },
     });
     await updateUserSkillScore(submission.userId, finalScore);
 
-    res.json({ data: { scoreBonus: scored.scoreBonus, feedback: scored.feedback, followUp: updated } });
+    res.json({
+      data: {
+        scoreBonus: effectiveBonus,
+        feedback: scored.feedback,
+        followUp: updated,
+        declarationMismatch: scored.declarationMismatch,
+        mismatchPenalty,
+      },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to submit follow-up";
     res.status(500).json({ error: message });
