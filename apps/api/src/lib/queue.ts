@@ -65,6 +65,7 @@ export function startReviewWorker(): Worker<ReviewJobData> {
           data: {
             submissionId,
             question1: q1Result.value.question1,
+            question2: "",   // populated later when user submits A1
           },
         });
         console.log(`[review-worker] Completed submission ${submissionId} — score ${review.scoreTotal}`);
