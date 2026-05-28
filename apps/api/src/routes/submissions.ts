@@ -327,6 +327,7 @@ router.get("/:id/stream", async (req: Request, res: Response): Promise<void> => 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering on Railway
   res.flushHeaders();
 
   // If already reviewed, send event immediately and close

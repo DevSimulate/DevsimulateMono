@@ -193,31 +193,49 @@ function SubmitPageInner() {
   }
 
   async function waitForReviewSSE(sid: string, token: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Review is taking longer than expected. Try again or check your dashboard."));
-      }, 5 * 60 * 1000);
+    const deadline = Date.now() + 5 * 60 * 1000;
+
+    // Attempt SSE first
+    const sseOk = await new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => resolve(false), 5 * 60 * 1000);
 
       fetch(`${API_URL}/submissions/${sid}/stream`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(async (response) => {
-          if (!response.body) { reject(new Error("No stream available")); return; }
+          if (!response.body) { clearTimeout(timeout); resolve(false); return; }
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) { clearTimeout(timeout); resolve(false); return; }
             if (decoder.decode(value, { stream: true }).includes("reviewed")) {
               clearTimeout(timeout);
-              resolve();
+              resolve(true);
               return;
             }
           }
-          reject(new Error("Stream ended before review completed"));
         })
-        .catch((err) => { clearTimeout(timeout); reject(err); });
+        .catch(() => { clearTimeout(timeout); resolve(false); });
     });
+
+    if (sseOk) return;
+
+    // SSE stream closed early (Railway nginx) — fall back to polling
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const r = await fetch(`${API_URL}/submissions/${sid}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (data.data?.status === "REVIEWED") return;
+        }
+      } catch { /* keep polling */ }
+    }
+
+    throw new Error("Review is taking longer than expected. Try again or check your dashboard.");
   }
 
   async function handleA1Submit() {
