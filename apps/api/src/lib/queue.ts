@@ -1,7 +1,7 @@
 import { Queue, Worker, Job } from "bullmq";
 import IORedis from "ioredis";
 import { ReviewJobData } from "../types/index";
-import { reviewPullRequest, fetchPrDiff, generateFollowUpQuestions } from "../services/review.service";
+import { reviewPullRequest, fetchPrDiff, generateFirstQuestion } from "../services/review.service";
 import { saveReviewResult, calculateRiskScore } from "../services/score.service";
 import prisma from "./prisma";
 
@@ -73,19 +73,19 @@ export function startReviewWorker(): Worker<ReviewJobData> {
 
       await saveReviewResult(submissionId, review);
 
-      // Generate follow-up questions after scoring
+      // Generate Q1 only — Q2 is generated after the developer submits A1
       try {
-        const followUp = await generateFollowUpQuestions(ticket, prDiff, review);
+        const { question1 } = await generateFirstQuestion(ticket, prDiff, review);
         await prisma.followUpQuestion.create({
           data: {
             submissionId,
-            question1: followUp.question1,
-            question2: followUp.question2,
+            question1,
+            // question2 left null — generated from A1 in POST /followup/answer1
           },
         });
-        console.log(`[review-worker] Follow-up questions generated for submission ${submissionId}`);
+        console.log(`[review-worker] Q1 generated for submission ${submissionId}`);
       } catch (err) {
-        console.error(`[review-worker] Failed to generate follow-up questions:`, err);
+        console.error(`[review-worker] Failed to generate Q1:`, err);
       }
 
       console.log(

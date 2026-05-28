@@ -12,15 +12,7 @@ interface Ticket {
   id: string;
   title: string;
   difficulty: "JUNIOR" | "MID" | "SENIOR";
-  description: string;
-  filesInvolved: string[];
   expectedMinutes: number;
-}
-
-interface FollowUp {
-  id: string;
-  question1: string;
-  question2: string;
 }
 
 interface ReviewResult {
@@ -40,7 +32,7 @@ interface ReviewResult {
 
 const DIFFICULTY_COLOR: Record<string, string> = {
   JUNIOR: "bg-[#CCFBF1] text-[#0D9488]",
-  MID: "bg-[#FEF3C7] text-[#D97706]",
+  MID:    "bg-[#FEF3C7] text-[#D97706]",
   SENIOR: "bg-[#FCE7F3] text-[#BE185D]",
 };
 
@@ -57,10 +49,31 @@ const AI_OPTIONS: { value: AIDeclaration; label: string; sub: string }[] = [
   { value: "AI_USED_FOR_ANSWER",        label: "AI wrote my answers",                  sub: "AI generated the answer text" },
 ];
 
-type Stage = "loading" | "describe" | "analysing" | "questions" | "scoring" | "score";
+type Stage =
+  | "loading"
+  | "describe"
+  | "analysing"
+  | "q1"
+  | "loading_q2"
+  | "q2"
+  | "scoring"
+  | "score";
 
-const STAGE_LABELS = ["Describe", "Analysing", "Questions", "Score"];
-const STAGE_ORDER: Stage[] = ["describe", "analysing", "questions", "scoring", "score"];
+const STEP_LABELS = ["Describe", "Review", "Q1", "Q2", "Score"];
+
+function stepIndex(stage: Stage): number {
+  const map: Record<Stage, number> = {
+    loading:    0,
+    describe:   0,
+    analysing:  1,
+    q1:         2,
+    loading_q2: 3,
+    q2:         3,
+    scoring:    4,
+    score:      4,
+  };
+  return map[stage];
+}
 
 function ScoreBar({ label, value, max }: { label: string; value: number | null; max: number }) {
   const pct = value !== null ? Math.round((value / max) * 100) : 0;
@@ -93,7 +106,8 @@ function SubmitPageInner() {
   const [ticket,       setTicket]       = useState<Ticket | null>(null);
   const [description,  setDescription]  = useState("");
   const [submissionId, setSubmissionId] = useState<string | null>(null);
-  const [followUp,     setFollowUp]     = useState<FollowUp | null>(null);
+  const [question1,    setQuestion1]    = useState("");
+  const [question2,    setQuestion2]    = useState("");
   const [answer1,      setAnswer1]      = useState("");
   const [answer2,      setAnswer2]      = useState("");
   const [declaration,  setDeclaration]  = useState<AIDeclaration | null>(null);
@@ -112,35 +126,27 @@ function SubmitPageInner() {
       router.push("/");
       return;
     }
-
     if (!ticketId || !prUrl) {
       setError("Missing ticket information. Please re-submit from the VS Code extension.");
       setStage("describe");
       return;
     }
-
     fetch(`${API_URL}/tickets/${ticketId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((data) => {
-        if (data.data) setTicket(data.data);
-        setStage("describe");
-      })
+      .then((data) => { if (data.data) setTicket(data.data); setStage("describe"); })
       .catch(() => setStage("describe"));
   }, [ticketId, prUrl, router]);
 
-  // 10-minute countdown for questions stage
+  // 10-minute countdown — active during q1 and q2 stages
   useEffect(() => {
-    if (stage === "questions") {
+    if (stage === "q1") {
       setTimeLeft(600);
       timerRef.current = setInterval(() => {
-        setTimeLeft((t) => {
-          if (t <= 1) { clearInterval(timerRef.current!); return 0; }
-          return t - 1;
-        });
+        setTimeLeft((t) => { if (t <= 1) { clearInterval(timerRef.current!); return 0; } return t - 1; });
       }, 1000);
-    } else {
+    } else if (stage !== "q2") {
       if (timerRef.current) clearInterval(timerRef.current);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -163,29 +169,25 @@ function SubmitPageInner() {
 
       const sid: string = data.data.id;
       setSubmissionId(sid);
-      await pollForReview(sid, token);
+      await pollForQ1(sid, token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed — please try again.");
       setStage("describe");
     }
   }
 
-  async function pollForReview(sid: string, token: string) {
+  async function pollForQ1(sid: string, token: string) {
     for (let i = 0; i < 60; i++) {
       await sleep(3000);
       try {
-        const r = await fetch(`${API_URL}/submissions/${sid}`, {
+        const qr = await fetch(`${API_URL}/submissions/${sid}/followup`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = await r.json();
-        if (data.data?.status === "REVIEWED") {
-          const qr = await fetch(`${API_URL}/submissions/${sid}/followup`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (qr.ok) {
-            const qdata = await qr.json();
-            setFollowUp(qdata.data);
-            setStage("questions");
+        if (qr.ok) {
+          const qdata = await qr.json();
+          if (qdata.data?.question1) {
+            setQuestion1(qdata.data.question1);
+            setStage("q1");
             return;
           }
         }
@@ -195,8 +197,30 @@ function SubmitPageInner() {
     setStage("describe");
   }
 
-  async function handleAnswersSubmit() {
-    if (!answer1.trim() || !answer2.trim() || !declaration || !submissionId) return;
+  async function handleA1Submit() {
+    if (!answer1.trim() || !submissionId) return;
+    const token = getToken();
+    if (!token) return;
+    setStage("loading_q2");
+
+    try {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/followup/answer1`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ answer1 }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Failed to generate Q2");
+      setQuestion2(data.data.question2);
+      setStage("q2");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate Q2 — please try again.");
+      setStage("q1");
+    }
+  }
+
+  async function handleFinalSubmit() {
+    if (!answer2.trim() || !declaration || !submissionId) return;
     const token = getToken();
     if (!token) return;
     setStage("scoring");
@@ -217,26 +241,25 @@ function SubmitPageInner() {
       const sub = sdata.data;
 
       setResult({
-        scoreTotal:          sub.scoreTotal          ?? 0,
-        scoreDiagnosis:      sub.scoreDiagnosis      ?? 0,
-        scoreDesign:         sub.scoreDesign         ?? 0,
-        scoreCommunication:  sub.scoreCommunication  ?? 0,
-        scoreExecution:      sub.scoreExecution      ?? 0,
-        claudeReview:        sub.claudeReview        ?? null,
-        followUpFeedback:    data.data.feedback      ?? null,
-        scoreBonus:          data.data.scoreBonus    ?? 0,
+        scoreTotal:         sub.scoreTotal         ?? 0,
+        scoreDiagnosis:     sub.scoreDiagnosis     ?? 0,
+        scoreDesign:        sub.scoreDesign        ?? 0,
+        scoreCommunication: sub.scoreCommunication ?? 0,
+        scoreExecution:     sub.scoreExecution     ?? 0,
+        claudeReview:       sub.claudeReview       ?? null,
+        followUpFeedback:   data.data.feedback     ?? null,
+        scoreBonus:         data.data.scoreBonus   ?? 0,
       });
       setStage("score");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scoring failed — please try again.");
-      setStage("questions");
+      setStage("q2");
     }
   }
 
   const mins = Math.floor(timeLeft / 60).toString().padStart(2, "0");
   const secs = (timeLeft % 60).toString().padStart(2, "0");
-
-  const stageIndex = STAGE_ORDER.indexOf(stage);
+  const si    = stepIndex(stage);
 
   if (stage === "loading") {
     return (
@@ -265,35 +288,30 @@ function SubmitPageInner() {
       <main className="max-w-2xl mx-auto px-6 py-10">
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1 mb-8">
-          {STAGE_LABELS.map((label, i) => {
-            const normalised = stage === "scoring" ? 3 : stageIndex;
-            const done   = i < normalised;
-            const active = i === normalised || (stage === "score" && i === 3);
-            return (
-              <div key={label} className="flex items-center gap-1 flex-1">
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <div className={clsx(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors",
-                    done   ? "bg-[#0D9488] text-white" :
-                    active ? "bg-[#5B5BD6] text-white" :
+        <div className="flex items-center mb-8">
+          {STEP_LABELS.map((label, i) => (
+            <div key={label} className="flex items-center flex-1 last:flex-none">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className={clsx(
+                  "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors",
+                  i < si  ? "bg-[#0D9488] text-white" :
+                  i === si ? "bg-[#5B5BD6] text-white" :
                              "bg-[#E4E2DD] text-[#6B6B6B]"
-                  )}>
-                    {done ? "✓" : i + 1}
-                  </div>
-                  <span className={clsx(
-                    "text-xs font-medium hidden sm:block",
-                    active || done ? "text-[#1A1A1A]" : "text-[#6B6B6B]"
-                  )}>
-                    {label}
-                  </span>
+                )}>
+                  {i < si ? "✓" : i + 1}
                 </div>
-                {i < STAGE_LABELS.length - 1 && (
-                  <div className="flex-1 h-px mx-2" style={{ background: done ? "#0D9488" : "#E4E2DD" }} />
-                )}
+                <span className={clsx(
+                  "text-xs font-medium hidden sm:block",
+                  i <= si ? "text-[#1A1A1A]" : "text-[#6B6B6B]"
+                )}>
+                  {label}
+                </span>
               </div>
-            );
-          })}
+              {i < STEP_LABELS.length - 1 && (
+                <div className="flex-1 h-px mx-2" style={{ background: i < si ? "#0D9488" : "#E4E2DD" }} />
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Ticket info bar */}
@@ -301,9 +319,7 @@ function SubmitPageInner() {
           <div className="card p-4 mb-6">
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate mb-0.5" style={{ color: "#1A1A1A" }}>
-                  {ticket.title}
-                </div>
+                <div className="font-bold text-sm truncate mb-0.5" style={{ color: "#1A1A1A" }}>{ticket.title}</div>
                 <a href={prUrl} target="_blank" rel="noreferrer"
                   className="text-xs font-mono truncate block hover:underline" style={{ color: "#5B5BD6" }}>
                   {prUrl}
@@ -324,69 +340,51 @@ function SubmitPageInner() {
           </div>
         )}
 
-        {/* ── Stage 1: Describe ── */}
+        {/* ── Stage: Describe ── */}
         {stage === "describe" && (
           <div className="card p-6 fade-in-up">
             <div className="section-label mb-1">Your Approach</div>
             <p className="text-sm mb-5" style={{ color: "#6B6B6B" }}>
-              Explain your fix. What was the root cause? How did you find it? Why did you choose this solution?
-              This is what Claude will score — be specific.
+              Explain your fix — root cause, how you found it, why you chose this solution.
+              Be specific. This is what Claude scores.
             </p>
-
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={[
-                "## What was the root cause?",
-                "",
-                "## How did you investigate?",
-                "",
-                "## Why did you choose this solution?",
-                "",
-                "## How do you know it works?",
-              ].join("\n")}
+              placeholder={"## What was the root cause?\n\n## How did you investigate?\n\n## Why did you choose this solution?\n\n## How do you know it works?"}
               rows={12}
               className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
               style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
             />
-
             <div className="flex items-center justify-between mb-5">
               <span className="text-xs font-medium" style={{ color: description.length < 100 ? "#D97706" : "#0D9488" }}>
                 {description.length} chars
-                {description.length < 100 ? ` — write at least ${100 - description.length} more` : " — ready to submit"}
+                {description.length < 100 ? ` — need ${100 - description.length} more` : " — ready"}
               </span>
-              <span className="text-xs" style={{ color: "#6B6B6B" }}>
-                Est. {ticket?.expectedMinutes ?? "—"} min ticket
-              </span>
+              <span className="text-xs" style={{ color: "#6B6B6B" }}>Est. {ticket?.expectedMinutes ?? "—"} min ticket</span>
             </div>
-
-            <button
-              onClick={handleDescriptionSubmit}
-              disabled={description.trim().length < 100}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-            >
+            <button onClick={handleDescriptionSubmit} disabled={description.trim().length < 100}
+              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
               Submit for Review →
             </button>
           </div>
         )}
 
-        {/* ── Stage 2: Analysing ── */}
+        {/* ── Stage: Analysing ── */}
         {stage === "analysing" && (
           <div className="card p-10 text-center fade-in-up">
             <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
             <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Analysing your PR…</div>
             <div className="text-sm mb-8" style={{ color: "#6B6B6B" }}>
-              Claude is reading your diff.<br />Follow-up questions will appear here in ~20 seconds.
+              Claude is reading your diff. First question will appear in ~20 seconds.
             </div>
             <div className="rounded-xl p-5 text-left space-y-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>
-                What to expect
-              </div>
+              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>What to expect</div>
               {[
-                "2 questions specific to your actual code changes",
-                "They test whether you understood the root cause, not just the fix",
-                "You'll have 10 minutes to answer both",
-                "Your score combines the PR review + your answers",
+                "Q1 is specific to your actual code changes — exact variables and functions",
+                "After you answer Q1, Q2 is generated from your answer",
+                "You have 10 minutes total across both questions",
+                "Final score = PR review + follow-up answers combined",
               ].map((tip) => (
                 <div key={tip} className="flex items-start gap-2 text-xs" style={{ color: "#6B6B6B" }}>
                   <span className="shrink-0 mt-0.5" style={{ color: "#5B5BD6" }}>→</span>
@@ -397,46 +395,81 @@ function SubmitPageInner() {
           </div>
         )}
 
-        {/* ── Stage 3: Questions ── */}
-        {stage === "questions" && followUp && (
+        {/* ── Stage: Q1 ── */}
+        {stage === "q1" && (
           <div className="card p-6 fade-in-up">
             <div className="flex items-center justify-between mb-5">
-              <div className="section-label">Follow-up Questions</div>
+              <div className="section-label">Question 1 of 2</div>
               <span className={clsx(
                 "text-sm font-mono font-bold tabular-nums",
-                timeLeft < 120 ? "text-red-500" :
-                timeLeft < 300 ? "text-[#D97706]" :
-                                 "text-[#6B6B6B]"
+                timeLeft < 120 ? "text-red-500" : timeLeft < 300 ? "text-[#D97706]" : "text-[#6B6B6B]"
               )}>
                 ⏱ {mins}:{secs}
               </span>
             </div>
 
-            <div className="space-y-6 mb-6">
-              {([
-                { q: followUp.question1, val: answer1, set: setAnswer1, label: "Q1" },
-                { q: followUp.question2, val: answer2, set: setAnswer2, label: "Q2" },
-              ] as const).map(({ q, val, set, label }) => (
-                <div key={label}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center"
-                      style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
-                      {label[1]}
-                    </span>
-                    <p className="text-sm font-semibold" style={{ color: "#1A1A1A" }}>{q}</p>
-                  </div>
-                  <textarea
-                    value={val}
-                    onChange={(e) => set(e.target.value)}
-                    placeholder="Your answer…"
-                    rows={4}
-                    disabled={timeLeft === 0}
-                    className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none disabled:opacity-50"
-                    style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
-                  />
-                </div>
-              ))}
+            <div className="rounded-xl p-4 mb-5" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{question1}</p>
             </div>
+
+            <textarea
+              value={answer1}
+              onChange={(e) => setAnswer1(e.target.value)}
+              placeholder="Your answer…"
+              rows={6}
+              disabled={timeLeft === 0}
+              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-5 disabled:opacity-50"
+              style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+            />
+
+            <div className="rounded-xl border px-4 py-3 mb-5 text-xs" style={{ borderColor: "#E4E2DD", background: "#EBEBFF", color: "#5B5BD6" }}>
+              After you submit this answer, Q2 will be generated based on what you wrote.
+            </div>
+
+            <button onClick={handleA1Submit} disabled={!answer1.trim() || timeLeft === 0}
+              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+              {timeLeft === 0 ? "Time expired" : "Submit Answer → Get Q2"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Stage: Loading Q2 ── */}
+        {stage === "loading_q2" && (
+          <div className="card p-10 text-center fade-in-up">
+            <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
+            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Generating Q2…</div>
+            <div className="text-sm" style={{ color: "#6B6B6B" }}>
+              Reading your answer and generating a follow-up question. ~5 seconds.
+            </div>
+          </div>
+        )}
+
+        {/* ── Stage: Q2 ── */}
+        {stage === "q2" && (
+          <div className="card p-6 fade-in-up">
+            <div className="flex items-center justify-between mb-5">
+              <div className="section-label">Question 2 of 2</div>
+              <span className={clsx(
+                "text-sm font-mono font-bold tabular-nums",
+                timeLeft < 120 ? "text-red-500" : timeLeft < 300 ? "text-[#D97706]" : "text-[#6B6B6B]"
+              )}>
+                ⏱ {mins}:{secs}
+              </span>
+            </div>
+
+            <div className="rounded-xl p-4 mb-5" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{question2}</p>
+            </div>
+
+            <textarea
+              value={answer2}
+              onChange={(e) => setAnswer2(e.target.value)}
+              placeholder="Your answer…"
+              rows={6}
+              disabled={timeLeft === 0}
+              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-5 disabled:opacity-50"
+              style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+            />
 
             <div className="rounded-xl border p-4 mb-5 space-y-2" style={{ borderColor: "#E4E2DD", background: "white" }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>
@@ -445,19 +478,11 @@ function SubmitPageInner() {
               {AI_OPTIONS.map((opt) => (
                 <label key={opt.value} className={clsx(
                   "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors",
-                  declaration === opt.value
-                    ? "border-[#5B5BD6] bg-[#EBEBFF]"
-                    : "border-[#E4E2DD] hover:border-[#C4C2DB]"
+                  declaration === opt.value ? "border-[#5B5BD6] bg-[#EBEBFF]" : "border-[#E4E2DD] hover:border-[#C4C2DB]"
                 )}>
-                  <input
-                    type="radio"
-                    name="aiDeclaration"
-                    value={opt.value}
-                    checked={declaration === opt.value}
-                    onChange={() => setDeclaration(opt.value)}
-                    className="mt-0.5 shrink-0"
-                    style={{ accentColor: "#5B5BD6" }}
-                  />
+                  <input type="radio" name="aiDeclaration" value={opt.value}
+                    checked={declaration === opt.value} onChange={() => setDeclaration(opt.value)}
+                    className="mt-0.5 shrink-0" style={{ accentColor: "#5B5BD6" }} />
                   <div>
                     <div className="text-xs font-semibold" style={{ color: "#1A1A1A" }}>{opt.label}</div>
                     <div className="text-xs" style={{ color: "#6B6B6B" }}>{opt.sub}</div>
@@ -466,32 +491,25 @@ function SubmitPageInner() {
               ))}
             </div>
 
-            <button
-              onClick={handleAnswersSubmit}
-              disabled={!answer1.trim() || !answer2.trim() || !declaration || timeLeft === 0}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-            >
-              {timeLeft === 0
-                ? "Time expired"
-                : !declaration
-                ? "Select how you answered to continue"
-                : "Get My Score →"}
+            <button onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration || timeLeft === 0}
+              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+              {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get My Score →"}
             </button>
           </div>
         )}
 
-        {/* ── Stage 4: Scoring ── */}
+        {/* ── Stage: Scoring ── */}
         {stage === "scoring" && (
           <div className="card p-10 text-center fade-in-up">
             <div className="inline-block w-12 h-12 rounded-full border-4 border-[#0D9488] border-t-transparent animate-spin mb-5" />
             <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Calculating your score…</div>
             <div className="text-sm" style={{ color: "#6B6B6B" }}>
-              Combining your PR review with your answers. Almost done.
+              Combining PR review with your answers. Almost done.
             </div>
           </div>
         )}
 
-        {/* ── Stage 5: Score ── */}
+        {/* ── Stage: Score ── */}
         {stage === "score" && result && (
           <div className="space-y-5 fade-in-up">
 
@@ -501,11 +519,8 @@ function SubmitPageInner() {
               </div>
             )}
 
-            {/* Big score */}
             <div className="card shine p-8 text-center">
-              <div className="text-6xl font-black gradient-text leading-none mb-1">
-                {result.scoreTotal}
-              </div>
+              <div className="text-6xl font-black gradient-text leading-none mb-1">{result.scoreTotal}</div>
               <div className="text-sm font-semibold mb-3" style={{ color: "#6B6B6B" }}>/100</div>
               {result.scoreBonus > 0 && (
                 <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
@@ -515,7 +530,6 @@ function SubmitPageInner() {
               )}
             </div>
 
-            {/* Score bars */}
             <div className="card p-6">
               <div className="section-label mb-4">Score Breakdown</div>
               <div className="space-y-3">
@@ -526,7 +540,6 @@ function SubmitPageInner() {
               </div>
             </div>
 
-            {/* Claude feedback */}
             {result.claudeReview && (
               <div className="card p-6">
                 <div className="section-label mb-4">Claude&rsquo;s Feedback</div>
@@ -546,7 +559,6 @@ function SubmitPageInner() {
               </div>
             )}
 
-            {/* Follow-up feedback */}
             {result.followUpFeedback && (
               <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
                 style={{ background: "#EBEBFF", border: "1px solid #C4C2DB" }}>

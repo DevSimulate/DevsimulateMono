@@ -157,7 +157,7 @@ model FollowUpQuestion {
   submissionId        String                @unique
   submission          Submission            @relation(fields: [submissionId], references: [id])
   question1           String                @db.Text
-  question2           String                @db.Text
+  question2           String?               @db.Text
   answer1             String?               @db.Text
   answer2             String?               @db.Text
   scoreBonus          Int?

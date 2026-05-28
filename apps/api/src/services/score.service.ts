@@ -31,7 +31,8 @@ export async function saveReviewResult(
     include: { user: true },
   });
 
-  await updateUserSkillScore(submission.userId, review.scoreTotal);
+  // EMA update intentionally deferred — runs after follow-up answers
+  // so skill score reflects the final combined score, not the base score.
 
   return submission;
 }
@@ -40,7 +41,7 @@ export async function saveReviewResult(
  * Recalculates and persists the user's skill score using an exponential
  * moving average weighted toward recent performance.
  */
-async function updateUserSkillScore(
+export async function updateUserSkillScore(
   userId: string,
   latestScore: number
 ): Promise<void> {
