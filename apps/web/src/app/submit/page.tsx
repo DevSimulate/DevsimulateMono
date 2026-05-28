@@ -111,7 +111,9 @@ function SubmitPageInner() {
   const [result,       setResult]       = useState<ReviewResult | null>(null);
   const [error,        setError]        = useState<string | null>(null);
   const [timeLeft,     setTimeLeft]     = useState(600);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [elapsed,      setElapsed]      = useState(0);
+  const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auth check + ticket fetch
   useEffect(() => {
@@ -135,6 +137,17 @@ function SubmitPageInner() {
       .then((data) => { if (data.data) setTicket(data.data); setStage("describe"); })
       .catch(() => setStage("describe"));
   }, [ticketId, prUrl, router]);
+
+  // Elapsed timer — active during analysing stage
+  useEffect(() => {
+    if (stage === "analysing") {
+      setElapsed(0);
+      elapsedRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else {
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+    }
+    return () => { if (elapsedRef.current) clearInterval(elapsedRef.current); };
+  }, [stage]);
 
   // 10-minute countdown — active during q1 and q2 stages
   useEffect(() => {
@@ -193,11 +206,11 @@ function SubmitPageInner() {
   }
 
   async function waitForReviewSSE(sid: string, token: string): Promise<void> {
-    const deadline = Date.now() + 5 * 60 * 1000;
+    const deadline = Date.now() + 8 * 60 * 1000;
 
     // Attempt SSE first
     const sseOk = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 5 * 60 * 1000);
+      const timeout = setTimeout(() => resolve(false), 8 * 60 * 1000);
 
       fetch(`${API_URL}/submissions/${sid}/stream`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -416,8 +429,11 @@ function SubmitPageInner() {
           <div className="card p-10 text-center fade-in-up">
             <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
             <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Analysing your PR…</div>
-            <div className="text-sm mb-8" style={{ color: "#6B6B6B" }}>
-              Claude is reading your diff. First question will appear in ~20 seconds.
+            <div className="text-sm mb-1" style={{ color: "#6B6B6B" }}>
+              Claude is reading your diff and generating a question. Usually 60–90 seconds.
+            </div>
+            <div className="text-xs font-mono mb-8" style={{ color: elapsed > 90 ? "#D97706" : "#6B6B6B" }}>
+              {Math.floor(elapsed / 60).toString().padStart(2, "0")}:{(elapsed % 60).toString().padStart(2, "0")} elapsed
             </div>
             <div className="rounded-xl p-5 text-left space-y-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
               <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>What to expect</div>
