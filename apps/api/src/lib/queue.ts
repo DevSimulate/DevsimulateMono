@@ -59,10 +59,7 @@ export function startReviewWorker(): Worker<ReviewJobData> {
         generateFirstQuestion(ticket, prDiff, review),
       ]);
 
-      // ── 5. Notify SSE clients that the review is ready ───────────────────
-      reviewEvents.emit("reviewed", submissionId);
-
-      // ── 6. Persist Q1 if generation succeeded ────────────────────────────
+      // ── 5. Persist Q1 if generation succeeded ────────────────────────────
       if (q1Result.status === "fulfilled") {
         await prisma.followUpQuestion.create({
           data: {
@@ -74,6 +71,9 @@ export function startReviewWorker(): Worker<ReviewJobData> {
       } else {
         console.error(`[review-worker] Q1 generation failed for ${submissionId}:`, q1Result.reason);
       }
+
+      // ── 6. Notify SSE clients only after Q1 is saved ─────────────────────
+      reviewEvents.emit("reviewed", submissionId);
     },
     { connection: redisConnection, concurrency: 3 }
   );
