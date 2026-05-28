@@ -244,8 +244,12 @@ function SubmitPageInner() {
         if (r.ok) {
           const data = await r.json();
           if (data.data?.status === "REVIEWED") return;
+          if (data.data?.status === "VOID") throw new Error("Review failed on the server. Please try again.");
         }
-      } catch { /* keep polling */ }
+      } catch (pollErr) {
+        if (pollErr instanceof Error && pollErr.message.includes("Review failed")) throw pollErr;
+        /* keep polling on transient errors */
+      }
     }
 
     throw new Error("Review is taking longer than expected. Try again or check your dashboard.");

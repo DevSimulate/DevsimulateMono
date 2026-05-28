@@ -78,8 +78,18 @@ export function startReviewWorker(): Worker<ReviewJobData> {
     { connection: redisConnection, concurrency: 3 }
   );
 
-  worker.on("failed", (job, err) => {
+  worker.on("failed", async (job, err) => {
     console.error(`[review-worker] Job ${job?.id} failed after ${job?.attemptsMade} attempts:`, err.message);
+    // Mark submission VOID so the web client stops polling immediately
+    if (job?.data?.submissionId) {
+      try {
+        await prisma.submission.update({
+          where: { id: job.data.submissionId },
+          data: { status: "VOID" },
+        });
+        reviewEvents.emit("reviewed", job.data.submissionId); // unblock SSE clients
+      } catch { /* best-effort */ }
+    }
   });
 
   return worker;
