@@ -278,7 +278,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     const scored = await scoreFollowUpAnswers(
       submission.ticket as any,
       followUp.question1,
-      followUp.question2,
+      followUp.question2 ?? "",
       answer1,
       answer2,
       aiDeclaration!
