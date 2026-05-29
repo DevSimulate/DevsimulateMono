@@ -12,6 +12,7 @@ import employerRouter from "./routes/employer";
 import employerDemoRouter from "./routes/employer-demo";
 import githubRouter from "./routes/github";
 import waitlistRouter from "./routes/waitlist";
+import feedbackRouter from "./routes/feedback";
 import { startReviewWorker } from "./lib/queue";
 
 const app = express();
@@ -62,6 +63,7 @@ app.use("/users", usersRouter);
 app.use("/billing", billingRouter);
 app.use("/github", githubRouter);
 app.use("/waitlist", waitlistRouter);
+app.use("/feedback", feedbackRouter);
 app.use("/", employerDemoRouter);
 app.use("/", employerRouter);
 

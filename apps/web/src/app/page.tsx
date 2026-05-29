@@ -344,11 +344,13 @@ export default function LandingPage(): React.ReactElement {
       <footer className="py-8 px-6 border-t" style={{ borderColor: "#E4E2DD", background: "#F7F6F3" }}>
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <Logo variant="horizontal" size={28} />
-          <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2025 DevSimulate. Scored by Claude AI.</p>
+          <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2026 DevSimulate. Scored by Claude AI.</p>
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
             <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-            <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">Feedback</a>
+            <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">
+              ossama@devsimulate.com
+            </a>
           </div>
         </div>
       </footer>

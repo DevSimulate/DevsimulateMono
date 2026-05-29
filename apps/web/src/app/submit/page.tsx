@@ -123,6 +123,10 @@ function SubmitPageInner() {
   const [declaration,  setDeclaration]  = useState<AIDeclaration | null>(null);
   const [result,       setResult]       = useState<ReviewResult | null>(null);
   const [error,        setError]        = useState<string | null>(null);
+  const [feedbackRating,  setFeedbackRating]  = useState<number>(0);
+  const [feedbackText,    setFeedbackText]    = useState("");
+  const [feedbackSent,    setFeedbackSent]    = useState(false);
+  const [feedbackSending, setFeedbackSending] = useState(false);
   const [timeLeft,     setTimeLeft]     = useState(600);
   const [elapsed,      setElapsed]      = useState(0);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -285,6 +289,30 @@ function SubmitPageInner() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate Q2 — please try again.");
       setStage("q1");
+    }
+  }
+
+  async function handleFeedbackSubmit() {
+    if (!feedbackText.trim() || feedbackRating === 0) return;
+    const token = getToken();
+    if (!token) return;
+    setFeedbackSending(true);
+    try {
+      await fetch(`${API_URL}/feedback`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: feedbackText,
+          rating: feedbackRating,
+          ticketTitle: ticket?.title ?? "",
+          score: result?.scoreTotal ?? 0,
+        }),
+      });
+      setFeedbackSent(true);
+    } catch {
+      setFeedbackSent(true);
+    } finally {
+      setFeedbackSending(false);
     }
   }
 
@@ -684,6 +712,45 @@ function SubmitPageInner() {
             <Link href="/dashboard" className="btn-primary w-full text-center block">
               Back to Dashboard →
             </Link>
+
+            {/* Feedback */}
+            {!feedbackSent ? (
+              <div className="card p-6">
+                <div className="section-label mb-1">Quick Feedback</div>
+                <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
+                  Help us improve — takes 30 seconds. Goes directly to the founder.
+                </p>
+                <div className="flex gap-2 mb-4">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button key={star} onClick={() => setFeedbackRating(star)}
+                      className="text-2xl transition-transform hover:scale-110"
+                      style={{ opacity: feedbackRating >= star ? 1 : 0.3 }}>
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder="What worked well? What was confusing? Anything you want added?"
+                  rows={3}
+                  className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3"
+                  style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+                />
+                <button
+                  onClick={handleFeedbackSubmit}
+                  disabled={feedbackSending || feedbackRating === 0 || !feedbackText.trim()}
+                  className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                >
+                  {feedbackSending ? "Sending…" : "Send Feedback"}
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-2xl p-5 text-center text-sm font-semibold"
+                style={{ background: "#DCFCE7", color: "#16a34a" }}>
+                Thanks for the feedback! It goes straight to ossama@devsimulate.com
+              </div>
+            )}
 
           </div>
         )}
