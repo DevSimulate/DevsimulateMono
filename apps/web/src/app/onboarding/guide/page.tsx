@@ -11,7 +11,7 @@ const GITHUB_AUTH_URL =
   `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
   `&scope=read:user,user:email` +
   `&redirect_uri=${encodeURIComponent(
-    (process.env.NEXT_PUBLIC_APP_URL ?? "https://devsimulate-mono-web.vercel.app") +
+    (process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com") +
     "/auth/callback"
   )}`;
 

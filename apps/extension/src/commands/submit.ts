@@ -5,7 +5,7 @@ import { getAssignedTickets } from "../services/ticket.service";
 import { getCurrentBranch, getRemoteUrl } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
 
-const WEB_URL = "https://devsimulate-mono-web.vercel.app";
+const WEB_URL = "https://www.devsimulate.com";
 
 /**
  * Parses "owner" and "repo" from a GitHub remote URL.

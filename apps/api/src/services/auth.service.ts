@@ -13,7 +13,7 @@ export async function exchangeGitHubCode(code: string): Promise<{
   githubUser: GitHubUser;
 }> {
   const appUrl =
-    process.env.APP_URL ?? "https://devsimulate-mono-web.vercel.app";
+    process.env.APP_URL ?? "https://www.devsimulate.com";
 
   const tokenRes = await axios.post<GitHubTokenResponse>(
     "https://github.com/login/oauth/access_token",

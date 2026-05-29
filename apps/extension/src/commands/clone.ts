@@ -22,7 +22,7 @@ export async function cloneCommand(
         "Open Dashboard"
       );
       if (choice === "Open Dashboard") {
-        await vscode.env.openExternal(vscode.Uri.parse("https://devsimulate-mono-web.vercel.app/dashboard"));
+        await vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/dashboard"));
       }
       return;
     }
