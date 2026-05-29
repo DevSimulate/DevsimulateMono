@@ -285,8 +285,12 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     );
 
     // Tiered bonus based on declared AI usage level.
-    // Mismatch penalty only applies when NO_AI / PHRASING is declared but answers look AI-generated.
-    const MISMATCH_PENALTY = 20;
+    // Mismatch penalty differs by declaration: PHRASING gets -10 (smaller gap),
+    // NO_AI_USED gets -20 (claimed full independence).
+    const MISMATCH_PENALTY: Record<string, number> = {
+      NO_AI_USED:           20,
+      AI_USED_FOR_PHRASING: 10,
+    };
     const BONUS_MULTIPLIER: Record<string, number> = {
       NO_AI_USED:                1.0,
       AI_USED_FOR_PHRASING:      1.0,
@@ -295,8 +299,9 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     };
     const HONESTY_REWARD = aiDeclaration === "AI_USED_FOR_ANSWER" ? 3 : 0;
     const multiplier     = BONUS_MULTIPLIER[aiDeclaration!] ?? 1.0;
-
-    const mismatchPenalty = scored.declarationMismatch ? MISMATCH_PENALTY : 0;
+    const mismatchPenalty = scored.declarationMismatch
+      ? (MISMATCH_PENALTY[aiDeclaration!] ?? 20)
+      : 0;
     const effectiveBonus  = scored.declarationMismatch
       ? 0
       : Math.round(scored.scoreBonus * multiplier) + HONESTY_REWARD;
@@ -315,6 +320,29 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       },
     });
 
+    /**
+     * INTENTIONAL DESIGN DECISION:
+     *
+     * Base score dominates final score by design.
+     *
+     * A developer who copy-pasted everything but whose code actually works
+     * correctly will score approximately 60–65 after mismatch penalty.
+     *
+     * This is philosophically correct:
+     * - Their code fix was genuinely good (base score reflects this)
+     * - Their understanding was not proven (penalty reflects this)
+     * - 63/100 accurately represents partial value
+     *
+     * We do NOT want to collapse scores to zero for technically correct fixes.
+     * The employer sees both the raw PR score and the final adjusted score.
+     * The gap between them tells the story.
+     *
+     * Example:
+     * PR Score:    83/100  (code was excellent)
+     * Final Score: 63/100  (understanding unproven)
+     * Gap:         20 pts
+     * Employer interpretation: Great code, unclear if they understood what they fixed.
+     */
     const finalScore = Math.max(0, Math.min((submission.scoreTotal ?? 0) + effectiveBonus - mismatchPenalty, 100));
     await prisma.submission.update({
       where: { id: req.params.id },
@@ -324,7 +352,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
 
     const bonusNote =
       scored.declarationMismatch
-        ? `Declaration mismatch detected — bonus forfeited and ${MISMATCH_PENALTY} pts deducted.`
+        ? `Declaration mismatch detected — bonus forfeited and ${mismatchPenalty} pts deducted.`
         : aiDeclaration === "AI_USED_FOR_ANSWER"
         ? `You honestly declared AI wrote your answers. No follow-up bonus, but +${HONESTY_REWARD} pts for transparency.`
         : aiDeclaration === "AI_USED_FOR_UNDERSTANDING"

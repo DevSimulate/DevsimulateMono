@@ -589,6 +589,20 @@ function SubmitPageInner() {
             <div className="card shine p-8 text-center">
               <div className="text-6xl font-black gradient-text leading-none mb-1">{result.scoreTotal}</div>
               <div className="text-sm font-semibold mb-3" style={{ color: "#6B6B6B" }}>/100</div>
+              {(() => {
+                const prBase = (result.scoreDiagnosis ?? 0) + (result.scoreDesign ?? 0) +
+                               (result.scoreCommunication ?? 0) + (result.scoreExecution ?? 0);
+                const gap = prBase - result.scoreTotal;
+                return gap > 10 ? (
+                  <div className="text-xs mb-3" style={{ color: "#6B6B6B" }}>
+                    PR score <span className="font-bold" style={{ color: "#1A1A1A" }}>{prBase}</span>
+                    {" → "}
+                    final <span className="font-bold" style={{ color: "#DC2626" }}>{result.scoreTotal}</span>
+                    {"  "}
+                    <span style={{ color: "#D97706" }}>({gap} pts deducted)</span>
+                  </div>
+                ) : null;
+              })()}
               {result.scoreBonus > 0 && (
                 <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
                   style={{ background: "#CCFBF1", color: "#0D9488" }}>

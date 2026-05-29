@@ -307,6 +307,16 @@ Assess whether the answer patterns match the declared usage:
 
 Set declarationMismatch to true ONLY if the developer declared NO_AI_USED or AI_USED_FOR_PHRASING but the answers strongly resemble AI-generated content. Do not flag for minor polish. High bar — require clear signal.
 
+IMPORTANT RULE FOR AI_USED_FOR_PHRASING:
+Developer declared they used AI only to polish their own writing. Their answers will naturally sound professional and well-structured. Do NOT flag mismatch based on writing quality alone.
+
+Only flag declarationMismatch: true for AI_USED_FOR_PHRASING if BOTH of these are true:
+1. Answers contain absolutely zero references to specific file names, line numbers, method names, or variable names from the actual PR diff
+2. Answers read like a generic textbook explanation that could apply to any bug of this type anywhere — not grounded in THIS codebase or THIS fix
+
+If answers sound polished BUT contain specific code references — declarationMismatch: false. This is exactly what honest AI phrasing looks like.
+If answers contain zero specific references AND read like a textbook explanation — declarationMismatch: true. This suggests AI wrote the understanding, not just the phrasing.
+
 Write employerSummary as 2-3 sentences describing what you observed: the declared level, what patterns you detected, and your confidence in the authenticity signal. This is for an employer reviewing the candidate — be factual, not accusatory.
 
 ## Task 3 — Developer feedback
