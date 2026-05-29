@@ -82,62 +82,60 @@ export async function submitCommand(
       if (proceed !== "Submit Anyway") return;
     }
 
-    // --- Auto-detect PR URL ---
-    let detectedUrl: string | undefined;
-
+    // --- Auto-detect PR ---
     const remoteUrl = await getRemoteUrl();
     const parsed = remoteUrl ? parseGitHubOwnerRepo(remoteUrl) : null;
 
-    if (parsed && assignment.branchName) {
-      try {
-        const prs = await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: "DevSimulate: Looking up your PR…",
-            cancellable: false,
-          },
-          () => findOpenPRs(token, parsed.owner, parsed.repo, assignment.branchName)
-        );
-
-        if (prs.length === 1) {
-          detectedUrl = prs[0].url;
-        } else if (prs.length > 1) {
-          const items = prs.map((pr) => ({ label: `#${pr.number}: ${pr.title}`, url: pr.url }));
-          const choice = await vscode.window.showQuickPick(items, {
-            placeHolder: "Multiple open PRs found — select one",
-          });
-          if (!choice) return;
-          detectedUrl = choice.url;
-        }
-      } catch {
-        // API lookup failed — fall through to manual input
-      }
+    if (!parsed) {
+      vscode.window.showErrorMessage(
+        "DevSimulate: Could not read git remote. Make sure you are inside the cloned repo."
+      );
+      return;
     }
 
-    // Show input box: pre-filled if PR was found, empty if not
-    const prUrl = await vscode.window.showInputBox({
-      prompt: detectedUrl
-        ? "PR found — press Enter to confirm or edit the URL"
-        : "No PR found. Paste your GitHub PR URL",
-      value: detectedUrl ?? "",
-      placeHolder: "https://github.com/you/novatech-crm/pull/1",
-      ignoreFocusOut: true,
-      validateInput: (v) => {
-        if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
-          return "Must be a valid GitHub PR URL";
-        }
-        return undefined;
+    const prs = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: "DevSimulate: Looking up your PR…",
+        cancellable: false,
       },
-    });
+      () => findOpenPRs(token, parsed.owner, parsed.repo, assignment.branchName)
+    );
 
-    if (!prUrl) return;
+    let prUrl: string;
+
+    if (prs.length === 0) {
+      const action = await vscode.window.showWarningMessage(
+        `DevSimulate: No open PR found for branch '${assignment.branchName}'. Open a PR on GitHub first.`,
+        "Open GitHub"
+      );
+      if (action === "Open GitHub") {
+        await vscode.env.openExternal(
+          vscode.Uri.parse(
+            `https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(assignment.branchName)}`
+          )
+        );
+      }
+      return;
+    }
+
+    if (prs.length === 1) {
+      prUrl = prs[0].url;
+    } else {
+      const items = prs.map((pr) => ({ label: `#${pr.number}: ${pr.title}`, url: pr.url }));
+      const choice = await vscode.window.showQuickPick(items, {
+        placeHolder: "Multiple open PRs found — select one",
+      });
+      if (!choice) return;
+      prUrl = choice.url;
+    }
 
     const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}`;
 
     await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
 
     vscode.window.showInformationMessage(
-      "DevSimulate: Submission form opened in your browser — describe your approach and get your score."
+      `DevSimulate: Opening submission form for PR — describe your fix and get your score.`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Submission failed";
