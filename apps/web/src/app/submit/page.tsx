@@ -123,10 +123,9 @@ function SubmitPageInner() {
   const [declaration,  setDeclaration]  = useState<AIDeclaration | null>(null);
   const [result,       setResult]       = useState<ReviewResult | null>(null);
   const [error,        setError]        = useState<string | null>(null);
-  const [feedbackRating,  setFeedbackRating]  = useState<number>(0);
-  const [feedbackText,    setFeedbackText]    = useState("");
-  const [feedbackSent,    setFeedbackSent]    = useState(false);
-  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<number>(0);
+  const [feedbackText,   setFeedbackText]   = useState("");
+  const [feedbackSent,   setFeedbackSent]   = useState(false);
   const [timeLeft,     setTimeLeft]     = useState(600);
   const [elapsed,      setElapsed]      = useState(0);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -292,28 +291,22 @@ function SubmitPageInner() {
     }
   }
 
-  async function handleFeedbackSubmit() {
+  function handleFeedbackSubmit() {
     if (!feedbackText.trim() || feedbackRating === 0) return;
     const token = getToken();
     if (!token) return;
-    setFeedbackSending(true);
-    try {
-      await fetch(`${API_URL}/feedback`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: feedbackText,
-          rating: feedbackRating,
-          ticketTitle: ticket?.title ?? "",
-          score: result?.scoreTotal ?? 0,
-        }),
-      });
-      setFeedbackSent(true);
-    } catch {
-      setFeedbackSent(true);
-    } finally {
-      setFeedbackSending(false);
-    }
+    // Close immediately — fire and forget
+    setFeedbackSent(true);
+    fetch(`${API_URL}/feedback`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: feedbackText,
+        rating: feedbackRating,
+        ticketTitle: ticket?.title ?? "",
+        score: result?.scoreTotal ?? 0,
+      }),
+    }).catch(() => { /* silent — user already sees success */ });
   }
 
   async function handleFinalSubmit() {
@@ -739,10 +732,10 @@ function SubmitPageInner() {
                 />
                 <button
                   onClick={handleFeedbackSubmit}
-                  disabled={feedbackSending || feedbackRating === 0 || !feedbackText.trim()}
+                  disabled={feedbackRating === 0 || !feedbackText.trim()}
                   className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
                 >
-                  {feedbackSending ? "Sending…" : "Send Feedback"}
+                  Send Feedback
                 </button>
               </div>
             ) : (

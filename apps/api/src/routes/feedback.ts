@@ -31,27 +31,23 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  try {
-    await transporter.sendMail({
-      from: `"DevSimulate Feedback" <${process.env.EMAIL_USER}>`,
-      to: "ossama@devsimulate.com",
-      subject: `[Feedback] ${githubUsername} · Score ${score ?? "?"}/100 · ${ticketTitle ?? "Unknown ticket"}`,
-      text: [
-        `From: ${githubUsername}`,
-        `Ticket: ${ticketTitle ?? "—"}`,
-        `Score: ${score ?? "—"}/100`,
-        `Rating: ${"★".repeat(rating ?? 0)}${"☆".repeat(5 - (rating ?? 0))} (${rating ?? "—"}/5)`,
-        ``,
-        `Message:`,
-        message,
-      ].join("\n"),
-    });
+  res.json({ success: true });
 
-    res.json({ success: true });
-  } catch (err) {
-    console.error("[feedback] email send failed:", err);
-    res.status(500).json({ error: "Failed to send feedback" });
-  }
+  // Send email in background — never block or surface errors to the user
+  transporter.sendMail({
+    from: `"DevSimulate Feedback" <${process.env.EMAIL_USER}>`,
+    to: "ossama@devsimulate.com",
+    subject: `[Feedback] ${githubUsername} · Score ${score ?? "?"}/100 · ${ticketTitle ?? "Unknown ticket"}`,
+    text: [
+      `From: ${githubUsername}`,
+      `Ticket: ${ticketTitle ?? "—"}`,
+      `Score: ${score ?? "—"}/100`,
+      `Rating: ${"★".repeat(rating ?? 0)}${"☆".repeat(5 - (rating ?? 0))} (${rating ?? "—"}/5)`,
+      ``,
+      `Message:`,
+      message,
+    ].join("\n"),
+  }).catch((err) => console.error("[feedback] email send failed:", err));
 });
 
 export default router;
