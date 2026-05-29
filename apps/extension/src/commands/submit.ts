@@ -1,10 +1,48 @@
 import * as vscode from "vscode";
-import { getToken } from "../services/auth.service";
+import axios from "axios";
+import { getToken, getApiUrl } from "../services/auth.service";
 import { getAssignedTickets } from "../services/ticket.service";
-import { getCurrentBranch } from "../services/git.service";
+import { getCurrentBranch, getRemoteUrl } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
 
 const WEB_URL = "https://devsimulate-mono-web.vercel.app";
+
+/**
+ * Parses "owner" and "repo" from a GitHub remote URL.
+ * Handles both HTTPS (https://github.com/owner/repo.git) and
+ * SSH (git@github.com:owner/repo.git) formats.
+ */
+function parseGitHubOwnerRepo(remoteUrl: string): { owner: string; repo: string } | null {
+  const httpsMatch = /github\.com\/([^/]+)\/([^/.]+)(\.git)?$/.exec(remoteUrl);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+  }
+  const sshMatch = /github\.com[:/]([^/]+)\/([^/.]+)(\.git)?$/.exec(remoteUrl);
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] };
+  }
+  return null;
+}
+
+/**
+ * Queries the DevSimulate API for open PRs on the given branch.
+ * Returns an array of { number, title, url } objects.
+ */
+async function findOpenPRs(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<Array<{ number: number; title: string; url: string }>> {
+  const response = await axios.get<{ data: Array<{ number: number; title: string; url: string }> }>(
+    `${getApiUrl()}/github/pr`,
+    {
+      params: { owner, repo, branch },
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return response.data.data ?? [];
+}
 
 /**
  * Handles the devsimulate.submitPR command.
@@ -63,17 +101,71 @@ export async function submitCommand(
       if (proceed !== "Submit Anyway") return;
     }
 
-    const prUrl = await vscode.window.showInputBox({
-      prompt: "Paste your GitHub PR URL",
-      placeHolder: "https://github.com/org/repo/pull/42",
-      ignoreFocusOut: true,
-      validateInput: (v) => {
-        if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
-          return "Must be a valid GitHub PR URL";
+    // --- Auto-detect PR URL from GitHub API ---
+    let prUrl: string | undefined;
+
+    const remoteUrl = await getRemoteUrl();
+    const parsed = remoteUrl ? parseGitHubOwnerRepo(remoteUrl) : null;
+    const branchForPR = assignment.branchName;
+
+    if (parsed && branchForPR) {
+      try {
+        const prs = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "DevSimulate: Looking up open PR…",
+            cancellable: false,
+          },
+          () => findOpenPRs(token, parsed.owner, parsed.repo, branchForPR)
+        );
+
+        if (prs.length === 1) {
+          prUrl = prs[0].url;
+          vscode.window.showInformationMessage(
+            `DevSimulate: Found PR #${prs[0].number} — "${prs[0].title}"`
+          );
+        } else if (prs.length > 1) {
+          const items = prs.map((pr) => ({
+            label: `#${pr.number}: ${pr.title}`,
+            url: pr.url,
+          }));
+          const choice = await vscode.window.showQuickPick(items, {
+            placeHolder: "Multiple open PRs found — select one",
+          });
+          if (!choice) return;
+          prUrl = choice.url;
+        } else {
+          // No PRs found via API — fall through to manual input
+          const openBrowser = await vscode.window.showWarningMessage(
+            `DevSimulate: No open PR found for branch '${branchForPR}'. Create a PR on GitHub first.`,
+            "Open GitHub",
+            "Enter URL Manually"
+          );
+          if (openBrowser === "Open GitHub") {
+            await vscode.env.openExternal(
+              vscode.Uri.parse(`https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(branchForPR)}`)
+            );
+            return;
+          }
         }
-        return undefined;
-      },
-    });
+      } catch {
+        // API lookup failed — silently fall back to manual input
+      }
+    }
+
+    if (!prUrl) {
+      prUrl = await vscode.window.showInputBox({
+        prompt: "Paste your GitHub PR URL",
+        placeHolder: "https://github.com/org/repo/pull/42",
+        ignoreFocusOut: true,
+        validateInput: (v) => {
+          if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
+            return "Must be a valid GitHub PR URL";
+          }
+          return undefined;
+        },
+      });
+    }
 
     if (!prUrl) return;
 

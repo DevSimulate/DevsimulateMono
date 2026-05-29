@@ -10,6 +10,7 @@ import usersRouter from "./routes/users";
 import billingRouter from "./routes/billing";
 import employerRouter from "./routes/employer";
 import employerDemoRouter from "./routes/employer-demo";
+import githubRouter from "./routes/github";
 import { startReviewWorker } from "./lib/queue";
 
 const app = express();
@@ -58,6 +59,7 @@ app.use("/submissions", submissionsRouter);
 app.use("/webhooks", webhooksRouter);
 app.use("/users", usersRouter);
 app.use("/billing", billingRouter);
+app.use("/github", githubRouter);
 app.use("/", employerDemoRouter);
 app.use("/", employerRouter);
 
