@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
 
@@ -14,56 +14,173 @@ const GITHUB_AUTH_URL =
     "/auth/callback"
   )}`;
 
-// ─── Step data ────────────────────────────────────────────────────────────────
+// ─── Step definitions ─────────────────────────────────────────────────────────
 
-const STEPS = [
+const STEPS: {
+  num: string;
+  icon: string;
+  color: string;
+  title: string;
+  lines: string[];
+  note: string | null;
+  highlight?: boolean;
+  done?: boolean;
+}[] = [
   {
     num: "01",
-    icon: "🧩",
+    icon: "🌐",
     color: "#EBEBFF",
-    title: "Install the VS Code extension",
-    what: "Open VS Code → Extensions panel (Ctrl+Shift+X or ⌘⇧X) → search \"DevSimulate\" → Install → click the DevSimulate icon in the sidebar → hit \"Login with GitHub\".",
-    detail: "The extension handles everything: cloning the repo, creating your branch, and detecting your open PR when you submit.",
-    time: "~2 min",
-    tip: null,
+    title: "Go to DevSimulate and click Start Free",
+    lines: [
+      "Visit devsimulate-mono-web.vercel.app in your browser.",
+      'Click the "Start free" button in the top navigation.',
+      "You land on the codebase selection page.",
+    ],
+    note: null,
+    done: true,
   },
   {
     num: "02",
-    icon: "🎯",
+    icon: "🗂️",
     color: "#CCFBF1",
-    title: "Claim your first ticket",
-    what: "In the DevSimulate sidebar click \"Browse Tickets\", pick one that fits your level, then click \"Start Ticket\". Choose a folder — the extension clones NovaTech CRM and checks out your branch automatically.",
-    detail: "Your branch name is saved. The extension will use it later to auto-find your PR on GitHub — no copy-pasting URLs.",
-    time: "~3 min",
-    tip: "Start with a MID ticket. JUNIOR tickets are too guided; you want enough ambiguity to practice real diagnosis.",
+    title: "Select NovaTech CRM",
+    lines: [
+      "NovaTech CRM is the only live codebase right now.",
+      'Click "Start with NovaTech" on the green-bordered card.',
+      "You arrive on this guide page.",
+    ],
+    note: null,
+    done: true,
   },
   {
     num: "03",
-    icon: "🔧",
+    icon: "🐙",
     color: "#FEF3C7",
-    title: "Fix the bug — then open a PR",
-    what: "Read the ticket description carefully. Explore the codebase. Find the root cause (not just the symptom). Fix it. Push your branch. Open a Pull Request on GitHub with a short description explaining what you found and why you fixed it the way you did.",
-    detail: "40% of your score is Diagnosis — did you understand WHY the bug exists? Your PR description is where you prove it. Don't just describe what you changed; explain the reasoning.",
-    time: "30 min – 2 hrs",
-    tip: "The PR description is half your score. Write it like you're explaining the bug to a colleague in Slack — clear, direct, specific.",
+    title: "Sign in with GitHub",
+    lines: [
+      'Click "Sign in with GitHub" at the bottom of this page.',
+      "GitHub asks you to authorize DevSimulate — click Authorize.",
+      "Takes about 5 seconds. We only read your public profile and email.",
+      "After login you land on the Tickets page.",
+    ],
+    note: "We never get write access to your code. The only permission is read:user.",
   },
   {
     num: "04",
-    icon: "🤖",
+    icon: "🎫",
     color: "#FCE7F3",
-    title: "Submit → get scored in ~60 seconds",
-    what: "In VS Code, open the command palette (Ctrl+Shift+P or ⌘⇧P) → run \"DevSimulate: Submit PR\". The extension auto-detects your open PR. Your browser opens — write a sentence or two about your approach, click Submit.",
-    detail: "Claude reviews your PR diff against the ticket rubric and scores Diagnosis, Design, Communication, and Execution. Then two follow-up questions appear — answer them to earn up to 20 bonus points.",
-    time: "~10 min",
-    tip: "The follow-up questions reference your specific code changes. They can't be answered by AI without reading what you actually wrote.",
+    title: "Browse tickets and assign yourself one",
+    lines: [
+      "The Tickets page shows all available NovaTech CRM bugs.",
+      "Each card shows: difficulty (MID or SENIOR), the bug title, files involved, and expected time.",
+      "Pick a ticket that fits your level and click Assign to me.",
+      "The ticket is now locked to your account and a branch name is generated automatically.",
+    ],
+    note: "Start with a MID ticket on your first attempt. SENIOR tickets assume deep familiarity with the codebase.",
+  },
+  {
+    num: "05",
+    icon: "🧩",
+    color: "#EBEBFF",
+    title: "Install DevSimulate in VS Code",
+    lines: [
+      "Open VS Code.",
+      "Press Ctrl+Shift+X on Windows/Linux or Cmd+Shift+X on Mac to open the Extensions panel.",
+      'Search "DevSimulate" in the search box.',
+      "Click Install on the DevSimulate extension.",
+      "After install a lightning bolt icon appears in the VS Code left sidebar.",
+    ],
+    note: null,
+  },
+  {
+    num: "06",
+    icon: "🔑",
+    color: "#CCFBF1",
+    title: "Login from VS Code and see your ticket",
+    lines: [
+      "Click the DevSimulate lightning bolt icon in the VS Code sidebar.",
+      'Click "Login with GitHub" inside the sidebar panel.',
+      "A browser tab opens — authorize and copy the code shown back into VS Code when prompted.",
+      "Once authenticated your assigned ticket appears in the sidebar.",
+    ],
+    note: null,
+  },
+  {
+    num: "07",
+    icon: "📦",
+    color: "#FEF3C7",
+    title: "Start the ticket — extension clones the repo",
+    lines: [
+      'Click "Start Ticket" next to your ticket in the VS Code sidebar.',
+      "A folder picker opens — choose where you want to clone NovaTech CRM.",
+      "The extension automatically clones the repo and creates your branch (e.g. devsim/nova-47).",
+      "VS Code reopens with the cloned folder. Your branch is already checked out — ready to code.",
+    ],
+    note: null,
+  },
+  {
+    num: "08",
+    icon: "🔧",
+    color: "#FCE7F3",
+    title: "Read the ticket, find the root cause, fix it",
+    lines: [
+      "Open the ticket description in the sidebar. Read it carefully. More than once.",
+      "Explore the files listed in the ticket. Understand what the code is supposed to do.",
+      "Find the root cause — not just where the error shows up, but WHY it happens.",
+      "Write your fix. Test it if you can.",
+      "Push your branch: git push origin your-branch-name.",
+      "Go to GitHub, open your repo, and click Compare & pull request to open a PR.",
+    ],
+    note: "40% of your score is Diagnosis — did you understand WHY the bug exists? Fixing the symptom without understanding the cause scores low.",
+    highlight: true,
+  },
+  {
+    num: "09",
+    icon: "🚀",
+    color: "#EBEBFF",
+    title: "Submit via VS Code — PR is auto-detected",
+    lines: [
+      "Back in VS Code press Ctrl+Shift+P or Cmd+Shift+P to open the command palette.",
+      'Type "DevSimulate: Submit PR" and press Enter.',
+      "The extension automatically finds your open PR on GitHub — no URL copy-pasting needed.",
+      "A notification confirms the PR was found.",
+      "Your browser opens with the DevSimulate submission form.",
+    ],
+    note: null,
+  },
+  {
+    num: "10",
+    icon: "📝",
+    color: "#CCFBF1",
+    title: "Describe your fix and hit Submit",
+    lines: [
+      "In the browser form you see your PR details and a description text area.",
+      "Write 3 to 5 sentences about: what the root cause was, why the bug happened, and why your fix is correct.",
+      "This description is 20% of your score — do not leave it blank.",
+      "Click Submit for Review.",
+    ],
+    note: "Treat this like a Slack message to a senior engineer. Clear, direct, specific — not a summary of what you changed.",
+  },
+  {
+    num: "11",
+    icon: "🤖",
+    color: "#FEF3C7",
+    title: "Claude reviews your PR and scores it in ~60 seconds",
+    lines: [
+      "Claude reads your PR diff and your description and scores against the ticket rubric.",
+      "After ~60 seconds your score appears with 4 dimensions: Diagnosis (40 pts), Design (30 pts), Communication (20 pts), Execution (10 pts).",
+      "Two follow-up questions appear about your specific code changes — answer them honestly.",
+      "Strong answers add up to 20 bonus points.",
+      "Everything is saved to your Dashboard: score history, Claude feedback, and follow-up Q&A.",
+    ],
+    note: null,
   },
 ];
 
-// ─── Inner component (needs useSearchParams) ──────────────────────────────────
+// ─── Inner component ──────────────────────────────────────────────────────────
 
 function GuideContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const codebase = searchParams.get("codebase") ?? "novatech";
   const [authed, setAuthed] = useState<boolean | null>(null);
 
@@ -73,7 +190,7 @@ function GuideContent() {
 
   function handleGetStarted() {
     if (getToken()) {
-      router.push("/tickets");
+      window.location.href = "/tickets";
     } else {
       localStorage.setItem("ds_submit_return", "/tickets");
       window.location.href = GITHUB_AUTH_URL;
@@ -85,7 +202,8 @@ function GuideContent() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href="/onboarding/select" className="flex items-center gap-2 text-sm font-medium transition-colors"
+        <Link href="/onboarding/select"
+          className="text-sm font-medium transition-colors"
           style={{ color: "#6B6B6B" }}
           onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
           onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
@@ -101,7 +219,7 @@ function GuideContent() {
       <div className="max-w-2xl mx-auto px-5 py-14">
 
         {/* Header */}
-        <div className="text-center mb-14 fade-in-up">
+        <div className="text-center mb-12 fade-in-up">
           {codebase === "novatech" && (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4 text-xs font-bold"
               style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
@@ -110,62 +228,93 @@ function GuideContent() {
             </div>
           )}
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4" style={{ color: "#1A1A1A" }}>
-            You&apos;re 4 steps from your<br />
-            <span className="gradient-text">first real ticket</span>
+            Complete walkthrough —<br />
+            <span className="gradient-text">start to scored PR</span>
           </h1>
-          <p className="text-base leading-relaxed max-w-md mx-auto" style={{ color: "#6B6B6B" }}>
-            This is the full loop — from extension install to scored PR. It takes about 10 minutes to set up. The ticket itself is up to you.
+          <p className="text-base max-w-md mx-auto leading-relaxed" style={{ color: "#6B6B6B" }}>
+            11 steps, nothing skipped. Follow this exactly on your first run.
           </p>
         </div>
 
+        {/* Progress strip */}
+        <div className="flex items-center gap-1 mb-10 px-1">
+          {STEPS.map((s, i) => (
+            <div key={i} className="flex-1 h-1 rounded-full"
+              style={{ background: s.done ? "#22c55e" : "#E4E2DD" }} />
+          ))}
+        </div>
+
         {/* Steps */}
-        <div className="space-y-5 mb-14">
+        <div className="space-y-4">
           {STEPS.map((step, i) => (
-            <div
-              key={step.num}
+            <div key={step.num}
               className="card fade-in-up rounded-2xl overflow-hidden"
-              style={{ animationDelay: `${i * 80}ms` }}
-            >
-              <div className="flex items-start gap-4 p-6">
-                {/* Icon circle */}
-                <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-                  style={{ background: step.color }}>
-                  {step.icon}
+              style={{ animationDelay: `${i * 50}ms` }}>
+
+              <div className="flex items-start gap-4 p-5 sm:p-6">
+
+                {/* Icon */}
+                <div className="shrink-0 flex flex-col items-center">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+                    style={{
+                      background: step.done ? "#DCFCE7" : step.color,
+                      border: step.done ? "2px solid #22c55e" : "none",
+                      fontSize: step.done ? "18px" : "22px",
+                    }}>
+                    {step.done ? "✓" : step.icon}
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <div className="w-0.5 mt-2 rounded-full"
+                      style={{ height: "18px", background: "#E4E2DD" }} />
+                  )}
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  {/* Step number + time */}
-                  <div className="flex items-center justify-between mb-1.5">
+                <div className="flex-1 min-w-0 pb-1">
+                  {/* Step num + done badge */}
+                  <div className="flex items-center gap-2 mb-1.5">
                     <span className="text-xs font-black tracking-widest" style={{ color: "#9CA3AF" }}>
                       STEP {step.num}
                     </span>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                      style={{ background: step.color, color: "#6B6B6B" }}>
-                      {step.time}
-                    </span>
+                    {step.done && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: "#DCFCE7", color: "#16a34a" }}>
+                        Done ✓
+                      </span>
+                    )}
                   </div>
 
                   {/* Title */}
-                  <h3 className="font-black text-lg mb-2" style={{ color: "#1A1A1A" }}>
+                  <h3 className="font-black text-base mb-3" style={{ color: "#1A1A1A" }}>
                     {step.title}
                   </h3>
 
-                  {/* What to do */}
-                  <p className="text-sm leading-relaxed mb-3" style={{ color: "#3A3A3A" }}>
-                    {step.what}
-                  </p>
+                  {/* Action lines */}
+                  <ol className="space-y-2">
+                    {step.lines.map((line, j) => (
+                      <li key={j} className="flex items-start gap-2.5 text-sm leading-relaxed"
+                        style={{ color: "#3A3A3A" }}>
+                        <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
+                          style={{ background: step.color, color: "#1A1A1A", minWidth: "20px" }}>
+                          {j + 1}
+                        </span>
+                        <span>{line}</span>
+                      </li>
+                    ))}
+                  </ol>
 
-                  {/* Why it matters — subtle */}
-                  <p className="text-xs leading-relaxed mb-3" style={{ color: "#6B6B6B" }}>
-                    {step.detail}
-                  </p>
-
-                  {/* Tip */}
-                  {step.tip && (
-                    <div className="rounded-xl px-3.5 py-2.5 text-xs leading-relaxed"
-                      style={{ background: "#F7F6F3", borderLeft: "3px solid #5B5BD6", color: "#4B4B4B" }}>
-                      <span className="font-bold" style={{ color: "#5B5BD6" }}>Tip: </span>
-                      {step.tip}
+                  {/* Note */}
+                  {step.note && (
+                    <div className="mt-3 rounded-xl px-3.5 py-2.5 text-xs leading-relaxed"
+                      style={{
+                        background: step.highlight ? "#FFF7ED" : "#F7F6F3",
+                        borderLeft: `3px solid ${step.highlight ? "#F97316" : "#5B5BD6"}`,
+                        color: step.highlight ? "#9A3412" : "#4B4B4B",
+                      }}>
+                      <span className="font-bold"
+                        style={{ color: step.highlight ? "#EA580C" : "#5B5BD6" }}>
+                        {step.highlight ? "Important: " : "Note: "}
+                      </span>
+                      {step.note}
                     </div>
                   )}
                 </div>
@@ -175,70 +324,62 @@ function GuideContent() {
         </div>
 
         {/* Honest expectation */}
-        <div className="card rounded-2xl p-7 mb-10 fade-in-up"
-          style={{
-            background: "#FFFBEB",
-            border: "1px solid #FDE68A",
-            animationDelay: "360ms",
-          }}>
+        <div className="card rounded-2xl p-7 mt-8 mb-10 fade-in-up"
+          style={{ background: "#FFFBEB", border: "1px solid #FDE68A", animationDelay: "600ms" }}>
           <div className="flex items-start gap-3">
             <span className="text-2xl shrink-0">☕</span>
             <div>
               <h3 className="font-black text-base mb-2" style={{ color: "#92400E" }}>
-                One honest thing to know before you start
+                One honest thing before you start
               </h3>
               <p className="text-sm leading-relaxed" style={{ color: "#78350F" }}>
-                Your first ticket will probably take <strong>2–4 hours</strong>, not 45 minutes. The description will feel vague — that&apos;s intentional. Real bugs don&apos;t come with a step-by-step guide. You&apos;ll read a lot more code than you write, and that&apos;s the whole point. A score of <strong>65–75 on your first attempt is good</strong>. Claude is strict on Diagnosis because identifying the root cause is what separates senior engineers from everyone else.
+                Your first ticket will take <strong>2–4 hours</strong>, not 45 minutes.
+                The bug descriptions are intentionally vague — that is realistic.
+                A score of <strong>65–75 on your first attempt is solid</strong>.
+                Claude is strict on Diagnosis because root cause analysis is the skill that actually matters in production.
               </p>
             </div>
           </div>
         </div>
 
         {/* CTA */}
-        <div className="text-center fade-in-up" style={{ animationDelay: "440ms" }}>
-          <button
-            onClick={handleGetStarted}
-            className="btn-primary text-base px-10 py-4"
-          >
-            {authed === null
-              ? "Get My First Ticket →"
-              : authed
+        <div className="text-center fade-in-up" style={{ animationDelay: "650ms" }}>
+          <p className="text-sm font-medium mb-4" style={{ color: "#6B6B6B" }}>
+            Steps 1 and 2 are done. Pick up from Step 3 below.
+          </p>
+          <button onClick={handleGetStarted} className="btn-primary text-base px-10 py-4">
+            {authed
               ? "Browse Tickets →"
-              : "Sign in with GitHub — it's free →"}
+              : "Sign in with GitHub — it’s free →"}
           </button>
           {authed === false && (
             <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
-              Takes 5 seconds. We only request read access to your public profile.
+              We only request read access to your public GitHub profile.
             </p>
           )}
-          <p className="text-xs mt-4" style={{ color: "#9CA3AF" }}>
+          {authed === true && (
+            <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
+              You are already signed in. Jump straight to tickets.
+            </p>
+          )}
+          <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
             Free plan · 2 tickets/month · No credit card
           </p>
         </div>
 
       </div>
-
-      {/* Footer */}
-      <div className="py-8 text-center">
-        <p className="text-sm" style={{ color: "#9CA3AF" }}>
-          Questions?{" "}
-          <a href="mailto:support@devsimulate.io" className="underline hover:text-gray-600 transition-colors">
-            support@devsimulate.io
-          </a>
-        </p>
-      </div>
-
     </main>
   );
 }
 
-// ─── Page export (Suspense wrapper for useSearchParams) ───────────────────────
+// ─── Export with Suspense for useSearchParams ─────────────────────────────────
 
 export default function GuidePage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#F7F6F3", color: "#6B6B6B" }}>
-        Loading…
+      <div className="min-h-screen flex items-center justify-center"
+        style={{ background: "#F7F6F3", color: "#6B6B6B" }}>
+        Loading...
       </div>
     }>
       <GuideContent />
