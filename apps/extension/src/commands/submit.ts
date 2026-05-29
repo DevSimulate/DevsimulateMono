@@ -105,17 +105,29 @@ export async function submitCommand(
     let prUrl: string;
 
     if (prs.length === 0) {
-      const action = await vscode.window.showWarningMessage(
-        `DevSimulate: No open PR found for branch '${assignment.branchName}'. Open a PR on GitHub first.`,
-        "Open GitHub"
+      await vscode.env.openExternal(
+        vscode.Uri.parse(
+          `https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(assignment.branchName)}`
+        )
       );
-      if (action === "Open GitHub") {
-        await vscode.env.openExternal(
-          vscode.Uri.parse(
-            `https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(assignment.branchName)}`
-          )
-        );
-      }
+
+      const prUrl = await vscode.window.showInputBox({
+        prompt: "Create your PR on GitHub, then paste the PR URL here",
+        placeHolder: "https://github.com/you/novatech-crm/pull/1",
+        ignoreFocusOut: true,
+        validateInput: (v) => {
+          if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
+            return "Must be a valid GitHub PR URL";
+          }
+          return undefined;
+        },
+      });
+
+      if (!prUrl) return;
+
+      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}`;
+      await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
+      vscode.window.showInformationMessage("DevSimulate: Submission form opened in your browser.");
       return;
     }
 
