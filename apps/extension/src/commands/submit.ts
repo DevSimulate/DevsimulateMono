@@ -1,18 +1,36 @@
 import * as vscode from "vscode";
-import { getToken } from "../services/auth.service";
+import axios from "axios";
+import { getToken, getApiUrl } from "../services/auth.service";
 import { getAssignedTickets } from "../services/ticket.service";
-import { getCurrentBranch } from "../services/git.service";
+import { getCurrentBranch, getRemoteUrl } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
 
 const WEB_URL = "https://www.devsimulate.com";
 
-/**
- * Handles the devsimulate.submitPR command.
- *
- * Prompts the user to paste their GitHub PR URL, then opens the web
- * submission form which handles description input, follow-up questions,
- * and scoring — all in one page.
- */
+function parseGitHubOwnerRepo(remoteUrl: string): { owner: string; repo: string } | null {
+  const httpsMatch = /github\.com\/([^/]+)\/([^/.]+)(\.git)?$/.exec(remoteUrl);
+  if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] };
+  const sshMatch = /github\.com[:/]([^/]+)\/([^/.]+)(\.git)?$/.exec(remoteUrl);
+  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] };
+  return null;
+}
+
+async function findOpenPRs(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<Array<{ number: number; title: string; url: string }>> {
+  const response = await axios.get<{ data: Array<{ number: number; title: string; url: string }> }>(
+    `${getApiUrl()}/github/pr`,
+    {
+      params: { owner, repo, branch },
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  return response.data.data ?? [];
+}
+
 export async function submitCommand(
   context: vscode.ExtensionContext,
   _sidebar: SidebarProvider
@@ -64,8 +82,44 @@ export async function submitCommand(
       if (proceed !== "Submit Anyway") return;
     }
 
+    // --- Auto-detect PR URL ---
+    let detectedUrl: string | undefined;
+
+    const remoteUrl = await getRemoteUrl();
+    const parsed = remoteUrl ? parseGitHubOwnerRepo(remoteUrl) : null;
+
+    if (parsed && assignment.branchName) {
+      try {
+        const prs = await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "DevSimulate: Looking up your PR…",
+            cancellable: false,
+          },
+          () => findOpenPRs(token, parsed.owner, parsed.repo, assignment.branchName)
+        );
+
+        if (prs.length === 1) {
+          detectedUrl = prs[0].url;
+        } else if (prs.length > 1) {
+          const items = prs.map((pr) => ({ label: `#${pr.number}: ${pr.title}`, url: pr.url }));
+          const choice = await vscode.window.showQuickPick(items, {
+            placeHolder: "Multiple open PRs found — select one",
+          });
+          if (!choice) return;
+          detectedUrl = choice.url;
+        }
+      } catch {
+        // API lookup failed — fall through to manual input
+      }
+    }
+
+    // Show input box: pre-filled if PR was found, empty if not
     const prUrl = await vscode.window.showInputBox({
-      prompt: "Paste your GitHub PR URL (copy it from the browser address bar on your PR page)",
+      prompt: detectedUrl
+        ? "PR found — press Enter to confirm or edit the URL"
+        : "No PR found. Paste your GitHub PR URL",
+      value: detectedUrl ?? "",
       placeHolder: "https://github.com/you/novatech-crm/pull/1",
       ignoreFocusOut: true,
       validateInput: (v) => {
