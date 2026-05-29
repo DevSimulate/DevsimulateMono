@@ -2,7 +2,7 @@
   "name": "devsimulate",
   "displayName": "DevSimulate",
   "description": "Developer training platform — solve real tickets, get scored by AI",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "publisher": "devsimulate-app",
   "engines": {
     "vscode": "^1.85.0"
@@ -23,7 +23,7 @@
     "build": "node esbuild.js",
     "dev": "node esbuild.js --watch",
     "typecheck": "tsc --noEmit",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "contributes": {
     "viewsContainers": {
