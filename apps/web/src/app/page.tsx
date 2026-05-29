@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 
-const GITHUB_AUTH_URL =
-  `https://github.com/login/oauth/authorize` +
-  `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
-  `&scope=read:user,user:email` +
-  `&redirect_uri=${encodeURIComponent(
-    (process.env.NEXT_PUBLIC_APP_URL ?? "https://devsimulate-mono-web.vercel.app") +
-    "/auth/callback"
-  )}`;
+const ONBOARDING_URL = "/onboarding/select";
 
 const STEPS = [
   {
@@ -105,9 +98,9 @@ export default function LandingPage(): React.ReactElement {
           >
             Dashboard
           </Link>
-          <a href={GITHUB_AUTH_URL} className="btn-primary text-sm">
+          <Link href={ONBOARDING_URL} className="btn-primary text-sm">
             Start free →
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -135,9 +128,9 @@ export default function LandingPage(): React.ReactElement {
 
         {/* CTAs */}
         <div className="fade-in-up delay-300 flex flex-col sm:flex-row gap-3 mb-16">
-          <a href={GITHUB_AUTH_URL} className="btn-primary">
+          <Link href={ONBOARDING_URL} className="btn-primary">
             Start for free — no credit card
-          </a>
+          </Link>
           <a href="#how-it-works" className="btn-outline">
             See how it works ↓
           </a>
@@ -296,7 +289,7 @@ export default function LandingPage(): React.ReactElement {
                   </li>
                 ))}
               </ul>
-              <a href={GITHUB_AUTH_URL} className="btn-outline w-full text-center block">Get started free</a>
+              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">Get started free</Link>
             </div>
 
             {/* Pro */}
@@ -314,7 +307,7 @@ export default function LandingPage(): React.ReactElement {
                   </li>
                 ))}
               </ul>
-              <a href={GITHUB_AUTH_URL} className="btn-primary w-full text-center block">Start Pro</a>
+              <Link href={ONBOARDING_URL} className="btn-primary w-full text-center block">Start Pro</Link>
             </div>
           </div>
         </div>
@@ -335,9 +328,9 @@ export default function LandingPage(): React.ReactElement {
               <p className="mb-8 text-lg" style={{ color: "#6B6B6B" }}>
                 Your first ticket is free. No credit card. Just your GitHub account and your best thinking.
               </p>
-              <a href={GITHUB_AUTH_URL} className="btn-primary text-base px-10 py-4">
-                Login with GitHub — it&apos;s free
-              </a>
+              <Link href={ONBOARDING_URL} className="btn-primary text-base px-10 py-4">
+                Get started — it&apos;s free
+              </Link>
             </div>
           </div>
         </div>
