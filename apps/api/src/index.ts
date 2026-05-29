@@ -37,9 +37,22 @@ app.use(
 // Security & parsing
 // ---------------------------------------------------------------------------
 app.use(helmet());
+const ALLOWED_ORIGINS = [
+  "https://www.devsimulate.com",
+  "https://devsimulate.com",
+  "http://localhost:3000",
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL ?? "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
     credentials: true,
   })
 );
