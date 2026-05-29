@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import nodemailer from "nodemailer";
 import { requireAuth } from "../middleware/auth.middleware";
 
+
 const router = Router();
 
 const transporter = nodemailer.createTransport({
