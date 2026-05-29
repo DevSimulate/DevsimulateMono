@@ -7,6 +7,7 @@ const router = Router();
 
 router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
 
+
 const transporter = nodemailer.createTransport({
   host: "mail.privateemail.com",
   port: 465,
