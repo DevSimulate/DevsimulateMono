@@ -34,11 +34,6 @@ router.get("/pr", async (req: Request, res: Response): Promise<void> => {
       per_page: 5,
     });
 
-    if (data.length === 0) {
-      res.status(404).json({ error: "No open PR found for this branch" });
-      return;
-    }
-
     const prs = data.map((pr) => ({
       number: pr.number,
       title: pr.title,
