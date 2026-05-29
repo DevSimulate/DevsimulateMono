@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Logo from "@/components/Logo";
 
 const ONBOARDING_URL = "/onboarding/select";
 
@@ -76,10 +77,7 @@ export default function LandingPage(): React.ReactElement {
 
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between max-w-7xl mx-auto w-full" style={{ maxWidth: "100%" }}>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          <span className="font-black text-lg tracking-tight" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-        </div>
+        <Logo variant="horizontal" size={32} />
         <div className="hidden md:flex items-center gap-8">
           {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Pricing", "#pricing"]].map(([label, href]) => (
             <a key={label} href={href} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
@@ -320,7 +318,7 @@ export default function LandingPage(): React.ReactElement {
             <div className="absolute inset-0 pointer-events-none opacity-40"
               style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(91,91,214,0.12), transparent 70%)" }} />
             <div className="relative z-10">
-              <div className="text-5xl mb-5">⚡</div>
+              <div className="flex justify-center mb-5"><Logo variant="icon" size={64} /></div>
               <h2 className="text-4xl font-black mb-4" style={{ color: "#1A1A1A" }}>
                 Ready to find out{" "}
                 <span className="gradient-text">how good you really are?</span>
@@ -339,10 +337,7 @@ export default function LandingPage(): React.ReactElement {
       {/* ── Footer ── */}
       <footer className="py-8 px-6 border-t" style={{ borderColor: "#E4E2DD", background: "#F7F6F3" }}>
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span>⚡</span>
-            <span className="font-black" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-          </div>
+          <Logo variant="horizontal" size={28} />
           <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2025 DevSimulate. Scored by Claude AI.</p>
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
             <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
