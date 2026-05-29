@@ -70,7 +70,8 @@ type Stage =
   | "loading_q2"
   | "q2"
   | "scoring"
-  | "score";
+  | "score"
+  | "upgrade";
 
 const STEP_LABELS = ["Describe", "Review", "Q1", "Q2", "Score"];
 
@@ -84,6 +85,7 @@ function stepIndex(stage: Stage): number {
     q2:         3,
     scoring:    4,
     score:      4,
+    upgrade:    0,
   };
   return map[stage];
 }
@@ -189,6 +191,7 @@ function SubmitPageInner() {
         body: JSON.stringify({ ticketId, prUrl, prDescription: description, branchName }),
       });
       const data = await r.json();
+      if (r.status === 402) { setStage("upgrade"); return; }
       if (!r.ok) throw new Error(data.error ?? "Submission failed");
 
       const sid: string = data.data.id;
@@ -588,6 +591,31 @@ function SubmitPageInner() {
               className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
               {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get My Score →"}
             </button>
+          </div>
+        )}
+
+        {/* ── Stage: Upgrade ── */}
+        {stage === "upgrade" && (
+          <div className="card rounded-2xl p-10 text-center fade-in-up">
+            <div className="text-4xl mb-4">🚀</div>
+            <h2 className="text-2xl font-black mb-2" style={{ color: "#1A1A1A" }}>
+              Free plan limit reached
+            </h2>
+            <p className="text-sm mb-6 leading-relaxed" style={{ color: "#6B6B6B" }}>
+              You have used your 2 free submissions this month.<br />
+              Upgrade to Pro for <strong style={{ color: "#1A1A1A" }}>unlimited tickets</strong> at $9/month.
+            </p>
+            <div className="space-y-3 max-w-xs mx-auto">
+              <a href="/pricing" className="btn-primary w-full text-center block">
+                Upgrade to Pro — $9/month →
+              </a>
+              <a href="/dashboard" className="btn-outline w-full text-center block">
+                Back to Dashboard
+              </a>
+            </div>
+            <p className="text-xs mt-4" style={{ color: "#9CA3AF" }}>
+              Your limit resets on the 1st of every month.
+            </p>
           </div>
         )}
 

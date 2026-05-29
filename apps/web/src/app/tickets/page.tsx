@@ -22,23 +22,35 @@ const DIFF_COLOR: Record<string, string> = {
   SENIOR: "bg-red-500/10 text-red-400 border-red-500/20",
 };
 
+interface UsageData {
+  used: number;
+  limit: number | null;
+  tier: string;
+}
+
 export default function TicketsPage(): React.ReactElement {
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
+  const [usage, setUsage] = useState<UsageData | null>(null);
 
   useEffect(() => {
     const token = getToken();
     if (!token) { router.push("/"); return; }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-    axios
-      .get<{ data: Ticket[] }>(`${apiUrl}/tickets`, {
-        headers: { Authorization: `Bearer ${token}` },
+    const headers = { Authorization: `Bearer ${token}` };
+
+    Promise.all([
+      axios.get<{ data: Ticket[] }>(`${apiUrl}/tickets`, { headers }),
+      axios.get<{ data: UsageData }>(`${apiUrl}/billing/usage`, { headers }),
+    ])
+      .then(([ticketsRes, usageRes]) => {
+        setTickets(ticketsRes.data.data);
+        setUsage(usageRes.data.data);
       })
-      .then((r) => setTickets(r.data.data))
       .catch(() => null)
       .finally(() => setLoading(false));
   }, [router]);
@@ -89,6 +101,30 @@ export default function TicketsPage(): React.ReactElement {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-4">
+        {usage && usage.limit !== null && (
+          <div className={`rounded-xl border px-5 py-4 flex items-center justify-between gap-4 ${
+            usage.used >= usage.limit
+              ? "border-red-500/30 bg-red-500/10"
+              : "border-slate-700 bg-slate-900"
+          }`}>
+            <div>
+              <p className="text-sm font-bold text-white">
+                {usage.used} of {usage.limit} free submissions used this month
+              </p>
+              {usage.used >= usage.limit && (
+                <p className="text-xs text-slate-400 mt-0.5">You&apos;ve hit the free limit. Upgrade to Pro for unlimited tickets.</p>
+              )}
+            </div>
+            {usage.used >= usage.limit ? (
+              <Link href="/pricing" className="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 text-sm transition-colors">
+                Upgrade → $9/mo
+              </Link>
+            ) : (
+              <span className="shrink-0 text-xs text-slate-500">{usage.limit - usage.used} remaining</span>
+            )}
+          </div>
+        )}
+
         {tickets.length === 0 && (
           <div className="text-center text-slate-500 py-20">No tickets available.</div>
         )}

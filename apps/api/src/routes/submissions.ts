@@ -35,6 +35,23 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
+    // Free tier limit: 2 submissions per month
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user?.subscriptionTier === "FREE") {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const count = await prisma.submission.count({
+        where: { userId, submittedAt: { gte: startOfMonth }, status: { not: "VOID" } },
+      });
+      if (count >= 2) {
+        res.status(402).json({
+          error: "You have used your 2 free submissions this month. Upgrade to Pro for unlimited tickets.",
+          upgradeRequired: true,
+        });
+        return;
+      }
+    }
     const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl);
     if (!prUrlMatch) {
       res.status(400).json({ error: "Invalid PR URL — must be a GitHub PR link" });

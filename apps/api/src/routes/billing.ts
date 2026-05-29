@@ -239,4 +239,35 @@ router.get(
   }
 );
 
+/**
+ * GET /billing/usage
+ * Returns submissions used this month and the plan limit.
+ */
+router.get(
+  "/usage",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const used = await prisma.submission.count({
+        where: { userId, submittedAt: { gte: startOfMonth }, status: { not: "VOID" } },
+      });
+      res.json({
+        data: {
+          used,
+          limit: user?.subscriptionTier === "FREE" ? 2 : null,
+          tier: user?.subscriptionTier ?? "FREE",
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch usage";
+      res.status(500).json({ error: message });
+    }
+  }
+);
+
 export default router;
