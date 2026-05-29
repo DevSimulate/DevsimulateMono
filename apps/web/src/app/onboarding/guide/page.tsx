@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
+import Logo from "@/components/Logo";
 
 const GITHUB_AUTH_URL =
   `https://github.com/login/oauth/authorize` +
@@ -209,10 +210,7 @@ function GuideContent() {
           onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
           ← Back
         </Link>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          <span className="font-black text-lg tracking-tight" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-        </div>
+        <Logo variant="horizontal" size={32} />
         <div className="w-16" />
       </nav>
 

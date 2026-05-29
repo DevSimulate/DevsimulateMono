@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/auth";
+import { BoltIcon } from "@/components/Logo";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -13,7 +14,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  Zap,
+
 } from "lucide-react";
 
 const NAV = [
@@ -44,10 +45,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="px-5 pt-5 pb-4" style={{ borderBottom: "1px solid #222222" }}>
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
-            <Zap size={14} color="white" />
-          </div>
+          <BoltIcon size={28} />
           <span className="font-black text-white text-sm tracking-tight">DevSimulate</span>
         </div>
         <span className="text-xs font-semibold px-2.5 py-1 rounded-full"

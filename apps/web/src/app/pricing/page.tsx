@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import axios from "axios";
 import { getToken } from "@/lib/auth";
 
@@ -56,9 +57,7 @@ export default function PricingPage(): React.ReactElement {
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="font-bold text-white tracking-tight">
-          ⚡ DevSimulate
-        </Link>
+        <Link href="/"><Logo variant="horizontal" size={32} textColor="#FFFFFF" /></Link>
         <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white transition-colors">
           Dashboard
         </Link>

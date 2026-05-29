@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 
 // ─── Codebase data ────────────────────────────────────────────────────────────
 
@@ -122,10 +123,7 @@ export default function SelectCodebasePage() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          <span className="font-black text-lg tracking-tight" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-        </Link>
+        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
         <Link href="/dashboard" className="text-sm font-medium transition-colors"
           style={{ color: "#6B6B6B" }}
           onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}

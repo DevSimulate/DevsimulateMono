@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 import { getPublicProfile } from "@/lib/api";
 import { format } from "date-fns";
 
@@ -110,9 +111,7 @@ export default async function ProfilePage({ params }: ProfilePageProps): Promise
     <div style={{ backgroundColor: "#0A1628" }} className="min-h-screen text-white">
       {/* Nav */}
       <header className="border-b border-white/10 px-6 py-4">
-        <Link href="/" className="font-bold text-white tracking-tight">
-          ⚡ DevSimulate
-        </Link>
+        <Link href="/"><Logo variant="horizontal" size={32} textColor="#FFFFFF" /></Link>
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10">

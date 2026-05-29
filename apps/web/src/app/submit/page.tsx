@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
+import Logo from "@/components/Logo";
 import clsx from "clsx";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -338,10 +339,7 @@ function SubmitPageInner() {
 
       {/* Header */}
       <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          <span className="font-black text-lg tracking-tight" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-        </Link>
+        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
         <Link href="/dashboard" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#1A1A1A")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "#6B6B6B")}>

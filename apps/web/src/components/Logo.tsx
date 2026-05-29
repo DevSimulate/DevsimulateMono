@@ -16,6 +16,8 @@ interface LogoProps {
   size?: number;
   /** Override icon bg — defaults to indigo-to-teal gradient */
   solidColor?: string;
+  /** Wordmark text colour — defaults to #1A1A1A (use "#FFFFFF" on dark navs) */
+  textColor?: string;
 }
 
 export function BoltIcon({ size = 40, solidColor }: { size?: number; solidColor?: string }) {
@@ -49,7 +51,7 @@ export function BoltIcon({ size = 40, solidColor }: { size?: number; solidColor?
   );
 }
 
-export default function Logo({ variant = "horizontal", size = 36 }: LogoProps) {
+export default function Logo({ variant = "horizontal", size = 36, solidColor, textColor = "#1A1A1A" }: LogoProps) {
   if (variant === "icon") {
     return <BoltIcon size={size} />;
   }
@@ -57,14 +59,14 @@ export default function Logo({ variant = "horizontal", size = 36 }: LogoProps) {
   if (variant === "stacked") {
     return (
       <div className="flex flex-col items-center gap-2">
-        <BoltIcon size={size} />
+        <BoltIcon size={size} solidColor={solidColor} />
         <span
           style={{
             fontFamily: "Inter, sans-serif",
             fontWeight: 900,
             fontSize: `${Math.round(size * 0.55)}px`,
             letterSpacing: "-0.03em",
-            color: "#1A1A1A",
+            color: textColor,
             lineHeight: 1,
           }}
         >
@@ -78,14 +80,14 @@ export default function Logo({ variant = "horizontal", size = 36 }: LogoProps) {
   const wordmarkSize = Math.round(size * 0.5);
   return (
     <div className="flex items-center gap-2.5">
-      <BoltIcon size={size} />
+      <BoltIcon size={size} solidColor={solidColor} />
       <span
         style={{
           fontFamily: "Inter, sans-serif",
           fontWeight: 900,
           fontSize: `${wordmarkSize}px`,
           letterSpacing: "-0.03em",
-          color: "#1A1A1A",
+          color: textColor,
           lineHeight: 1,
         }}
       >

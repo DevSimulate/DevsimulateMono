@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { BoltIcon } from "@/components/Logo";
 
 function VsCodeCallbackHandler(): React.ReactElement {
   const params = useSearchParams();
@@ -29,7 +30,7 @@ function VsCodeCallbackHandler(): React.ReactElement {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 text-center px-6">
-      <div className="text-4xl">⚡</div>
+      <BoltIcon size={52} />
       <h1 className="text-xl font-bold text-white">Almost there!</h1>
       <p className="text-slate-400 text-sm max-w-sm">
         Copy the code below and paste it into the VS Code input box that appeared.

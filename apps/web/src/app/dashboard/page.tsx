@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken, clearToken } from "@/lib/auth";
+import Logo from "@/components/Logo";
 import { getMe, getSubmissions, getAssignments, getScoreHistory, ScoreHistoryPoint } from "@/lib/api";
 import { User, Submission, TicketAssignment, ClaudeReview, Difficulty } from "@devsimulate/shared";
 import clsx from "clsx";
@@ -246,10 +247,7 @@ export default function DashboardPage() {
 
       {/* ── Header ── */}
       <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          <span className="font-black text-lg tracking-tight" style={{ color: "#1A1A1A" }}>DevSimulate</span>
-        </Link>
+        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
         <div className="flex items-center gap-5">
           <Link href="/tickets" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
             onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
