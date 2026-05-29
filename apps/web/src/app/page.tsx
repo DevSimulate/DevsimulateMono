@@ -75,6 +75,12 @@ export default function LandingPage(): React.ReactElement {
   return (
     <main className="bg-grid min-h-screen overflow-x-hidden">
 
+      {/* ── Beta banner ── */}
+      <div className="w-full py-2 px-4 text-center text-xs font-bold" style={{ background: "#5B5BD6", color: "#FFFFFF" }}>
+        🚀 DevSimulate is in public beta — free for everyone right now &nbsp;·&nbsp;{" "}
+        <Link href="/pricing" className="underline underline-offset-2 opacity-90 hover:opacity-100">See pricing</Link>
+      </div>
+
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between max-w-7xl mx-auto w-full" style={{ maxWidth: "100%" }}>
         <Logo variant="horizontal" size={32} />
@@ -268,45 +274,45 @@ export default function LandingPage(): React.ReactElement {
 
       {/* ── Pricing ── */}
       <section id="pricing" className="py-24 px-6" style={{ background: "#F7F6F3" }}>
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-14">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-10">
             <div className="section-label">Pricing</div>
-            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Start free, upgrade when ready</h2>
+            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Free during beta</h2>
+            <p className="mt-3 text-base" style={{ color: "#6B6B6B" }}>
+              No credit card. No limits. Enjoy it while it lasts.
+            </p>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-6 items-start">
-            {/* Free */}
-            <div className="card p-7">
-              <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>Free</div>
-              <div className="text-5xl font-black mb-0.5" style={{ color: "#1A1A1A" }}>$0</div>
-              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>forever</div>
-              <ul className="space-y-2.5 mb-8 text-sm" style={{ color: "#3A3A3A" }}>
-                {["2 tickets per month", "Full AI-scored feedback", "Public profile page", "Score history chart"].map(f => (
-                  <li key={f} className="flex items-center gap-2">
-                    <span className="font-bold" style={{ color: "#0D9488" }}>✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">Get started free</Link>
+          <div className="card-glow rounded-3xl p-8">
+            <div className="flex items-end gap-3 mb-6">
+              <span className="text-6xl font-black" style={{ color: "#1A1A1A" }}>$0</span>
+              <div className="pb-2">
+                <div className="text-sm font-bold" style={{ color: "#16a34a" }}>during beta</div>
+                <div className="text-sm line-through" style={{ color: "#9CA3AF" }}>$9 / month after beta</div>
+              </div>
             </div>
 
-            {/* Pro */}
-            <div className="card-glow p-7">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-bold uppercase tracking-widest" style={{ color: "#5B5BD6" }}>Pro</div>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{ background: "#EBEBFF", color: "#5B5BD6" }}>Most popular</span>
-              </div>
-              <div className="text-5xl font-black mb-0.5" style={{ color: "#1A1A1A" }}>$29</div>
-              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>per month · or $199/year</div>
-              <ul className="space-y-2.5 mb-8 text-sm" style={{ color: "#3A3A3A" }}>
-                {["Unlimited tickets", "Everything in Free", "Priority review queue", "Employer dashboard", "Team training analytics"].map(f => (
-                  <li key={f} className="flex items-center gap-2">
-                    <span className="font-bold" style={{ color: "#5B5BD6" }}>✓</span> {f}
-                  </li>
-                ))}
-              </ul>
-              <Link href={ONBOARDING_URL} className="btn-primary w-full text-center block">Start Pro</Link>
-            </div>
+            <ul className="space-y-2.5 mb-8 text-sm" style={{ color: "#3A3A3A" }}>
+              {[
+                "All NovaTech CRM tickets",
+                "Claude AI scoring on every PR",
+                "Full written feedback — Diagnosis, Design, Communication, Execution",
+                "Score history on your dashboard",
+                "Public shareable profile",
+              ].map(f => (
+                <li key={f} className="flex items-center gap-2">
+                  <span className="font-black" style={{ color: "#5B5BD6" }}>✓</span> {f}
+                </li>
+              ))}
+            </ul>
+
+            <Link href={ONBOARDING_URL} className="btn-primary w-full text-center block text-base py-4">
+              Start free — no credit card
+            </Link>
+
+            <p className="text-xs text-center mt-4" style={{ color: "#9CA3AF" }}>
+              We will email you before any charge. No surprises.
+            </p>
           </div>
         </div>
       </section>
