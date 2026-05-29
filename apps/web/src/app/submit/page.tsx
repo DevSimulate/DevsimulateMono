@@ -9,6 +9,15 @@ import clsx from "clsx";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
+const GITHUB_AUTH_URL =
+  `https://github.com/login/oauth/authorize` +
+  `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
+  `&scope=read:user,user:email` +
+  `&redirect_uri=${encodeURIComponent(
+    (process.env.NEXT_PUBLIC_APP_URL ?? "https://devsimulate-mono-web.vercel.app") +
+    "/auth/callback"
+  )}`;
+
 interface Ticket {
   id: string;
   title: string;
@@ -123,10 +132,8 @@ function SubmitPageInner() {
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("ds_submit_return", window.location.href);
-      }
-      router.push("/");
+      localStorage.setItem("ds_submit_return", window.location.href);
+      window.location.href = GITHUB_AUTH_URL;
       return;
     }
     if (!ticketId || !prUrl) {
