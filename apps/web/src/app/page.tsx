@@ -342,6 +342,7 @@ export default function LandingPage(): React.ReactElement {
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
             <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
+            <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">Feedback</a>
           </div>
         </div>
       </footer>

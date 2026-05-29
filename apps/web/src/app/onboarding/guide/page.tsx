@@ -110,9 +110,9 @@ const STEPS: {
     num: "07",
     icon: "📦",
     color: "#FEF3C7",
-    title: "Start the ticket — extension clones the repo",
+    title: "Clone the codebase — extension sets up the repo",
     lines: [
-      'Click "Start Ticket" next to your ticket in the VS Code sidebar.',
+      'Click "Clone Codebase" next to your ticket in the VS Code sidebar.',
       "A folder picker opens — choose where you want to clone NovaTech CRM.",
       "The extension automatically clones the repo and creates your branch (e.g. devsim/nova-47).",
       "VS Code reopens with the cloned folder. Your branch is already checked out — ready to code.",
