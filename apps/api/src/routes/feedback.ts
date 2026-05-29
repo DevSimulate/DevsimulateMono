@@ -5,6 +5,8 @@ import { AuthenticatedRequest } from "../types/index";
 
 const router = Router();
 
+router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
+
 const transporter = nodemailer.createTransport({
   host: "mail.privateemail.com",
   port: 465,
@@ -15,7 +17,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-router.post("/", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/", async (req: Request, res: Response): Promise<void> => {
   const { githubUsername } = (req as AuthenticatedRequest).user;
   const { message, rating, ticketTitle, score } = req.body as {
     message: string;
