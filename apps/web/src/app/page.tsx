@@ -1,7 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import { getToken } from "@/lib/auth";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+const PRO_FEATURES = [
+  "All NovaTech CRM tickets — unlimited",
+  "Claude AI scoring on every PR",
+  "Full written feedback — Diagnosis, Design, Communication, Execution",
+  "Score history on your dashboard",
+  "Public shareable profile",
+  "More codebases as they launch",
+];
 
 const ONBOARDING_URL = "/onboarding/select";
 
@@ -72,12 +85,34 @@ const SCORES = [
 ];
 
 export default function LandingPage(): React.ReactElement {
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+
+  async function handleUpgrade() {
+    const token = getToken();
+    if (!token) { window.location.href = "/onboarding/select"; return; }
+    setUpgradeLoading(true);
+    setUpgradeError(null);
+    try {
+      const res = await fetch(`${API_URL}/billing/create-checkout-session`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to start checkout");
+      window.location.href = data.url!;
+    } catch (err) {
+      setUpgradeError(err instanceof Error ? err.message : "Something went wrong");
+      setUpgradeLoading(false);
+    }
+  }
+
   return (
     <main className="bg-grid min-h-screen overflow-x-hidden">
 
       {/* ── Beta banner ── */}
       <div className="w-full py-2 px-4 text-center text-xs font-bold" style={{ background: "#5B5BD6", color: "#FFFFFF" }}>
-        🚀 DevSimulate is in public beta — free for everyone right now &nbsp;·&nbsp;{" "}
+        🚀 DevSimulate is in public beta — 2 free tickets/month, then $9/mo &nbsp;·&nbsp;{" "}
         <Link href="/pricing" className="underline underline-offset-2 opacity-90 hover:opacity-100">See pricing</Link>
       </div>
 
@@ -277,43 +312,57 @@ export default function LandingPage(): React.ReactElement {
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-10">
             <div className="section-label">Pricing</div>
-            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Free during beta</h2>
+            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Simple, honest pricing</h2>
             <p className="mt-3 text-base" style={{ color: "#6B6B6B" }}>
-              No credit card. No limits. Enjoy it while it lasts.
+              Free plan to try it. Pro when you&apos;re serious about levelling up.
             </p>
           </div>
 
-          <div className="card-glow rounded-3xl p-8">
-            <div className="flex items-end gap-3 mb-6">
-              <span className="text-6xl font-black" style={{ color: "#1A1A1A" }}>$0</span>
-              <div className="pb-2">
-                <div className="text-sm font-bold" style={{ color: "#16a34a" }}>during beta</div>
-                <div className="text-sm line-through" style={{ color: "#9CA3AF" }}>$9 / month after beta</div>
-              </div>
+          <div className="grid sm:grid-cols-2 gap-5">
+            {/* Free */}
+            <div className="card rounded-2xl p-7 flex flex-col">
+              <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>Free</div>
+              <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$0</div>
+              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>2 submissions / month</div>
+              <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
+                {["2 tickets per month", "Full AI-scored feedback", "Public profile page", "Score history"].map(f => (
+                  <li key={f} className="flex items-center gap-2">
+                    <span className="font-black" style={{ color: "#0D9488" }}>✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">
+                Get started free
+              </Link>
             </div>
 
-            <ul className="space-y-2.5 mb-8 text-sm" style={{ color: "#3A3A3A" }}>
-              {[
-                "All NovaTech CRM tickets",
-                "Claude AI scoring on every PR",
-                "Full written feedback — Diagnosis, Design, Communication, Execution",
-                "Score history on your dashboard",
-                "Public shareable profile",
-              ].map(f => (
-                <li key={f} className="flex items-center gap-2">
-                  <span className="font-black" style={{ color: "#5B5BD6" }}>✓</span> {f}
-                </li>
-              ))}
-            </ul>
-
-            <Link href={ONBOARDING_URL} className="btn-primary w-full text-center block text-base py-4">
-              Start free — no credit card
-            </Link>
-
-            <p className="text-xs text-center mt-4" style={{ color: "#9CA3AF" }}>
-              We will email you before any charge. No surprises.
-            </p>
+            {/* Pro */}
+            <div className="card-glow rounded-2xl p-7 flex flex-col relative overflow-hidden">
+              <div className="absolute top-0 right-0 text-xs font-black px-3 py-1 rounded-bl-xl"
+                style={{ background: "#5B5BD6", color: "#fff" }}>
+                PRO
+              </div>
+              <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#5B5BD6" }}>Pro</div>
+              <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$9</div>
+              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>per month · cancel anytime</div>
+              <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
+                {PRO_FEATURES.map(f => (
+                  <li key={f} className="flex items-start gap-2">
+                    <span className="font-black mt-0.5 shrink-0" style={{ color: "#5B5BD6" }}>✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+              {upgradeError && <p className="text-xs mb-3 text-red-500">{upgradeError}</p>}
+              <button onClick={handleUpgrade} disabled={upgradeLoading}
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+                {upgradeLoading ? "Redirecting to checkout…" : "Upgrade to Pro →"}
+              </button>
+            </div>
           </div>
+
+          <p className="text-xs text-center mt-6" style={{ color: "#9CA3AF" }}>
+            Payments processed securely by Stripe. Cancel anytime.
+          </p>
         </div>
       </section>
 
