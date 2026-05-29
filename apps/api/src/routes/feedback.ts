@@ -1,7 +1,7 @@
-import { Router, Request, Response } from "express";
+import { Response, Router } from "express";
 import nodemailer from "nodemailer";
 import { requireAuth } from "../middleware/auth.middleware";
-
+import { AuthenticatedRequest } from "../types/index";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-router.post("/", requireAuth, async (req: Request, res: Response) => {
+router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const { message, rating, ticketTitle, score } = req.body as {
     message: string;
     rating: number;
@@ -23,7 +23,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
     score: number;
   };
 
-  const user = (req as any).user as { githubUsername: string };
+  const user = req.user;
 
   if (!message?.trim()) {
     res.status(400).json({ error: "Message is required" });
