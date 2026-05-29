@@ -30,11 +30,12 @@ router.get("/pr", async (req: Request, res: Response): Promise<void> => {
       owner,
       repo,
       state: "open",
-      head: `${owner}:${branch}`,
-      per_page: 5,
+      per_page: 50,
     });
 
-    const prs = data.map((pr) => ({
+    const matching = data.filter((pr) => pr.head.ref === branch);
+
+    const prs = matching.map((pr) => ({
       number: pr.number,
       title: pr.title,
       url: pr.html_url,
