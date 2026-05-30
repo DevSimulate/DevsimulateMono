@@ -86,7 +86,7 @@ export default function LeaderboardPage(): React.ReactElement {
             {entries.map((entry, i) => (
               <Link
                 key={entry.githubUsername}
-                href={`/u/${entry.githubUsername}`}
+                href={`/profile/${entry.githubUsername}`}
                 className="card rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow"
                 style={{ display: "flex" }}
               >
