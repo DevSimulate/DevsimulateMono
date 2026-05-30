@@ -523,6 +523,423 @@ Write your complete design below. This is an infrastructure-level design — be 
     });
   }
 
+  // ── RAGCore codebase ──────────────────────────────────────────────────────
+  const ragCodebase = await prisma.codebase.upsert({
+    where: { id: "ragcore-seed-id-001" },
+    update: {},
+    create: {
+      id: "ragcore-seed-id-001",
+      name: "RAGCore",
+      stack: Stack.PYTHON,
+      repoUrl: "https://github.com/OSSAMA-prog-droid/ragcore",
+      description: "A production-grade Retrieval-Augmented Generation (RAG) API built with FastAPI, LangChain, ChromaDB, and PostgreSQL. Multi-tenant document ingestion, semantic search, and conversational Q&A.",
+      companyLore: `RAGCore is a B2B SaaS product that allows enterprise customers to upload their internal documents and query them using natural language through an OpenAI-powered RAG pipeline.
+
+The engineering team is 6 developers. The codebase was originally built as a proof-of-concept and promoted to production faster than expected. Several critical bugs were introduced during the rapid development phase and have not been caught in code review.
+
+Key architectural decisions engineers must understand:
+- Multi-tenancy is enforced via ChromaDB collection-per-tenant: tenant_id must be validated before any vector operation
+- Embeddings are cached in Redis. Cache key must include the model name — swapping models while cache is warm returns wrong-dimension vectors
+- LangChain is used via the split package pattern: langchain-core, langchain-community, langchain-openai (NOT the deprecated monolithic langchain package)
+- Session memory for conversational chains is stored in a class-level dict — this is intentional for now but has a known unbounded growth issue
+- Document ingestion is async: documents move through states (processing → ready → error)
+- The relevance threshold constant (0.72) exists in vector_store.py but the filter is commented out — users are seeing irrelevant results
+
+Known production issues currently affecting customers:
+- Customers uploading the same document twice get duplicate search results
+- Chat history occasionally gets corrupted under concurrent requests in the same session
+- The delete document endpoint leaves orphaned vector embeddings in ChromaDB
+- Large file uploads are timing out the API server
+- PDF documents with scanned pages silently drop those pages without warning`,
+    },
+  });
+
+  const ragTickets = [
+    {
+      id: "ticket-rag-01-seed-id-001",
+      title: "RAG-01: Chat Completions Crash with 400 on Long Conversations",
+      description: `Users report that long chat sessions intermittently crash with no useful error message. Support has captured the API error: the OpenAI API returns HTTP 400 with "This model's maximum context length is 128,000 tokens." The error is never surfaced to the user — the UI shows a generic "Something went wrong."
+
+**What's happening:**
+The \`chat_complete()\` function in \`app/services/llm_service.py\` sends messages directly to OpenAI without checking the total token count first. After a long conversation the accumulated messages exceed the model's context window and the API call fails.
+
+**Your task:**
+1. Find the token counting function in \`llm_service.py\` — it exists but is never called from \`chat_complete()\`
+2. Add a token budget check before the API call that raises a clear \`ValueError\` if messages exceed the limit
+3. The model limit is 128,000 tokens. Reserve 2,000 tokens for the response (max_tokens). The check should fail if messages_tokens + 2000 > 128000
+4. Make sure the test in \`tests/test_llm_service.py::TestTokenGuard::test_raises_when_messages_exceed_context\` passes
+
+**Files:** \`app/services/llm_service.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/llm_service.py"],
+      rubric: {
+        diagnosis: "Did they find the existing count_messages_tokens() function and understand it is never called from chat_complete()? Did they correctly identify the missing pre-call validation as the root cause?",
+        design: "Did they add the token check before the API call (not after)? Did they use the correct threshold (128000 - 2000 = 126000 tokens for messages)? Did they raise a clear ValueError?",
+        communication: "Did they explain why the error is not surfaced to users? Did they describe what happens to accumulated messages over a long session?",
+        execution: "Does the fix make the test_raises_when_messages_exceed_context test pass? Is the token check placed correctly before the API call, not inside the except block?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-rag-02-seed-id-002",
+      title: "RAG-02: Streaming Endpoint Also Crashes on Long Conversations",
+      description: `After fixing RAG-01 (token guard in chat_complete), the team noticed the streaming endpoint \`/api/v1/queries/stream\` has the same bug. \`stream_response()\` in \`llm_service.py\` does not check token count before starting the stream. This means long sessions crash mid-stream, causing a broken partial response in the browser.
+
+**What's happening:**
+\`chat_complete()\` was fixed in RAG-01 but \`stream_response()\` is a completely separate code path that bypasses the token guard.
+
+**Your task:**
+1. Add the same token budget check to \`stream_response()\` that you added to \`chat_complete()\` in RAG-01
+2. The check must happen BEFORE the first token is yielded — a partial stream with an error at the end is worse than a clean upfront error
+3. Raise \`ValueError\` with a message containing "context" if the limit is exceeded
+4. Make the test \`tests/test_llm_service.py::TestTokenGuard::test_stream_raises_when_messages_exceed_context\` pass
+
+**Files:** \`app/services/llm_service.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/llm_service.py"],
+      rubric: {
+        diagnosis: "Did they identify that stream_response() is a separate code path from chat_complete() and has no token guard? Did they understand that the fix must be applied before the first yield, not after?",
+        design: "Is the token check placed before any yield statement? Does it use the same threshold as RAG-01? Does it raise ValueError with 'context' in the message?",
+        communication: "Did they explain why the fix must come before the first yield (partial stream is worse than a clean error)?",
+        execution: "Does test_stream_raises_when_messages_exceed_context pass? Is there no way for the stream to start and then fail mid-way due to token count?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-rag-03-seed-id-003",
+      title: "RAG-03: Search Results Are Incomplete — Chunks Too Large",
+      description: `Users are reporting that when they upload a long technical document and ask a specific question, the answer often misses relevant content. The retrieval system returns only 1–2 chunks when it should return 5+. Investigation reveals that documents are being split into very few large chunks instead of many small, overlapping ones.
+
+**Root cause:**
+\`document_processor.py\` uses \`CharacterTextSplitter(separator="\\n")\`. This splitter only splits on newline characters — meaning a paragraph with no newlines becomes a single chunk regardless of length. A 10,000-word PDF with minimal newlines produces a single chunk that exceeds the embedding model's token limit.
+
+**Your task:**
+1. Replace \`CharacterTextSplitter\` with \`RecursiveCharacterTextSplitter\` from \`langchain_text_splitters\`
+2. Configure it with \`chunk_size=1000\`, \`chunk_overlap=200\`, and the standard recursive separators: \`["\\n\\n", "\\n", ". ", " ", ""]\`
+3. Verify the test \`tests/test_document_processor.py::TestChunkSplitting::test_splits_long_prose_into_even_chunks\` passes
+
+**Files:** \`app/services/document_processor.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/document_processor.py"],
+      rubric: {
+        diagnosis: "Did they identify that CharacterTextSplitter(separator='\\n') fails to split prose without newlines, producing oversized chunks? Did they understand that RecursiveCharacterTextSplitter falls back through a hierarchy of separators?",
+        design: "Did they use RecursiveCharacterTextSplitter with chunk_size=1000, chunk_overlap=200, and the correct separator list? Did they import from langchain_text_splitters (not the deprecated langchain.text_splitter)?",
+        communication: "Did they explain why the original splitter produces oversized chunks and how RecursiveCharacterTextSplitter fixes it?",
+        execution: "Does the test_splits_long_prose_into_even_chunks test pass? Are all chunks ≤ 1200 characters for prose input?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-rag-04-seed-id-004",
+      title: "RAG-04: Chat History Corrupts When Same User Sends Two Messages at Once",
+      description: `A customer reports that in their web app, rapidly submitting two questions before the first answer arrives causes the conversation history to become corrupted. The model starts answering question B with context from question A, or repeats the same message twice in history.
+
+**Root cause:**
+In \`rag_chain.py\`, the \`ConversationBufferMemory\` object for each session is stored in \`_session_memory\` (a class-level dict) and retrieved by session_id. Two concurrent requests for the same session_id get the SAME memory object. Both coroutines call \`memory.save_context()\` concurrently, leading to interleaved writes.
+
+**Your task:**
+1. Add an \`asyncio.Lock\` per session to \`_session_memory\` so that only one request can write to a session's memory at a time
+2. The lock should be acquired before reading/writing memory and released after
+3. Store \`(memory, lock)\` tuples in the dict instead of bare memory objects
+4. The test \`tests/test_rag_chain.py::TestSessionMemoryIsolation::test_concurrent_sessions_dont_corrupt_history\` should pass
+
+**Files:** \`app/services/rag_chain.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/services/rag_chain.py"],
+      rubric: {
+        diagnosis: "Did they identify the shared mutable memory object as the root cause? Did they understand that two coroutines can interleave writes to the same ConversationBufferMemory?",
+        design: "Did they use asyncio.Lock (not threading.Lock)? Is the lock acquired before accessing the memory and released after? Is the lock stored per session (not a global lock which would serialize all requests)?",
+        communication: "Did they explain why asyncio.Lock is correct here vs threading.Lock? Did they explain the exact interleaving scenario that causes corruption?",
+        execution: "Does test_concurrent_sessions_dont_corrupt_history pass? Is the lock correctly scoped to the session, not global?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-rag-05-seed-id-005",
+      title: "RAG-05: Switching Embedding Models Returns Wrong-Dimension Vectors",
+      description: `The ops team upgraded the embedding model from \`text-embedding-3-small\` (1,536 dimensions) to \`text-embedding-3-large\` (3,072 dimensions). After the upgrade, some queries return a 500 error: "ChromaDB dimension mismatch — expected 1536 got 3072." Investigation shows that cached embeddings from the old model are being served for new queries.
+
+**Root cause:**
+In \`embedding_service.py\`, the Redis cache key is \`f"emb:{hashlib.md5(text.encode()).hexdigest()}"\`. The key does not include the model name. When the model changes, the old cache entries are still returned for the same text.
+
+**Your task:**
+1. Update the cache key to include the model name: \`f"emb:{self._model_name}:{hashlib.md5(text.encode()).hexdigest()}"\`
+2. Make sure both \`embed_text()\` and any other method that reads from the cache use the updated key format
+3. The test \`tests/test_embedding_service.py::TestCacheKey::test_different_models_dont_share_cache\` should pass
+
+**Files:** \`app/services/embedding_service.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/embedding_service.py"],
+      rubric: {
+        diagnosis: "Did they identify that the cache key is model-agnostic and that stale entries from the old model are returned when the model changes? Did they understand the dimension mismatch error flow?",
+        design: "Did they update the cache key to include the model name? Did they update all cache read/write paths consistently (not just the write)?",
+        communication: "Did they explain the model upgrade scenario and why the dimension mismatch happens? Did they mention cache invalidation as an alternative (but note key-based namespacing is cleaner)?",
+        execution: "Does test_different_models_dont_share_cache pass? Are both embed_text() cache reads and writes using the updated key?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-rag-06-seed-id-006",
+      title: "RAG-06: Scanned PDF Pages Silently Dropped During Ingestion",
+      description: `A customer uploaded a 50-page legal contract. Half the pages were scanned images (no extractable text). After ingestion, the customer searched for a clause that appeared on a scanned page — the system returned nothing. The customer has no idea the content is missing.
+
+**Root cause:**
+In \`document_processor.py\`, \`process_pdf()\` silently skips pages with no extractable text at DEBUG log level. Users and callers receive no indication that part of their document was not indexed.
+
+**Your task:**
+1. Count the number of pages that are skipped due to no extractable text (image-only pages)
+2. If any pages were skipped, emit a WARNING log (not DEBUG) with the message format: "X page(s) have no extractable text (image-only). These pages will not be searchable."
+3. Return the skipped page count from \`process_pdf()\` so callers can include it in the API response
+4. The test \`tests/test_document_processor.py::TestPDFProcessing::test_warns_on_image_only_page\` should pass
+
+**Files:** \`app/services/document_processor.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/document_processor.py"],
+      rubric: {
+        diagnosis: "Did they find the silent DEBUG log where image-only pages are skipped? Did they understand the user impact — customer has no idea half their document is unsearchable?",
+        design: "Did they change the log level to WARNING? Does the warning message include the count of skipped pages? Is the count returned so the API can surface it to the user?",
+        communication: "Did they explain the difference between DEBUG and WARNING log levels and when each is appropriate?",
+        execution: "Does test_warns_on_image_only_page pass (caplog.records contains a WARNING with 'image' or 'no text')?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-rag-07-seed-id-007",
+      title: "RAG-07: Search Returns Worst Results First",
+      description: `Users report that the search results are completely backwards — the most relevant document is always at the bottom of the list, and the least relevant is at the top.
+
+**Root cause:**
+In \`vector_store.py\`, the results from ChromaDB's similarity search are sorted by relevance score in ascending order (\`reverse=False\`). Similarity scores are higher for more relevant results, so ascending order puts the worst result first.
+
+**Your task:**
+1. Find the \`sorted()\` call in \`vector_store.py\` that sorts results by score
+2. Change \`reverse=False\` to \`reverse=True\` so the highest-scoring (most relevant) result comes first
+3. The test \`tests/test_vector_store.py::TestSortOrder::test_top_result_has_highest_score\` should pass
+
+**Files:** \`app/services/vector_store.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/vector_store.py"],
+      rubric: {
+        diagnosis: "Did they find the sorted() call with reverse=False and understand that higher scores = more relevant?",
+        design: "Is the fix just changing reverse=False to reverse=True? Nothing more complex is needed.",
+        communication: "Did they explain that ChromaDB cosine similarity scores are in [0,1] where 1 = most similar?",
+        execution: "Does test_top_result_has_highest_score pass? Is the fix applied to the correct sorted() call?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-rag-08-seed-id-008",
+      title: "RAG-08: Tenant Data Isolation Broken — Users See Other Tenants' Documents",
+      description: `A critical security issue has been reported. Tenant A uploaded confidential documents and queried them. The search results included chunks from Tenant B's documents. Multi-tenancy is completely broken.
+
+**Root cause:**
+In \`vector_store.py\`, the \`_collection_name()\` method returns \`"ragcore_shared"\` when \`tenant_id\` is \`None\`. This fallback is never supposed to happen in production, but a code path in the query handler passes \`None\` when the tenant lookup fails instead of raising an error. All tenants with lookup failures end up in the shared collection.
+
+**Your task:**
+1. Remove the \`"ragcore_shared"\` fallback from \`_collection_name()\`
+2. If \`tenant_id\` is \`None\` or empty, raise \`ValueError("tenant_id is required for all vector store operations")\`
+3. Also add this check at the entry point of \`search()\` and \`add_documents()\` before any ChromaDB call
+4. The test \`tests/test_vector_store.py::TestTenantIsolation::test_none_tenant_raises_not_falls_back\` should pass
+
+**Files:** \`app/services/vector_store.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/services/vector_store.py"],
+      rubric: {
+        diagnosis: "Did they correctly identify this as a data isolation security bug? Did they find the fallback to 'ragcore_shared' in _collection_name()?",
+        design: "Did they raise ValueError instead of silently using a shared collection? Did they add the check at the entry points of both search() and add_documents()?",
+        communication: "Did they classify this as a multi-tenancy security vulnerability? Did they mention checking audit logs to determine if cross-tenant data was actually served?",
+        execution: "Does test_none_tenant_raises_not_falls_back pass? Is ValueError raised (not a different exception)?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-rag-09-seed-id-009",
+      title: "RAG-09: Retry Logic Ignores OpenAI Retry-After Header",
+      description: `The API is hitting OpenAI rate limits during peak usage. The retry logic in \`llm_service.py\` does exponential backoff (1s, 2s, 4s, 8s...) but ignores the \`Retry-After\` header that OpenAI returns on 429 responses. This causes wasted retries that get rate limited again immediately.
+
+**Root cause:**
+\`chat_complete_with_retry()\` catches \`RateLimitError\` and uses \`await asyncio.sleep(2 ** attempt)\`. It never reads \`error.response.headers.get("Retry-After")\`.
+
+**Your task:**
+1. In the \`except RateLimitError\` block of \`chat_complete_with_retry()\`, read the \`Retry-After\` header from \`error.response.headers\`
+2. If the header is present, sleep for that many seconds (parse as float)
+3. If the header is absent, fall back to the existing \`2 ** attempt\` backoff
+4. The test \`tests/test_llm_service.py::TestRetryAfterHeader::test_respects_retry_after_header\` should pass
+
+**Files:** \`app/services/llm_service.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/services/llm_service.py"],
+      rubric: {
+        diagnosis: "Did they find chat_complete_with_retry() and identify that the Retry-After header is present on the error object but never read?",
+        design: "Is the Retry-After header read from error.response.headers? Is there a fallback to exponential backoff when the header is absent? Is the header value parsed as float (seconds)?",
+        communication: "Did they explain why ignoring Retry-After causes thundering herd retries that immediately get rate limited again?",
+        execution: "Does test_respects_retry_after_header pass? Is the sleep duration >= retry_after * 0.9?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-rag-10-seed-id-010",
+      title: "RAG-10: Memory Leak — Session Chat History Grows Without Bound",
+      description: `The API server's memory usage grows continuously under load and never comes down. A heap profile shows that \`RAGChain._session_memory\` — a class-level dict — is the culprit. It accumulates one entry per unique session_id and is never cleaned up. After 24 hours in production it holds 200,000+ entries.
+
+**Root cause:**
+\`_session_memory\` in \`rag_chain.py\` is a class-level dict with no eviction policy. Every chat session creates an entry that persists for the lifetime of the process.
+
+**Your task:**
+1. Replace \`_session_memory: dict\` with a size-bounded structure that evicts the least-recently-used entry when it exceeds 1,000 sessions
+2. Use Python's built-in \`functools\` module (hint: \`lru_cache\` won't work here, but \`OrderedDict\` will)
+3. Implement LRU eviction: on each access, move the session to the end; when the dict exceeds 1,000 entries, pop the first (oldest) entry
+4. The test \`tests/test_rag_chain.py::TestSessionMemoryIsolation::test_session_memory_does_not_grow_unbounded\` should pass
+
+**Files:** \`app/services/rag_chain.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/services/rag_chain.py"],
+      rubric: {
+        diagnosis: "Did they identify the class-level dict with no eviction as the memory leak source? Did they understand that every unique session_id creates a permanent entry?",
+        design: "Did they use OrderedDict (or equivalent) with a max size of 1,000? Is the LRU eviction implemented (move-to-end on access, pop-first when over limit)?",
+        communication: "Did they explain why a class-level dict retains entries for the process lifetime? Did they discuss the trade-off: LRU means very old sessions lose chat history, which is acceptable.",
+        execution: "Does test_session_memory_does_not_grow_unbounded pass (len < 200 after inserting 200)? Is the max size configurable?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-rag-11-seed-id-011",
+      title: "RAG-11: Deleting a Document Leaves Orphaned Vectors in ChromaDB",
+      description: `Customers who delete documents to free up storage are surprised to find that their search results still include content from deleted documents. The documents are gone from the UI but the embeddings remain searchable.
+
+**Root cause:**
+In \`app/api/documents.py\`, \`delete_document()\` deletes the PostgreSQL record but never calls \`vector_store.delete_document()\` to remove the corresponding vectors from ChromaDB. The vectors are orphaned and remain searchable indefinitely.
+
+**Your task:**
+1. In the \`delete_document()\` route handler in \`app/api/documents.py\`, after deleting the DB record, call the vector store's delete method to remove all chunks for that document
+2. The vector store deletion should use the \`document_id\` as the filter key (ChromaDB supports \`where={"document_id": doc_id}\`)
+3. If the vector store deletion fails, log a WARNING but still return 204 — the DB record is gone, partial cleanup is better than blocking the response
+4. Write a brief note in your PR description about why ordering matters here (DB first vs vector first)
+
+**Files:** \`app/api/documents.py\`, \`app/services/vector_store.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/api/documents.py", "app/services/vector_store.py"],
+      rubric: {
+        diagnosis: "Did they find that delete_document() only deletes the Postgres row and never touches ChromaDB? Did they understand the symptom — deleted content still appears in search?",
+        design: "Did they call vector_store.delete_document(doc_id, tenant_id) after the DB delete? Did they handle vector store failure gracefully (log WARNING, still return 204)?",
+        communication: "Did their PR note explain why DB is deleted first (if vector store fails, user can retry; if DB is gone and vector store succeeds, we have orphaned vectors with no way to track them)?",
+        execution: "Is the vector store delete called with the correct document_id filter? Is the error handling correct (WARNING log, 204 response)?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-rag-12-seed-id-012",
+      title: "RAG-12: Concurrent Document Uploads Create Duplicate Embeddings",
+      description: `A customer with a flaky upload client accidentally uploaded the same PDF twice in rapid succession. Their search results now return duplicate paragraphs for every query. The document appears once in the document list but the vectors are doubled.
+
+**Root cause:**
+\`document_processor.py\` has no idempotency guard. If two requests start ingesting the same \`document_id\` concurrently, both complete successfully — producing double the chunks in ChromaDB.
+
+**Your task:**
+1. Add an idempotency check at the start of \`ingest()\`: query the database for a document with the given \`document_id\` that has status \`"ready"\`
+2. If such a document already exists, skip ingestion and return early (log INFO: "Document {doc_id} already ingested, skipping")
+3. Use a database row-level mechanism or status transition to prevent two concurrent ingestions of the same ID (hint: set status to "processing" atomically using an upsert before starting the heavy work)
+4. The test \`tests/test_document_processor.py::TestIdempotency::test_concurrent_upload_same_id_no_duplicates\` should pass
+
+**Files:** \`app/services/document_processor.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/services/document_processor.py"],
+      rubric: {
+        diagnosis: "Did they identify the missing idempotency check as the root cause? Did they understand that two concurrent requests both pass the initial check before either commits?",
+        design: "Is the idempotency check atomic (using a DB upsert or SELECT FOR UPDATE, not just a SELECT)? Does the check happen before the expensive embedding work?",
+        communication: "Did they explain why a simple SELECT then INSERT is still racy and why an atomic upsert is required?",
+        execution: "Does test_concurrent_upload_same_id_no_duplicates pass (store_chunks called exactly once)? Is the check placed before the heavy work?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-rag-13-seed-id-013",
+      title: "RAG-13: Embedding Large Documents Is 10x Slower Than It Should Be",
+      description: `Document ingestion is taking 60–90 seconds for large PDFs. Profiling shows that the bottleneck is the embedding step: \`embed_chunks()\` calls \`embed_query()\` in a loop, making one API call per chunk. A 100-chunk document makes 100 sequential API calls.
+
+**Root cause:**
+In \`embedding_service.py\`, \`embed_chunks()\` iterates over chunks and calls \`embed_query()\` for each. OpenAI's embeddings API supports batching — you can send all texts in a single API call using \`aembed_documents()\`.
+
+**Your task:**
+1. Replace the loop in \`embed_chunks()\` with a single call to \`self._embeddings.aembed_documents(chunks)\`
+2. \`aembed_documents()\` returns a list of embeddings in the same order as the input chunks
+3. Ensure the return type is still \`list[list[float]]\`
+4. The test \`tests/test_embedding_service.py::TestBatchEmbedding::test_embed_chunks_uses_batch_api\` should pass
+
+**Files:** \`app/services/embedding_service.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/embedding_service.py"],
+      rubric: {
+        diagnosis: "Did they identify the N sequential API calls as the bottleneck and understand that aembed_documents() batches them into one call?",
+        design: "Did they replace the loop with a single aembed_documents() call? Is the return type preserved (list[list[float]])?",
+        communication: "Did they quantify the improvement — O(N) API calls → O(1)?",
+        execution: "Does test_embed_chunks_uses_batch_api pass (aembed_documents called exactly once)?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-rag-14-seed-id-014",
+      title: "RAG-14: Low-Quality Search Results Returned — Relevance Threshold Not Applied",
+      description: `Users are complaining that search results sometimes include completely irrelevant content. A search for "quarterly revenue figures" returns chunks about "annual employee satisfaction survey" with a similarity score of 0.41.
+
+**Root cause:**
+In \`vector_store.py\`, there is a constant \`RELEVANCE_THRESHOLD = 0.72\` defined at the top of the class. The \`search()\` method retrieves results from ChromaDB with scores but never filters out results below the threshold.
+
+**Your task:**
+1. In the \`search()\` method, after retrieving results with scores from ChromaDB, filter out any result where the similarity score is below \`RELEVANCE_THRESHOLD\`
+2. Apply this filter AFTER sorting (RAG-07 fix) and BEFORE returning to the caller
+3. If filtering leaves zero results, return an empty list (do not fall back to returning low-quality results)
+4. The test \`tests/test_vector_store.py::TestRelevanceThreshold::test_low_score_docs_filtered_out\` should pass
+
+**Files:** \`app/services/vector_store.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["app/services/vector_store.py"],
+      rubric: {
+        diagnosis: "Did they find RELEVANCE_THRESHOLD = 0.72 already defined in the class but never used? Did they locate the correct place in search() to apply the filter?",
+        design: "Is the filter applied after sorting and before the return? Does it correctly keep only results where score >= RELEVANCE_THRESHOLD? Does it return [] when all results are below threshold?",
+        communication: "Did they explain why zero results is better than low-quality results for a RAG system?",
+        execution: "Does test_low_score_docs_filtered_out pass ('noise' document with score 0.40 is excluded)?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-rag-15-seed-id-015",
+      title: "RAG-15: Large File Upload Loads Entire File Into Memory Before Processing",
+      description: `The API server crashes with OOM (Out of Memory) when a user uploads a file larger than 200MB. The server has 512MB of RAM. Investigation shows that the entire file content is loaded into memory before the background processing task starts.
+
+**Root cause:**
+In \`app/api/documents.py\`, \`ingest_document()\` calls \`await file.read()\` which reads the entire file into a bytes object before passing it to the background task. For a 300MB file this exhausts available memory.
+
+**Your task:**
+1. Instead of reading the file content in the request handler with \`await file.read()\`, save the uploaded file to a temporary file path on disk first
+2. Pass the file path to the background task instead of the bytes content
+3. Use Python's \`tempfile.mkstemp()\` to create the temp file, write the content in chunks using \`aiofiles\`, and pass the path
+4. The background task should delete the temp file after processing is complete
+5. Add a file size check: reject uploads larger than \`settings.MAX_UPLOAD_SIZE_MB\` MB with HTTP 413 before any file I/O
+
+**Files:** \`app/api/documents.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["app/api/documents.py"],
+      rubric: {
+        diagnosis: "Did they find the await file.read() call that loads the entire file into memory? Did they understand that the background task receives the bytes AFTER the request handler has already buffered everything?",
+        design: "Did they replace file.read() with streaming to disk using aiofiles? Did they pass a file path to the background task? Did they add cleanup of the temp file after processing? Did they add the 413 size check?",
+        communication: "Did they explain the memory model: await file.read() blocks the event loop AND holds the bytes in memory until GC, while streaming to disk is O(chunk_size) memory?",
+        execution: "Is the temp file approach implemented correctly (mkstemp + aiofiles chunked write)? Is the cleanup in a finally block or background task? Is the 413 check placed before any file I/O?",
+      },
+      expectedMinutes: 50,
+    },
+  ];
+
+  for (const t of ragTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.PYTHON, codebaseId: ragCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
-  console.log(`[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD tickets upserted.`);
+  console.log(
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore tickets upserted.`
+  );
 }

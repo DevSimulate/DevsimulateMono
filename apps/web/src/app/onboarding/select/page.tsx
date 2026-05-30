@@ -64,10 +64,11 @@ const CARDS: Card[] = [
     logoBg: "#FEF3C7",
     logoColor: "#92400E",
     stack: "Python + LangChain",
-    difficulties: ["MID"],
-    ticketCount: "Coming soon",
-    active: false,
-    cornerBadge: { label: "Beta", bg: "#CCFBF1", color: "#0D9488" },
+    difficulties: ["JUNIOR", "MID"],
+    ticketCount: "15 tickets available",
+    active: true,
+    cornerBadge: { label: "● New", bg: "#FEF3C7", color: "#92400E" },
+    href: "/tickets",
   },
   {
     id: "techcorp",
@@ -131,7 +132,7 @@ export default function SelectCodebasePage() {
       {/* Beta banner */}
       <div className="w-full px-4 py-3 text-center text-sm font-medium"
         style={{ background: "#FEF9C3", borderBottom: "1px solid #FDE68A", color: "#92400E" }}>
-        🚧 DevSim is in beta — System Design Arena + NovaTech CRM are live now. More codebases dropping soon.
+        🚧 DevSim is in beta — System Design Arena, NovaTech CRM, and RAGCore are live now. More codebases dropping soon.
         Your feedback shapes what we build next.
       </div>
 
@@ -191,10 +192,14 @@ export default function SelectCodebasePage() {
                 style={{
                   background: "#fff",
                   border: card.active
-                    ? card.id === "system-design" ? "2px solid #5B5BD6" : "2px solid #22c55e"
+                    ? card.id === "system-design" ? "2px solid #5B5BD6"
+                    : card.id === "ragcore" ? "2px solid #D97706"
+                    : "2px solid #22c55e"
                     : "1px solid #E4E2DD",
                   boxShadow: card.active
-                    ? card.id === "system-design" ? "0 0 0 3px rgba(91,91,214,0.12)" : "0 0 0 3px rgba(34,197,94,0.12)"
+                    ? card.id === "system-design" ? "0 0 0 3px rgba(91,91,214,0.12)"
+                    : card.id === "ragcore" ? "0 0 0 3px rgba(217,119,6,0.12)"
+                    : "0 0 0 3px rgba(34,197,94,0.12)"
                     : "0 1px 3px rgba(0,0,0,0.04)",
                   animationDelay: `${i * 60}ms`,
                 }}
@@ -203,6 +208,8 @@ export default function SelectCodebasePage() {
                   if (card.active) {
                     const shadow = card.id === "system-design"
                       ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(91,91,214,0.25)"
+                      : card.id === "ragcore"
+                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(217,119,6,0.25)"
                       : "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(34,197,94,0.20)";
                     (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
                     (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
@@ -212,6 +219,8 @@ export default function SelectCodebasePage() {
                   if (card.active) {
                     const shadow = card.id === "system-design"
                       ? "0 0 0 3px rgba(91,91,214,0.12)"
+                      : card.id === "ragcore"
+                      ? "0 0 0 3px rgba(217,119,6,0.12)"
                       : "0 0 0 3px rgba(34,197,94,0.12)";
                     (e.currentTarget as HTMLDivElement).style.transform = "";
                     (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
