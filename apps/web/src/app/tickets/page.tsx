@@ -6,6 +6,15 @@ import axios from "axios";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
 
+const GITHUB_AUTH_URL =
+  `https://github.com/login/oauth/authorize` +
+  `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
+  `&scope=read:user,user:email` +
+  `&redirect_uri=${encodeURIComponent(
+    (process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com") +
+    "/auth/callback"
+  )}`;
+
 interface Ticket {
   id: string;
   title: string;
@@ -39,7 +48,11 @@ export default function TicketsPage(): React.ReactElement {
 
   useEffect(() => {
     const token = getToken();
-    if (!token) { router.push("/"); return; }
+    if (!token) {
+      localStorage.setItem("ds_submit_return", "/tickets");
+      window.location.href = GITHUB_AUTH_URL;
+      return;
+    }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     const headers = { Authorization: `Bearer ${token}` };
