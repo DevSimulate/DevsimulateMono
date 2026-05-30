@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
+import { runSeed } from "./seed";
 import cors from "cors";
 import helmet from "helmet";
 import authRouter from "./routes/auth";
@@ -101,6 +102,7 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(PORT, () => {
   console.log(`DevSimulate API running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV ?? "development"}`);
+  runSeed().catch((err) => console.error("[seed] failed:", err));
 });
 
 // Start background review worker only when Redis is available
