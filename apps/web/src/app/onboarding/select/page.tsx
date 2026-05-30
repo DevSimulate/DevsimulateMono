@@ -40,7 +40,7 @@ const CARDS: Card[] = [
     ticketCount: "10 tickets available",
     active: true,
     cornerBadge: { label: "● New", bg: "#EBEBFF", color: "#5B5BD6" },
-    href: "/tickets",
+    href: "/tickets?stack=SYSTEM_DESIGN",
   },
   {
     id: "novatech",
@@ -54,7 +54,7 @@ const CARDS: Card[] = [
     ticketCount: "17 tickets available",
     active: true,
     cornerBadge: { label: "● Live", bg: "#DCFCE7", color: "#16a34a" },
-    href: "/onboarding/guide?codebase=novatech",
+    href: "/tickets?stack=DOTNET",
   },
   {
     id: "ragcore",
@@ -68,7 +68,7 @@ const CARDS: Card[] = [
     ticketCount: "15 tickets available",
     active: true,
     cornerBadge: { label: "● New", bg: "#FEF3C7", color: "#92400E" },
-    href: "/tickets",
+    href: "/tickets?stack=PYTHON",
   },
   {
     id: "techcorp",
