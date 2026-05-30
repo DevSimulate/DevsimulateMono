@@ -15,7 +15,7 @@ export const redisConnection = new IORedis(REDIS_URL, {
   ...(REDIS_URL.startsWith("rediss://") ? { tls: {} } : {}),
 });
 
-export const reviewQueue = new Queue<ReviewJobData>(QUEUE_NAME, {
+export const reviewQueue = new Queue<ReviewJobData, void, string>(QUEUE_NAME, {
   connection: redisConnection,
   defaultJobOptions: {
     attempts: 3,
@@ -23,8 +23,6 @@ export const reviewQueue = new Queue<ReviewJobData>(QUEUE_NAME, {
     removeOnComplete: 100,
     removeOnFail: 200,
   },
-  // Reduce how often the queue checks for stalled jobs — saves ~90% of idle Redis requests
-  stalledInterval: 300_000, // 5 minutes (default: 30s)
 });
 
 /**
@@ -35,10 +33,10 @@ export const reviewQueue = new Queue<ReviewJobData>(QUEUE_NAME, {
  *  2. saveReviewResult + generateFirstQuestion run simultaneously
  *     (DB write and Claude Q1 call overlap, saving ~3-5 seconds).
  */
-export function startReviewWorker(): Worker<ReviewJobData> {
-  const worker = new Worker<ReviewJobData>(
+export function startReviewWorker(): Worker<ReviewJobData, void, string> {
+  const worker = new Worker<ReviewJobData, void, string>(
     QUEUE_NAME,
-    async (job: Job<ReviewJobData>) => {
+    async (job: Job<ReviewJobData, void, string>) => {
       const { submissionId, prDescription, ticketId, repoOwner, repoName, prNumber } = job.data;
 
       // ── 1. Fetch ticket and diff in parallel ──────────────────────────────
