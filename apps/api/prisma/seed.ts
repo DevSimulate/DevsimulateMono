@@ -244,7 +244,307 @@ Key facts engineers must know:
     },
   });
 
-  console.log("Seed complete. Created NovaTech CRM codebase with 7 tickets.");
+  // Ticket 8 — NOVA-96
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-96-seed-id-008" },
+    update: {},
+    create: {
+      id: "ticket-nova-96-seed-id-008",
+      title: "NOVA-96: Invoice Emails Sent Without PDF Attachment",
+      description:
+        "Customers are complaining they receive invoice emails with no PDF attached. Support has confirmed it reproducibly: the email arrives, the body is correct, but there is no PDF link and no downloadable document. The code team says 'PDF generation works fine' because when they test GeneratePdfAsync directly it produces a URL. The bug only appears when invoices are sent via the automated flow. Find where the PDF URL is being dropped and fix it.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/InvoiceService.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find that SendAsync calls GeneratePdfAsync but ignores its return value, leaving the local invoice object with a null PdfUrl? Did they trace the call: GeneratePdfAsync saves the URL to DB but the in-memory invoice is never updated, so SendInvoiceAsync receives an invoice with PdfUrl = null?",
+        design:
+          "Did they fix it by capturing the return value of GeneratePdfAsync and updating invoice.PdfUrl before calling SendInvoiceAsync? Did they consider that re-fetching the invoice from DB after GeneratePdfAsync is an alternative correct fix?",
+        communication:
+          "Did they clearly explain that the PDF is generated successfully but the in-memory object is stale? Did they distinguish between the DB state (correct) and the object passed to the notification (wrong)?",
+        execution:
+          "Does the fix ensure invoice.PdfUrl is non-null before calling SendInvoiceAsync? Does the generated PDF URL reach the email?",
+      },
+      expectedMinutes: 40,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 9 — NOVA-99
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-99-seed-id-009" },
+    update: {},
+    create: {
+      id: "ticket-nova-99-seed-id-009",
+      title: "NOVA-99: Soft-Deleted Customers Appear in Search and Order Assignment",
+      description:
+        "Sales reps are complaining that closed customer accounts keep appearing when they search for customers to assign an order to. We closed 47 accounts last month after failed debt collection. Those accounts should be invisible to the UI. They still show up in search results and in the 'assign order' dropdown. The DeleteAsync method does soft-delete them (status = Closed) but something is not filtering them out downstream.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/CustomerService.cs",
+        "src/NovaTechCRM.Repositories/CustomerRepository.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify that CustomerService.SearchAsync and GetAllAsync pass no status filter to the repository? Did they find that the repository queries do not exclude Status = Closed records?",
+        design:
+          "Did they add a status filter — either at the service layer (filtering the returned list) or at the repository layer (adding a WHERE Status != Closed clause)? Did they consider that adding the filter at the repository layer is more efficient as it avoids loading closed records from the DB at all?",
+        communication:
+          "Did they explain the soft-delete pattern and why the filter needs to be explicit? Did they note that EvaluateTierAsync and GetAllDashboardsAsync may have the same issue?",
+        execution:
+          "Does the fix prevent Closed customers from appearing in search results? Does GetAllAsync also exclude them?",
+      },
+      expectedMinutes: 35,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 10 — NOVA-102
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-102-seed-id-010" },
+    update: {},
+    create: {
+      id: "ticket-nova-102-seed-id-010",
+      title: "NOVA-102: Duplicate Invoice Numbers Generated Under Load",
+      description:
+        "Finance has flagged 11 invoices this quarter with duplicate numbers — two separate invoices both assigned INV-2026-00034, for example. They only discovered it when a customer called about a payment that was applied to the wrong account. The invoice sequence supposedly comes from the database but somehow two invoices are getting the same number. It never happens during normal usage but appears under traffic spikes.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.MID,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/InvoiceService.cs",
+        "src/NovaTechCRM.Repositories/InvoiceRepository.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify that GetNextSequenceAsync likely uses a non-atomic read-then-increment pattern (SELECT MAX(sequence) + 1) rather than a database sequence or atomic increment? Under concurrent load two transactions can both read the same MAX value before either commits, resulting in duplicate sequence numbers.",
+        design:
+          "Did they propose replacing the read-increment pattern with a proper database sequence (CREATE SEQUENCE) or an atomic UPDATE ... OUTPUT / RETURNING clause? Did they consider a Redis counter as an alternative? Did they note the static _invoiceSequence field is also a cross-instance risk?",
+        communication:
+          "Did they explain why the race condition is invisible in single-request testing but surfaces under concurrent load? Did they assess the financial impact of duplicate invoice numbers?",
+        execution:
+          "Does the proposed fix guarantee uniqueness under concurrent requests across multiple API instances? Is it deadlock-safe?",
+      },
+      expectedMinutes: 75,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 11 — NOVA-105
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-105-seed-id-011" },
+    update: {},
+    create: {
+      id: "ticket-nova-105-seed-id-011",
+      title: "NOVA-105: Customer Tier Not Recalculated After Large Refunds",
+      description:
+        "The sales team noticed 9 enterprise customers have Gold or Platinum tier badges but should have been downgraded months ago. Each of these customers had large refunds processed — one customer spent $22,000 (Platinum) but was refunded $19,000, leaving effective lifetime spend of $3,000 (Silver). They are still Platinum and receiving Platinum-tier discounts worth thousands of dollars. Figure out why tier evaluation is not accounting for refunds.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.MID,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/CustomerService.cs",
+        "src/NovaTechCRM.Services/PaymentService.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find that EvaluateTierAsync calculates lifetime value using only fulfilled orders (Sum of TotalAmount) with no deduction for refunds? Did they identify that refunds in PaymentService update the Payment record but do not adjust order totals or trigger a tier re-evaluation?",
+        design:
+          "Did they propose either (a) deducting refunded amounts from LTV in EvaluateTierAsync, or (b) triggering EvaluateTierAsync after a refund is processed in RefundAsync? Did they consider backwards compatibility — running a one-time backfill to fix existing incorrect tiers?",
+        communication:
+          "Did they explain why the bug is hard to notice — tiers only get re-evaluated explicitly, and refunds flow through a different code path? Did they quantify the business impact (incorrect discounts)?",
+        execution:
+          "Does the fix correctly reduce LTV by refunded amounts when evaluating tier? Does a $22,000 spend with $19,000 in refunds correctly resolve to Silver tier ($3,000)?",
+      },
+      expectedMinutes: 60,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 12 — NOVA-108
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-108-seed-id-012" },
+    update: {},
+    create: {
+      id: "ticket-nova-108-seed-id-012",
+      title: "NOVA-108: Overdue Invoice Notification Has No Grace Period",
+      description:
+        "We are getting angry emails from enterprise customers. They receive an aggressive 'Your invoice is OVERDUE' notification on the exact day the invoice is due — sometimes within hours of the due date — before they have had a chance to pay. Two accounts threatened to cancel. The contract says we must allow 3 business days before sending overdue notices. The code sends them at midnight on the due date. Find it and add the grace period.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/InvoiceService.cs",
+        "src/NovaTechCRM.Infrastructure/BackgroundJobs/InvoiceOverdueJob.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find ProcessOverdueAsync uses `i.DueAt < now` with no grace period, so the very first midnight after the due date triggers the overdue notification? Did they find the TODO comment referencing NOVA-64 that explicitly called this out?",
+        design:
+          "Did they change the condition to `i.DueAt.AddDays(3) < now` or introduce a configurable GracePeriodDays setting? Did they consider that 'business days' vs 'calendar days' may matter for enterprise contracts and suggest making it configurable?",
+        communication:
+          "Did they explain the customer impact clearly and reference the contract SLA? Did they suggest whether the grace period should be configurable per customer tier or global?",
+        execution:
+          "Does the fix prevent notifications from firing within 3 days of the due date? Does it correctly handle invoices that were already past the grace period before the fix is deployed?",
+      },
+      expectedMinutes: 45,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 13 — NOVA-111
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-111-seed-id-013" },
+    update: {},
+    create: {
+      id: "ticket-nova-111-seed-id-013",
+      title: "NOVA-111: Any Authenticated User Can Delete Another Customer's Payment Method",
+      description:
+        "Our security team ran an internal penetration test and found that DELETE /api/payments/methods/{id} deletes the payment method with no check that the authenticated user actually owns it. An attacker who knows (or guesses) a payment method UUID can delete any customer's saved card. We already fixed a similar read vulnerability in NOVA-83. This is the same class of bug on the delete endpoint. Fix it before the pen test report goes to the board.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.MID,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/PaymentService.cs",
+        "src/NovaTechCRM.Api/Controllers/PaymentsController.cs",
+        "src/NovaTechCRM.Repositories/IPaymentRepository.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify that DeletePaymentMethodAsync in PaymentService calls the repository with no ownership verification? Did they confirm the controller passes the ID directly without checking the authenticated user's customerId against the payment method's customerId?",
+        design:
+          "Did they add a lookup before delete — fetch the payment method, verify PaymentMethod.CustomerId == authenticated user's customerId, return 403 if mismatch? Did they discuss whether the check belongs in the service layer (preferred) or controller layer?",
+        communication:
+          "Did they classify this as an IDOR (Insecure Direct Object Reference) vulnerability? Did they reference NOVA-83 as a prior instance of the same pattern in the codebase and suggest an audit of other endpoints?",
+        execution:
+          "Does the fix return 403 (not 404) when attempting to delete another customer's payment method? Is the fix placed at the service layer so it cannot be bypassed by different controller routes?",
+      },
+      expectedMinutes: 50,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 14 — NOVA-114
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-114-seed-id-014" },
+    update: {},
+    create: {
+      id: "ticket-nova-114-seed-id-014",
+      title: "NOVA-114: Audit Logs Missing for Entire Production System",
+      description:
+        "Compliance ran a quarterly audit review and found zero audit entries in the database for the last 90 days — despite the system processing thousands of orders. The AuditFlushJob logs show it running successfully every 30 seconds and always reporting 0 entries flushed. The development team insists the AuditService.LogAsync is being called correctly on every create/update/delete. Somehow entries are going in but never coming out. Find out why and fix it.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/AuditService.cs",
+        "src/NovaTechCRM.Infrastructure/BackgroundJobs/AuditFlushJob.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer discover that AuditService is registered as Scoped in DI? Each HTTP request creates its own AuditService instance with its own _batch list. The AuditFlushJob creates a new DI scope and gets a fresh AuditService with an empty batch — it never sees the entries accumulated in request-scoped instances. Request scopes are disposed at end-of-request, taking the unflushed batch with them.",
+        design:
+          "Did they propose the correct fix — registering AuditService as Singleton so the same _batch is shared across all requests and the flush job? Did they address thread safety — the existing SemaphoreSlim _lock is already present and handles this correctly for Singleton lifetime. Did they suggest running a compensating migration or re-audit for the missing 90 days?",
+        communication:
+          "Did they clearly explain the DI lifetime mismatch? Did they explain why the flush job always reports 0 — it is genuinely seeing an empty batch, not a logging bug? Did they connect the Scoped vs Singleton lifetime to the symptom?",
+        execution:
+          "Does changing to Singleton registration cause the flush job to see and flush the accumulated entries? Is the SemaphoreSlim thread-safe under Singleton usage across concurrent requests?",
+      },
+      expectedMinutes: 90,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 15 — NOVA-117
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-117-seed-id-015" },
+    update: {},
+    create: {
+      id: "ticket-nova-117-seed-id-015",
+      title: "NOVA-117: Customers Charged Twice After Payment Timeout",
+      description:
+        "Three enterprise customers have contacted us saying they were double-charged. In each case the story is the same: they submitted payment, it appeared to hang or time out, they hit submit again, and two charges appeared on their statement. Our logs show two separate payment records for each case, both with status Succeeded. The payment provider (Stripe) confirms both charges as legitimate transactions. We created the payment twice. Find the root cause and implement the fix.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/PaymentService.cs",
+        "src/NovaTechCRM.Infrastructure/Payments/StripePaymentProvider.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find that ChargeAsync creates a payment record in the DB before calling the provider, but if the DB update (step 3) fails or times out, the payment is stuck in Processing status? On retry, a new payment record is created and the provider is called again — the customer is charged twice. Did they identify the lack of an idempotency key as the root cause?",
+        design:
+          "Did they propose using a deterministic idempotency key (e.g., derived from customerId + invoiceId + amount + date) passed to the provider on every charge attempt? Did they consider using the existing Payment.Id GUID as the idempotency key since it is created before the provider call? Did they consider checking for existing Processing payments for the same invoice before creating a new record?",
+        communication:
+          "Did they explain the exact failure sequence — provider succeeds, DB update fails, payment stuck in Processing, retry creates second charge? Did they distinguish user-triggered retry from automated retry? Did they assess liability/refund process for the affected customers?",
+        execution:
+          "Does the fix prevent a second charge when the same invoice payment is retried? Does it handle the case where the provider has the charge but the DB does not, and reconcile correctly?",
+      },
+      expectedMinutes: 120,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 16 — NOVA-120
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-120-seed-id-016" },
+    update: {},
+    create: {
+      id: "ticket-nova-120-seed-id-016",
+      title: "NOVA-120: Race Condition in Set-Default Payment Method",
+      description:
+        "Customer support has escalated a recurring complaint: customers update their default payment method in the app and the next subscription renewal charges the old card instead. When we look in the DB we sometimes find two payment methods both marked IsDefault = true for the same customer. This causes the charge to go to whichever record the payment service happens to load first. It seems to happen when the customer saves a new card on the mobile app and web app at the same time.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/PaymentService.cs",
+        "src/NovaTechCRM.Repositories/IPaymentRepository.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer identify the read-modify-write race condition in SavePaymentMethodAsync? Two concurrent requests both read the existing payment methods, both see the old method as default, both clear it and set their own new method as default. The second write does not undo the first — both end up with IsDefault = true.",
+        design:
+          "Did they propose an atomic fix — either a database-level UPDATE ... SET IsDefault = false WHERE CustomerId = @id (all at once before inserting the new default), or a pessimistic lock (SELECT FOR UPDATE), or an optimistic concurrency check? Did they rule out the current approach of loading-and-updating individual records as inherently racy?",
+        communication:
+          "Did they explain why this is invisible in single-user testing but surfaces under concurrent mobile+web sessions? Did they describe the customer impact (wrong card charged on renewal)?",
+        execution:
+          "Does the fix ensure exactly one payment method per customer is marked IsDefault at all times, even under concurrent requests? Is the fix deadlock-safe?",
+      },
+      expectedMinutes: 90,
+      codebaseId: codebase.id,
+    },
+  });
+
+  // Ticket 17 — NOVA-123
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-123-seed-id-017" },
+    update: {},
+    create: {
+      id: "ticket-nova-123-seed-id-017",
+      title: "NOVA-123: Overdue Invoice Notification Silently Lost on Process Restart",
+      description:
+        "Finance discovered 34 invoices that are marked Overdue in the database but the customers never received an overdue notification. These are real past-due balances that customers are unaware of. The pattern: every case corresponds to a deployment window — the API was restarted between midnight and 1 AM when the overdue job runs. Find out exactly how the notification gets lost and propose a fix that guarantees either the notification is sent or the invoice stays Issued so the job retries it tomorrow.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.MID,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/InvoiceService.cs",
+        "src/NovaTechCRM.Infrastructure/BackgroundJobs/InvoiceOverdueJob.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "Did the developer find that ProcessOverdueAsync updates the invoice status to Overdue in the DB BEFORE sending the notification? If the process is killed after the DB update but before SendInvoiceOverdueAsync completes, the invoice is permanently Overdue in the DB but no notification was sent. The job only queries Issued invoices so it will never retry.",
+        design:
+          "Did they propose reordering operations — send the notification first, then update status — so that a crash before the DB update leaves the invoice as Issued and the job retries tomorrow? Did they discuss the trade-off: reordering means a crash after notification but before DB update sends a duplicate notification. Did they suggest an outbox pattern or idempotency field as the robust solution?",
+        communication:
+          "Did they clearly explain the at-most-once vs at-least-once delivery trade-off? Did they link the failure to deployment restarts during the job window? Did they recommend a monitoring alert for the gap between Overdue invoices and notification send logs?",
+        execution:
+          "Does the proposed fix eliminate silent notification loss in the common deployment-restart scenario? If reordering is chosen, is the duplicate-notification risk correctly acknowledged and mitigated?",
+      },
+      expectedMinutes: 75,
+      codebaseId: codebase.id,
+    },
+  });
+
+  console.log("Seed complete. Created NovaTech CRM codebase with 17 tickets.");
 }
 
 main()

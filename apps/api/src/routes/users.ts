@@ -4,6 +4,61 @@ import prisma from "../lib/prisma";
 const router = Router();
 
 /**
+ * GET /users/leaderboard
+ * Public endpoint — no auth required.
+ * Returns top 50 users ranked by average score across reviewed submissions.
+ */
+router.get("/leaderboard", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        submissions: {
+          some: { status: "REVIEWED" },
+        },
+      },
+      select: {
+        githubUsername: true,
+        primaryStack: true,
+        createdAt: true,
+        submissions: {
+          where: { status: "REVIEWED" },
+          select: {
+            scoreTotal: true,
+            scoreDiagnosis: true,
+            scoreDesign: true,
+            scoreCommunication: true,
+            scoreExecution: true,
+            submittedAt: true,
+          },
+        },
+      },
+    });
+
+    const ranked = users
+      .map((u) => {
+        const scores = u.submissions.map((s) => s.scoreTotal ?? 0);
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        const best = Math.max(...scores);
+        return {
+          githubUsername: u.githubUsername,
+          primaryStack: u.primaryStack ?? "Unknown",
+          ticketsCompleted: scores.length,
+          averageScore: avg,
+          bestScore: best,
+          joinedAt: u.createdAt,
+        };
+      })
+      .sort((a, b) => b.averageScore - a.averageScore || b.ticketsCompleted - a.ticketsCompleted)
+      .slice(0, 50);
+
+    res.json({ data: ranked });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to fetch leaderboard";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * GET /users/:username/profile
  * Public endpoint — no auth required.
  * Returns aggregated developer profile for the public profile page.

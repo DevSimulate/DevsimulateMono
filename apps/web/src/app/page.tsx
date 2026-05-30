@@ -120,7 +120,7 @@ export default function LandingPage(): React.ReactElement {
       <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between max-w-7xl mx-auto w-full" style={{ maxWidth: "100%" }}>
         <Logo variant="horizontal" size={32} />
         <div className="hidden md:flex items-center gap-8">
-          {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Pricing", "#pricing"]].map(([label, href]) => (
+          {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Pricing", "#pricing"], ["Leaderboard", "/leaderboard"]].map(([label, href]) => (
             <a key={label} href={href} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
