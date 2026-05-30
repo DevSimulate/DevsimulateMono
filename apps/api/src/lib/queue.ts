@@ -23,6 +23,8 @@ export const reviewQueue = new Queue<ReviewJobData>(QUEUE_NAME, {
     removeOnComplete: 100,
     removeOnFail: 200,
   },
+  // Reduce how often the queue checks for stalled jobs — saves ~90% of idle Redis requests
+  stalledInterval: 300_000, // 5 minutes (default: 30s)
 });
 
 /**
@@ -76,7 +78,13 @@ export function startReviewWorker(): Worker<ReviewJobData> {
       // ── 6. Notify SSE clients only after Q1 is saved ─────────────────────
       reviewEvents.emit("reviewed", submissionId);
     },
-    { connection: redisConnection, concurrency: 3 }
+    {
+      connection: redisConnection,
+      concurrency: 2,
+      drainDelay: 60_000,      // poll empty queue every 60s (default: 5s) — saves ~90% idle requests
+      stalledInterval: 300_000, // check stalled jobs every 5 min (default: 30s)
+      lockDuration: 600_000,   // 10 min lock — Claude reviews can be slow
+    }
   );
 
   worker.on("failed", async (job, err) => {
