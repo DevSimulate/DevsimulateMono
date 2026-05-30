@@ -42,4 +42,4 @@ COPY --from=base /app/node_modules/.prisma ./node_modules/.prisma
 WORKDIR /app/apps/api
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma generate && npx prisma migrate deploy && node dist/index.js"]
