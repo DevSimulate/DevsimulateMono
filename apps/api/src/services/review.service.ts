@@ -259,6 +259,200 @@ Respond with ONLY valid JSON:
   }
 }
 
+/**
+ * Reviews a system design document and scores it on architecture quality.
+ * Maps to the same 4-dimension scoring schema as code review:
+ *  scoreDiagnosis     → Requirements & Scope (0-40)
+ *  scoreDesign        → Architecture Quality  (0-30)
+ *  scoreCommunication → Communication         (0-20)
+ *  scoreExecution     → Completeness          (0-10)
+ */
+export async function reviewSystemDesign(
+  ticket: TicketWithCodebase,
+  designDoc: string
+): Promise<ClaudeReviewResult> {
+  const rubric = ticket.rubric as Record<string, string>;
+
+  const systemPrompt = `You are a senior staff engineer and system design interviewer. Your job is to score a candidate's system design answer for a specific problem.
+
+You must respond with ONLY a valid JSON object — no markdown, no prose, no code fences. The JSON must conform exactly to this shape:
+{
+  "scoreDiagnosis": <integer 0-40>,
+  "scoreDesign": <integer 0-30>,
+  "scoreCommunication": <integer 0-20>,
+  "scoreExecution": <integer 0-10>,
+  "scoreTotal": <integer 0-100>,
+  "feedback": {
+    "diagnosis": "<specific feedback on requirements coverage and problem scoping>",
+    "design": "<specific feedback on architecture quality, scalability, and soundness>",
+    "communication": "<specific feedback on how clearly trade-offs and decisions were explained>",
+    "execution": "<specific feedback on completeness — did they cover all required components>"
+  },
+  "summary": "<2-3 sentence overall review written as a senior staff engineer speaking directly to the candidate>",
+  "topStrength": "<the single best aspect of their design>",
+  "topImprovement": "<the single most important gap to address>"
+}
+
+Scoring dimensions:
+- scoreDiagnosis (0-40): Requirements & Scope — Did they identify functional requirements, non-functional requirements, and scale constraints? Did they clarify QPS, storage volume, latency targets, and key trade-off drivers?
+- scoreDesign (0-30): Architecture Quality — Is the design sound, scalable, and appropriately complex for the stated scale? Does it handle failure modes, avoid single points of failure, and choose appropriate data stores and services?
+- scoreCommunication (0-20): Communication & Trade-offs — Did they explain WHY they chose each component? Did they discuss alternatives and trade-offs? Did they structure the design clearly?
+- scoreExecution (0-10): Completeness — Did they cover all required components at sufficient depth? Did they address the specific constraints in the problem?
+
+scoreTotal must equal the sum of the four dimension scores.
+
+Be direct and specific. Name the exact design decisions that earned or lost points. Never be vague.`;
+
+  const codebaseContext = `## Problem
+**Title:** ${ticket.title}
+**Difficulty:** ${ticket.difficulty}
+**Required Components:** ${ticket.filesInvolved.join(", ")}
+**Expected Completion Time:** ${ticket.expectedMinutes} minutes
+
+## Problem Statement
+${ticket.description}
+
+## Scoring Rubric
+**Requirements & Scope (0-40):** ${rubric.diagnosis}
+**Architecture Quality (0-30):** ${rubric.design}
+**Communication & Trade-offs (0-20):** ${rubric.communication}
+**Completeness (0-10):** ${rubric.execution}`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 2048,
+    system: systemPrompt,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: codebaseContext,
+            cache_control: { type: "ephemeral" },
+          } as any,
+          {
+            type: "text",
+            text: `## Candidate's System Design Answer
+${designDoc}
+
+Please score this system design now. Return ONLY the JSON object.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response type from Claude");
+
+  let parsed: ClaudeReviewResult;
+  try {
+    parsed = JSON.parse(content.text) as ClaudeReviewResult;
+  } catch {
+    throw new Error(`Claude returned non-JSON response: ${content.text.slice(0, 200)}`);
+  }
+
+  parsed.scoreTotal =
+    parsed.scoreDiagnosis + parsed.scoreDesign + parsed.scoreCommunication + parsed.scoreExecution;
+
+  return parsed;
+}
+
+/**
+ * Generates Q1 for a system design submission — asks about a specific architectural
+ * decision in the candidate's design that reveals depth of understanding.
+ */
+export async function generateFirstQuestionFromDesign(
+  ticket: TicketWithCodebase,
+  designDoc: string,
+  review: ClaudeReviewResult
+): Promise<{ question1: string }> {
+  const prompt = `You are a senior engineering interviewer. A candidate answered a system design question and you need to ask them ONE targeted follow-up question.
+
+Problem: ${ticket.title}
+Score: ${review.scoreTotal}/100 — weakest dimension: ${review.scoreDiagnosis < 28 ? "Requirements & Scope" : review.scoreDesign < 20 ? "Architecture Design" : "Communication"}
+Top improvement needed: ${review.topImprovement}
+
+Their system design answer:
+${designDoc.slice(0, 3000)}
+
+Generate ONE question that:
+- References a SPECIFIC decision, component, or claim in their actual answer above
+- Tests whether they truly understand the implications of that decision
+- Cannot be answered correctly without having written and understood this specific design
+- Is NOT a generic question about system design patterns
+
+Bad example: "How does consistent hashing work?"
+Good example: "You chose Redis for your hot URL cache — what happens to your cache when a Redis node fails, and how does your design handle that?"
+
+Respond with ONLY valid JSON:
+{ "question1": "<your specific question referencing a decision from their design>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 256,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+
+  try {
+    const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    return JSON.parse(clean) as { question1: string };
+  } catch {
+    throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
+  }
+}
+
+/**
+ * Generates Q2 for a system design submission, based on the candidate's A1.
+ */
+export async function generateQ2FromA1ForDesign(
+  ticket: TicketWithCodebase,
+  designDoc: string,
+  question1: string,
+  answer1: string
+): Promise<{ question2: string }> {
+  const prompt = `You are a senior engineering interviewer conducting a system design debrief.
+
+Problem: ${ticket.title}
+
+Their original design (excerpt):
+${designDoc.slice(0, 1500)}
+
+Q1 you asked: ${question1}
+Their answer to Q1: ${answer1}
+
+Now generate ONE follow-up question (Q2) that:
+- Directly responds to something specific in their A1 — a gap, an assumption, or an interesting point
+- References their actual words or reasoning from A1
+- Digs deeper: "You said X — what happens when Y?" or "You mentioned Z but didn't cover — can you elaborate?"
+- Cannot be generated without having read their specific answer
+
+Do NOT ask a generic second question. Q2 must feel like a natural continuation of the conversation.
+
+Respond with ONLY valid JSON:
+{ "question2": "<your follow-up question based on their A1 answer>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 256,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+
+  try {
+    const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    return JSON.parse(clean) as { question2: string };
+  } catch {
+    throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
+  }
+}
+
 const DECLARATION_LABELS: Record<string, string> = {
   NO_AI_USED: "wrote their answers independently without AI assistance",
   AI_USED_FOR_PHRASING: "used AI only to help phrase their answers (not for the thinking)",

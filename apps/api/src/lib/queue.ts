@@ -1,7 +1,10 @@
 import { Queue, Worker, Job } from "bullmq";
 import IORedis from "ioredis";
 import { ReviewJobData } from "../types/index";
-import { reviewPullRequest, fetchPrDiff, generateFirstQuestion } from "../services/review.service";
+import {
+  reviewPullRequest, fetchPrDiff, generateFirstQuestion,
+  reviewSystemDesign, generateFirstQuestionFromDesign,
+} from "../services/review.service";
 import { saveReviewResult, calculateRiskScore } from "../services/score.service";
 import { reviewEvents } from "./review-events";
 import prisma from "./prisma";
@@ -37,43 +40,66 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
   const worker = new Worker<ReviewJobData, void, string>(
     QUEUE_NAME,
     async (job: Job<ReviewJobData, void, string>) => {
-      const { submissionId, prDescription, ticketId, repoOwner, repoName, prNumber } = job.data;
+      const { submissionId, submissionType, ticketId } = job.data;
 
-      // ── 1. Fetch ticket and diff in parallel ──────────────────────────────
-      const [ticket, prDiff] = await Promise.all([
-        prisma.ticket.findUniqueOrThrow({ where: { id: ticketId }, include: { codebase: true } }),
-        fetchPrDiff(repoOwner, repoName, prNumber),
-      ]);
+      const ticket = await prisma.ticket.findUniqueOrThrow({
+        where: { id: ticketId },
+        include: { codebase: true },
+      });
 
-      // ── 2. Run Claude PR review ───────────────────────────────────────────
-      const review = await reviewPullRequest(ticket, prDiff, prDescription);
+      let review;
+      let q1Context: string;
 
-      // ── 3. Compute risk score (synchronous) ──────────────────────────────
-      const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } });
-      const riskScore = calculateRiskScore(prDescription, submission.submittedAt, ticket.expectedMinutes);
-      await prisma.submission.update({ where: { id: submissionId }, data: { riskScore } });
+      if (submissionType === "SYSTEM_DESIGN") {
+        // ── System design review path ────────────────────────────────────────
+        const designDoc = job.data.designDoc ?? "";
+        review = await reviewSystemDesign(ticket, designDoc);
+        q1Context = designDoc;
 
-      // ── 4. Save review result + generate Q1 in parallel ──────────────────
-      const [, q1Result] = await Promise.allSettled([
-        saveReviewResult(submissionId, review),
-        generateFirstQuestion(ticket, prDiff, review),
-      ]);
+        const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } });
+        const riskScore = calculateRiskScore(designDoc, submission.submittedAt, ticket.expectedMinutes);
+        await prisma.submission.update({ where: { id: submissionId }, data: { riskScore } });
 
-      // ── 5. Persist Q1 if generation succeeded ────────────────────────────
-      if (q1Result.status === "fulfilled") {
-        await prisma.followUpQuestion.create({
-          data: {
-            submissionId,
-            question1: q1Result.value.question1,
-            question2: "",   // populated later when user submits A1
-          },
-        });
-        console.log(`[review-worker] Completed submission ${submissionId} — score ${review.scoreTotal}`);
+        const [, q1Result] = await Promise.allSettled([
+          saveReviewResult(submissionId, review),
+          generateFirstQuestionFromDesign(ticket, q1Context, review),
+        ]);
+
+        if (q1Result.status === "fulfilled") {
+          await prisma.followUpQuestion.create({
+            data: { submissionId, question1: q1Result.value.question1, question2: "" },
+          });
+          console.log(`[review-worker] SD review done for ${submissionId} — score ${review.scoreTotal}`);
+        } else {
+          console.error(`[review-worker] Q1 gen failed for ${submissionId}:`, q1Result.reason);
+        }
       } else {
-        console.error(`[review-worker] Q1 generation failed for ${submissionId}:`, q1Result.reason);
+        // ── Code review path (original) ──────────────────────────────────────
+        const { prDescription = "", repoOwner = "", repoName = "", prNumber = 0 } = job.data;
+
+        const prDiff = await fetchPrDiff(repoOwner, repoName, prNumber);
+        review = await reviewPullRequest(ticket, prDiff, prDescription);
+
+        const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } });
+        const riskScore = calculateRiskScore(prDescription, submission.submittedAt, ticket.expectedMinutes);
+        await prisma.submission.update({ where: { id: submissionId }, data: { riskScore } });
+
+        const [, q1Result] = await Promise.allSettled([
+          saveReviewResult(submissionId, review),
+          generateFirstQuestion(ticket, prDiff, review),
+        ]);
+
+        if (q1Result.status === "fulfilled") {
+          await prisma.followUpQuestion.create({
+            data: { submissionId, question1: q1Result.value.question1, question2: "" },
+          });
+          console.log(`[review-worker] Code review done for ${submissionId} — score ${review.scoreTotal}`);
+        } else {
+          console.error(`[review-worker] Q1 gen failed for ${submissionId}:`, q1Result.reason);
+        }
       }
 
-      // ── 6. Notify SSE clients only after Q1 is saved ─────────────────────
+      // ── Notify SSE clients after Q1 is saved ────────────────────────────
       reviewEvents.emit("reviewed", submissionId);
     },
     {

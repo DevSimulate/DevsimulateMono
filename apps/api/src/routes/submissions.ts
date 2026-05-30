@@ -3,7 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
-import { scoreFollowUpAnswers, generateQ2FromA1, fetchPrDiff } from "../services/review.service";
+import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff } from "../services/review.service";
 import { updateUserSkillScore } from "../services/score.service";
 import { reviewEvents } from "../lib/review-events";
 
@@ -13,24 +13,34 @@ router.use(requireAuth as (req: Request, res: Response, next: () => void) => voi
 
 /**
  * POST /submissions
- * Body: { ticketId, prUrl, prDescription, branchName }
- *
- * Creates a manual submission record (used when the developer submits via the
- * extension rather than via the GitHub webhook).
+ * Body (code):   { ticketId, prUrl, prDescription, branchName }
+ * Body (design): { ticketId, designDoc }
  */
 router.post("/", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { ticketId, prUrl, prDescription, branchName } = req.body as {
+  const { ticketId, prUrl, prDescription, branchName, designDoc } = req.body as {
     ticketId?: string;
     prUrl?: string;
     prDescription?: string;
     branchName?: string;
+    designDoc?: string;
   };
 
-  if (!ticketId || !prUrl || !prDescription || !branchName) {
-    res.status(400).json({
-      error: "Missing required fields: ticketId, prUrl, prDescription, branchName",
-    });
+  if (!ticketId) {
+    res.status(400).json({ error: "Missing required field: ticketId" });
+    return;
+  }
+
+  const isDesign = Boolean(designDoc);
+  const isCode   = Boolean(prUrl);
+
+  if (!isDesign && !isCode) {
+    res.status(400).json({ error: "Provide either prUrl (code review) or designDoc (system design)" });
+    return;
+  }
+
+  if (isCode && (!prDescription || !branchName)) {
+    res.status(400).json({ error: "Code review requires: prUrl, prDescription, branchName" });
     return;
   }
 
@@ -52,44 +62,55 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         return;
       }
     }
-    const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl);
-    if (!prUrlMatch) {
-      res.status(400).json({ error: "Invalid PR URL — must be a GitHub PR link" });
-      return;
-    }
-    const [, repoOwner, repoName, prNumberStr] = prUrlMatch;
-    const prNumber = parseInt(prNumberStr, 10);
 
-    const submission = await prisma.submission.create({
-      data: {
-        userId,
+    let jobData: ReviewJobData;
+
+    if (isDesign) {
+      const submission = await prisma.submission.create({
+        data: { userId, ticketId, designDoc, status: "PENDING" },
+        include: { ticket: true },
+      });
+
+      jobData = {
+        submissionId: submission.id,
+        submissionType: "SYSTEM_DESIGN",
         ticketId,
-        prUrl,
-        prDescription,
-        branchName,
-        status: "PENDING",
-      },
-      include: { ticket: true },
-    });
+        designDoc: designDoc!,
+      };
 
-    const jobData: ReviewJobData = {
-      submissionId: submission.id,
-      prUrl,
-      prDescription,
-      branchName,
-      ticketId,
-      repoOwner,
-      repoName,
-      prNumber,
-    };
+      await reviewQueue.add("review-pr", jobData, { jobId: `review-${submission.id}` });
+      console.log(`[submissions] Queued SD review for submission ${submission.id}`);
+      res.status(201).json({ data: submission });
+    } else {
+      const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(prUrl!);
+      if (!prUrlMatch) {
+        res.status(400).json({ error: "Invalid PR URL — must be a GitHub PR link" });
+        return;
+      }
+      const [, repoOwner, repoName, prNumberStr] = prUrlMatch;
+      const prNumber = parseInt(prNumberStr, 10);
 
-    await reviewQueue.add("review-pr", jobData, {
-      jobId: `review-${submission.id}`,
-    });
+      const submission = await prisma.submission.create({
+        data: { userId, ticketId, prUrl, prDescription, branchName, status: "PENDING" },
+        include: { ticket: true },
+      });
 
-    console.log(`[submissions] Queued review job for submission ${submission.id} (PR #${prNumber})`);
+      jobData = {
+        submissionId: submission.id,
+        submissionType: "CODE",
+        ticketId,
+        prUrl: prUrl!,
+        prDescription: prDescription!,
+        branchName: branchName!,
+        repoOwner,
+        repoName,
+        prNumber,
+      };
 
-    res.status(201).json({ data: submission });
+      await reviewQueue.add("review-pr", jobData, { jobId: `review-${submission.id}` });
+      console.log(`[submissions] Queued code review for submission ${submission.id} (PR #${prNumber})`);
+      res.status(201).json({ data: submission });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create submission";
     console.error("[submissions] create error:", message);
@@ -479,29 +500,34 @@ router.post("/:id/followup/answer1", async (req: Request, res: Response): Promis
       return;
     }
 
-    // Parse PR URL to fetch the diff for Q2 generation
-    const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(submission.prUrl);
-    if (!prUrlMatch) {
-      res.status(400).json({ error: "Cannot parse PR URL to fetch diff" });
-      return;
+    // Generate Q2 from A1 — route by submission type
+    let question2: string;
+    if (submission.designDoc) {
+      const result = await generateQ2FromA1ForDesign(
+        submission.ticket as any,
+        submission.designDoc,
+        followUp.question1,
+        answer1
+      );
+      question2 = result.question2;
+    } else {
+      const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(submission.prUrl ?? "");
+      if (!prUrlMatch) {
+        res.status(400).json({ error: "Cannot parse PR URL to fetch diff" });
+        return;
+      }
+      const [, repoOwner, repoName, prNumberStr] = prUrlMatch;
+      const prDiff = await fetchPrDiff(repoOwner, repoName, parseInt(prNumberStr, 10));
+      const result = await generateQ2FromA1(submission.ticket as any, prDiff, followUp.question1, answer1);
+      question2 = result.question2;
     }
-    const [, repoOwner, repoName, prNumberStr] = prUrlMatch;
-    const prDiff = await fetchPrDiff(repoOwner, repoName, parseInt(prNumberStr, 10));
-
-    // Generate Q2 from A1 — this is what makes chaining work
-    const { question2 } = await generateQ2FromA1(
-      submission.ticket as any,
-      prDiff,
-      followUp.question1,
-      answer1
-    );
 
     await prisma.followUpQuestion.update({
       where: { id: followUp.id },
-      data: { answer1, question2 },
+      data: { answer1, question2: question2 },
     });
 
-    res.json({ data: { question2 } });
+    res.json({ data: { question2: question2 } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to generate Q2";
     console.error("[submissions] answer1 error:", message);

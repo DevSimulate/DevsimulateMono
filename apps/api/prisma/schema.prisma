@@ -13,6 +13,7 @@ enum Stack {
   NODE
   ANGULAR
   REACT
+  SYSTEM_DESIGN
 }
 
 enum Difficulty {
@@ -133,9 +134,10 @@ model Submission {
   id                 String           @id @default(uuid())
   userId             String
   ticketId           String
-  prUrl              String
-  prDescription      String           @db.Text
-  branchName         String
+  prUrl              String?
+  prDescription      String?          @db.Text
+  branchName         String?
+  designDoc          String?          @db.Text
   status             SubmissionStatus @default(PENDING)
   scoreTotal         Int?
   scoreDiagnosis     Int?

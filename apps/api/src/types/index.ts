@@ -79,13 +79,17 @@ export interface GitHubPullRequestPayload {
 
 export interface ReviewJobData {
   submissionId: string;
-  prUrl: string;
-  prDescription: string;
-  branchName: string;
+  submissionType: "CODE" | "SYSTEM_DESIGN";
   ticketId: string;
-  repoOwner: string;
-  repoName: string;
-  prNumber: number;
+  // Code review fields (required when submissionType === "CODE")
+  prUrl?: string;
+  prDescription?: string;
+  branchName?: string;
+  repoOwner?: string;
+  repoName?: string;
+  prNumber?: number;
+  // System design fields (required when submissionType === "SYSTEM_DESIGN")
+  designDoc?: string;
 }
 
 // ---------------------------------------------------------------------------

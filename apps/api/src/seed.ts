@@ -192,6 +192,337 @@ Key facts engineers must know:
     });
   }
 
+  // ── System Design Arena codebase ──────────────────────────────────────────
+  const sdCodebase = await prisma.codebase.upsert({
+    where: { id: "system-design-arena-seed-id-001" },
+    update: {},
+    create: {
+      id: "system-design-arena-seed-id-001",
+      name: "System Design Arena",
+      stack: Stack.SYSTEM_DESIGN,
+      repoUrl: "https://devsimulate.com",
+      description: "Open-ended architecture challenges modelled on FAANG system design interviews. No codebase — design from scratch.",
+      companyLore: `System Design Arena presents candidates with real-world architecture problems similar to those asked at Google, Meta, Amazon, Apple, Netflix, and other top-tier engineering companies.
+
+There is no existing codebase. The candidate must design a system from scratch: define requirements, estimate scale, propose an architecture, describe data models, explain API design, and discuss trade-offs.
+
+Evaluation criteria match FAANG interview expectations:
+- Requirements & Scope (40 pts): Did you identify functional requirements, non-functional requirements, and constraints? Did you clarify scale — QPS, storage, latency targets?
+- Architecture Quality (30 pts): Is your design sound, scalable, and appropriately complex for the stated scale? Does it avoid single points of failure and choose appropriate data stores?
+- Communication & Trade-offs (20 pts): Did you explain WHY you chose each component? Did you consider alternatives and justify your decisions? Is the design walkthrough clear and structured?
+- Completeness (10 pts): Did you cover all required components at sufficient depth? Did you address failure modes and data consistency?`,
+    },
+  });
+
+  const sdTickets = [
+    {
+      id: "ticket-sd-01-seed-id-001",
+      title: "SD-01: Design a URL Shortener",
+      description: `Design a URL shortening service similar to bit.ly or tinyurl.com.
+
+**Scale requirements:**
+- 100 million new URLs created per day (~1,200 writes/sec)
+- Read-to-write ratio of 100:1 (~120,000 redirects/sec)
+- Redirect latency must be under 10ms at p99
+- URLs should be valid for at least 5 years
+
+**Your answer must cover:**
+1. API design — create URL endpoint, redirect endpoint, optional custom alias
+2. How you generate the short code — hash, counter, or base62 encoding? Handle collisions.
+3. Data model and storage choice — what do you store, where, and why?
+4. How you achieve <10ms redirects at 120k/sec — caching strategy, cache invalidation
+5. At least one trade-off in your design — be explicit about what you chose and why
+
+Write your complete system design below. Be specific: name the technologies, describe the data flow, and justify your choices.`,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["api-design", "data-model", "hashing-strategy", "caching-layer"],
+      rubric: {
+        diagnosis: "Did they correctly identify the key constraint — 100:1 read/write ratio — and understand its implications for caching? Did they note uniqueness requirements for short codes and the need for collision handling?",
+        design: "Is the core design sound? Does the hash/counter approach handle collisions correctly? Is the caching layer (Redis/CDN) appropriate for the read-heavy workload? Is the storage choice reasonable (KV store or relational with index)?",
+        communication: "Did they explain WHY they chose each component? Did they discuss at least one trade-off explicitly (e.g. hash vs counter, Redis vs CDN caching, SQL vs NoSQL)?",
+        execution: "Did they cover all 5 required components? Is the redirect flow clearly described end-to-end? Are the API endpoints defined with HTTP methods and response codes?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-sd-02-seed-id-002",
+      title: "SD-02: Design a Rate Limiter",
+      description: `Design a distributed rate limiter that can be used as middleware in a large API gateway.
+
+**Requirements:**
+- Limit requests per user per time window (e.g. 1,000 req/min per API key)
+- Must work correctly across 50 horizontally-scaled API gateway instances
+- Adding a new rule (new API key + limit) must take effect within 30 seconds across all instances
+- p99 latency overhead of the rate limiter itself must be under 2ms
+
+**Your answer must cover:**
+1. Which rate limiting algorithm you choose (token bucket, leaky bucket, fixed window, sliding window log, sliding window counter) and why
+2. How you store and synchronise state across 50 gateway instances
+3. How you handle the race condition when two gateway instances check the same counter simultaneously
+4. What happens when your rate limiter's storage layer goes down — fail open or fail closed? Why?
+5. How you propagate rule changes within 30 seconds across all instances
+
+Write your complete design below. Be specific about data structures, storage choices, and the trade-offs of your approach.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["algorithm-choice", "distributed-state", "storage-layer", "failure-modes"],
+      rubric: {
+        diagnosis: "Did they identify the core challenge — distributed state synchronisation across 50 instances — and the race condition in the check-then-decrement pattern? Did they clarify the exact requirements (per-user, per-window, latency budget)?",
+        design: "Did they choose an appropriate algorithm (sliding window counter or token bucket preferred at this scale) and justify it? Did they address the distributed state problem with Redis + Lua scripts or similar atomic operations? Did they design for the 2ms latency constraint?",
+        communication: "Did they explicitly discuss the fail-open vs fail-closed trade-off? Did they compare at least two algorithm options before choosing? Did they explain their rule propagation strategy (pub/sub, polling, config push)?",
+        execution: "Did they address all 5 required components? Is the atomic increment mechanism described correctly? Is the rule propagation mechanism concrete and achievable within 30 seconds?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-03-seed-id-003",
+      title: "SD-03: Design a Push Notification Service",
+      description: `Design a push notification service that sends real-time notifications to mobile devices and browser clients.
+
+**Scale requirements:**
+- 10 million registered devices (mix of iOS, Android, web browser)
+- Send 5 million notifications per day (~58/sec average, up to 10,000/sec during campaigns)
+- Delivery guarantee: at-least-once (duplicates are acceptable, losses are not)
+- Delivery latency: notifications should arrive within 5 seconds of being triggered
+
+**Your answer must cover:**
+1. System architecture — what are the main components and how do they communicate?
+2. How you handle fan-out for a notification sent to 1 million users simultaneously (e.g. a marketing campaign)
+3. How you integrate with APNs (Apple), FCM (Google), and web push — what does the abstraction look like?
+4. How you ensure at-least-once delivery — what happens when a device is offline?
+5. How you track delivery status and handle failures (device token expired, app uninstalled)
+
+Write your complete design below. Be specific about queue design, retry logic, and the data model for device registrations.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["fan-out-strategy", "push-providers", "delivery-guarantees", "device-registry"],
+      rubric: {
+        diagnosis: "Did they correctly identify the fan-out problem as the hardest challenge at scale? Did they distinguish between the latency requirement (5 seconds) and the throughput burst (10k/sec) and identify them as different design drivers?",
+        design: "Did they design an async pipeline (API → queue → workers → APNs/FCM) rather than synchronous sending? Did they handle fan-out with a job queue or scatter approach? Did they design the device registry and the provider abstraction layer?",
+        communication: "Did they explain how at-least-once delivery is achieved (persistent queue + acknowledgement)? Did they discuss failure handling (dead letter queue, token cleanup)?",
+        execution: "Did they cover all 5 required components? Is the delivery status tracking described? Is the offline device handling concrete (e.g. store-and-forward via APNs silent push)?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-04-seed-id-004",
+      title: "SD-04: Design a Real-Time Chat Application",
+      description: `Design a real-time messaging application similar to WhatsApp or Slack (1-to-1 and group chats).
+
+**Scale requirements:**
+- 500 million registered users, 100 million daily active users
+- 50 billion messages sent per day (~580,000/sec peak)
+- Messages must be delivered in under 100ms when both users are online
+- Message history must be stored permanently and searchable
+- Group chats support up to 500 members
+
+**Your answer must cover:**
+1. How do you establish and maintain persistent connections for real-time delivery — WebSockets, long polling, or something else?
+2. What is your message storage model — how do you store messages, and what are the access patterns (latest messages, pagination, search)?
+3. How does a message travel from sender to recipient — describe the complete flow including what happens if the recipient is offline
+4. How do you handle fan-out in a 500-member group chat at 580k messages/sec?
+5. How do you handle connection state — how does the system know which server a user is currently connected to?
+
+Write your complete design below. Address each component with sufficient depth.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["connection-management", "message-storage", "fan-out", "presence-service"],
+      rubric: {
+        diagnosis: "Did they identify the core challenges: real-time delivery requires persistent connections, offline delivery requires a push/inbox model, and group fan-out at scale requires async processing? Did they distinguish online vs offline delivery paths?",
+        design: "Did they design a WebSocket-based connection layer with a connection registry (Redis/consistent hash)? Did they choose an appropriate message store (Cassandra, ScyllaDB, or similar append-optimised)? Did they handle group fan-out via a queue or fan-out service?",
+        communication: "Did they explain the complete message delivery flow end-to-end? Did they discuss trade-offs in their storage model (e.g. wide-column vs document store)? Did they address the connection routing problem explicitly?",
+        execution: "Did they cover all 5 required components? Is the offline delivery path described? Is the connection state management concrete (which data store, what TTL)?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-05-seed-id-005",
+      title: "SD-05: Design a Distributed Job Queue",
+      description: `Design a distributed background job processing system (similar to Sidekiq, Celery, or BullMQ at scale).
+
+**Requirements:**
+- Producers enqueue jobs; workers pull and execute them
+- At-least-once execution guarantee — a job must not be silently lost
+- 10,000 job enqueues per second, 5,000 job executions per second
+- Jobs can have priorities: HIGH, NORMAL, LOW
+- If a worker crashes mid-execution, the job must be retried
+- Maximum job execution time: 30 minutes
+
+**Your answer must cover:**
+1. Core data model — what does a job look like, how is it stored, how do workers claim jobs?
+2. How you prevent two workers from executing the same job simultaneously (no double-execution)
+3. How you detect and recover crashed workers (their in-progress jobs must be retried)
+4. How you implement job priorities without starvation of low-priority work
+5. How you scale — what happens when job throughput doubles to 20,000/sec?
+
+Write your complete design below. Be specific about locking mechanisms, visibility timeouts, and the data structures you would use.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["job-claiming", "visibility-timeout", "priority-queues", "worker-scaling"],
+      rubric: {
+        diagnosis: "Did they identify the critical challenge — preventing double-execution while guaranteeing at-least-once delivery — as fundamentally requiring a locking or visibility-timeout mechanism? Did they understand that 'at-least-once' and 'exactly-once' are different guarantees with different costs?",
+        design: "Did they design a job-claiming mechanism (visibility timeout, pessimistic lock, or leader election)? Did they handle worker crash detection (heartbeat + timeout)? Did they implement priority without starvation (e.g. weighted round-robin, aging)?",
+        communication: "Did they explain why their design achieves at-least-once but not exactly-once? Did they discuss the trade-off between polling delay and throughput? Did they explain their scaling approach (more workers, partitioned queues)?",
+        execution: "Did they cover all 5 required components? Is the crash recovery mechanism concrete? Is the priority implementation described beyond 'use multiple queues'?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-06-seed-id-006",
+      title: "SD-06: Design Twitter's Timeline Feed",
+      description: `Design the Twitter home timeline — the feed of tweets from accounts a user follows, sorted reverse-chronologically.
+
+**Scale requirements:**
+- 300 million monthly active users, 100 million daily active users
+- 500 million tweets created per day
+- Users can follow up to 5,000 accounts; celebrities can have 100 million followers
+- Timeline reads must respond in under 200ms at p99
+- Users expect to see new tweets within 5 seconds of them being posted
+
+**Your answer must cover:**
+1. Push model vs pull model vs hybrid — explain the trade-offs and which you choose for this scale
+2. What happens when a tweet is posted by a user with 50 million followers — walk through the complete fan-out flow
+3. How you store pre-computed timelines — what is the data model and the storage system?
+4. How you handle celebrities (high-follower accounts) — do you treat them differently?
+5. How a user's timeline is assembled and served in under 200ms
+
+Write your complete design below. This is a SENIOR-level design problem — explain the non-obvious trade-offs.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["fan-out-on-write", "fan-out-on-read", "celebrity-problem", "timeline-assembly"],
+      rubric: {
+        diagnosis: "Did they correctly identify the celebrity/hotspot problem as the core challenge — pure push fan-out is infeasible for accounts with 100M followers? Did they identify that pure pull is too slow at read time for 200ms p99? Did they arrive at a hybrid model?",
+        design: "Did they design a hybrid approach: push for regular users, pull-on-read for celebrities, merge at serve time? Did they describe the timeline storage model (Redis sorted set or equivalent) and the tweet store? Did they explain how the 200ms SLA is met?",
+        communication: "Did they clearly articulate the push vs pull trade-off? Did they explain the celebrity threshold logic? Did they describe the 5-second delivery requirement and how it interacts with fan-out latency?",
+        execution: "Did they cover all 5 required components? Is the fan-out flow for a 50M-follower celebrity walk-through concrete? Is the timeline assembly step (merge pre-computed list + celebrity tweets) clearly described?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-07-seed-id-007",
+      title: "SD-07: Design a Payment Processing System",
+      description: `Design a payment processing system that handles credit card charges for an e-commerce platform.
+
+**Scale requirements:**
+- 10,000 payment transactions per second at peak (Black Friday scale)
+- Exactly-once processing — a customer must never be charged twice for the same order
+- Payments must complete or definitively fail within 30 seconds
+- Full audit trail required for every payment attempt, including failures
+- Must integrate with external payment providers (Stripe, Adyen) that have their own rate limits and failure modes
+
+**Your answer must cover:**
+1. How you guarantee exactly-once charging — idempotency keys, deduplication strategy
+2. How you handle the case where the provider charges the card but your database write fails (phantom charge)
+3. How you model the payment state machine — what are the states and valid transitions?
+4. How you build the audit trail — what events do you record and where?
+5. How you handle provider rate limits and failures — circuit breakers, fallback providers
+
+Write your complete design below. Payment systems are high-stakes — be specific about every failure mode.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["idempotency", "payment-state-machine", "audit-trail", "provider-integration"],
+      rubric: {
+        diagnosis: "Did they identify the phantom charge scenario (provider succeeds, DB write fails) as the hardest failure case? Did they understand that exactly-once processing requires idempotency keys at the provider level, not just deduplication in your DB?",
+        design: "Did they design idempotency keys derived from (orderId + customerId + amount) or equivalent? Did they handle the phantom charge with a reconciliation job or idempotent retry? Did they model the payment state machine (PENDING → AUTHORISED → CAPTURED / FAILED / REFUNDED)?",
+        communication: "Did they explain why exactly-once is hard in distributed systems (network partitions, timeouts)? Did they discuss the circuit breaker pattern for provider failures? Did they explain the audit trail model (append-only event log)?",
+        execution: "Did they cover all 5 required components? Is the idempotency mechanism concrete (stored key + status)? Is the state machine drawn or described with valid transitions? Is the audit trail implementation specific (what store, what events)?",
+      },
+      expectedMinutes: 75,
+    },
+    {
+      id: "ticket-sd-08-seed-id-008",
+      title: "SD-08: Design Netflix Video Streaming",
+      description: `Design the core video streaming infrastructure for a Netflix-scale service.
+
+**Scale requirements:**
+- 200 million subscribers, 100 million concurrent streams at peak
+- Videos range from 1GB (SD) to 60GB (4K HDR) per title
+- Startup latency: first frame must appear within 2 seconds on a fast connection
+- 99.99% availability — users cannot see buffering or errors during playback
+- Content library: 15,000 titles, each encoded in 20+ quality/resolution variants
+
+**Your answer must cover:**
+1. Video storage and encoding pipeline — how does a new title go from raw video to available for streaming?
+2. How you serve video content at 100 million concurrent streams — CDN strategy, edge caching
+3. How adaptive bitrate streaming works — how does the player pick quality, and what does the server need to provide?
+4. How you handle the long-tail cold start problem — a niche title requested for the first time hits a cold CDN edge node
+5. How you design for 99.99% availability — what are the failure modes and how do you handle them?
+
+Write your complete design below. Focus on the streaming delivery pipeline and the CDN architecture.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["encoding-pipeline", "cdn-architecture", "adaptive-bitrate", "availability"],
+      rubric: {
+        diagnosis: "Did they correctly identify that serving 100M concurrent streams is fundamentally a CDN/edge problem, not an origin server problem? Did they identify adaptive bitrate streaming (DASH/HLS) as the mechanism for quality adaptation? Did they scope the cold-start problem correctly?",
+        design: "Did they design a multi-tier CDN (origin → regional → edge) with aggressive caching? Did they describe chunked encoding and manifest files (MPD/M3U8) for ABR? Did they describe the encoding pipeline (raw → transcoding → multiple renditions → CDN upload)?",
+        communication: "Did they explain how ABR works at a protocol level — manifest file, segment requests, quality selection algorithm? Did they discuss the cold-start mitigation strategy (pre-warming, tiered fallback)? Did they explain the 99.99% availability design?",
+        execution: "Did they cover all 5 required components? Is the CDN tier architecture described with at least two levels? Is the ABR segment size and manifest structure mentioned? Is the encoding pipeline described from ingest to playback-ready?",
+      },
+      expectedMinutes: 75,
+    },
+    {
+      id: "ticket-sd-09-seed-id-009",
+      title: "SD-09: Design Google Search Autocomplete",
+      description: `Design the search query autocomplete/typeahead feature you see on Google Search.
+
+**Requirements:**
+- Show top 10 suggestions within 100ms of each keystroke
+- Suggestions must reflect trending queries — update frequency counts in near-real-time
+- Handle 10 billion search queries per day across 2 billion users (~115,000 queries/sec)
+- Support 100+ languages and locale-specific suggestions
+- No suggestion should be offensive or harmful
+
+**Your answer must cover:**
+1. Data model — how do you store query strings and their frequencies to support prefix lookups?
+2. How you serve suggestions in under 100ms — what data structure and where does it live?
+3. How you update suggestion frequencies in near-real-time without blocking reads
+4. How you handle personalisation — logged-in users see their own recent queries first
+5. How you filter offensive/harmful suggestions from the results
+
+Write your complete design below. This is a read-heavy system with a hard latency requirement — focus on the serving layer.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["trie-structure", "frequency-counting", "serving-layer", "personalisation"],
+      rubric: {
+        diagnosis: "Did they identify the trie (prefix tree) or sorted prefix index as the appropriate data structure for prefix lookups? Did they understand that 100ms requires the index to live in memory (not disk), and that 10B queries/day means frequency updates must be async, not synchronous?",
+        design: "Did they design an in-memory trie or equivalent (Redis ZRANGEBYLEX, Elasticsearch prefix) for serving? Did they design async frequency update pipeline (Kafka/queue → batch aggregation → trie rebuild)? Did they address personalisation with a user query history overlay?",
+        communication: "Did they explain the trie vs other data structures (inverted index, sorted set) and why trie is suitable? Did they explain the async update pipeline and the trade-off (near-real-time vs real-time)?",
+        execution: "Did they cover all 5 required components? Is the trie structure or equivalent described concretely? Is the frequency update pipeline end-to-end? Is the offensive content filtering strategy mentioned (blocklist, ML filter)?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-10-seed-id-010",
+      title: "SD-10: Design a Distributed Cache",
+      description: `Design a distributed in-memory cache system (similar to Redis Cluster or Memcached) that can be used as a shared cache layer across a fleet of application servers.
+
+**Requirements:**
+- Store up to 1TB of cached data across the cluster
+- Serve 1 million cache reads per second with sub-millisecond p99 latency
+- Cache nodes can be added or removed without full cache invalidation (minimal key redistribution)
+- When a cache node fails, the system should continue serving — no single point of failure
+- Support TTL-based expiry and LRU eviction when memory is full
+
+**Your answer must cover:**
+1. How you partition data across cache nodes — consistent hashing, why this matters for node addition/removal
+2. How you handle a cache node failure — what happens to the keys that were on the failed node?
+3. How you implement replication — where do replica reads go, and how do you handle replica lag?
+4. How you implement LRU eviction — approximate LRU at scale
+5. How you handle hot keys — when one key receives 100,000 requests per second
+
+Write your complete design below. This is an infrastructure-level design — be specific about data distribution and failure handling.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["consistent-hashing", "replication", "lru-eviction", "hot-key-mitigation"],
+      rubric: {
+        diagnosis: "Did they correctly identify consistent hashing (with virtual nodes) as the solution to minimal redistribution on node add/remove? Did they identify hot keys as a separate problem from node failure? Did they understand that sub-millisecond p99 requires data to be in local memory, not fetched from a remote replica?",
+        design: "Did they design consistent hashing with virtual nodes for data partitioning? Did they design replication (primary + N replicas per shard, with read replicas)? Did they describe approximate LRU (sampling or segmented LRU) for eviction? Did they address hot keys (local micro-caching, key sharding by request)?",
+        communication: "Did they explain why consistent hashing minimises redistribution compared to simple modulo partitioning? Did they discuss the CAP theorem implications of their replication design (CP vs AP under network partition)? Did they explain hot key mitigation concretely?",
+        execution: "Did they cover all 5 required components? Is the consistent hashing ring described with virtual nodes? Is the replica failure path (promotion, rebalance) described? Is the hot key strategy concrete beyond 'replicate the key'?",
+      },
+      expectedMinutes: 60,
+    },
+  ];
+
+  for (const t of sdTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.SYSTEM_DESIGN, codebaseId: sdCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
-  console.log(`[seed] Done — ${tickets.length} tickets upserted.`);
+  console.log(`[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD tickets upserted.`);
 }

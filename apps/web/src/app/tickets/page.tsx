@@ -10,6 +10,7 @@ interface Ticket {
   id: string;
   title: string;
   difficulty: "JUNIOR" | "MID" | "SENIOR";
+  stack: string;
   description: string;
   filesInvolved: string[];
   expectedMinutes: number;
@@ -142,6 +143,11 @@ export default function TicketsPage(): React.ReactElement {
                   >
                     {ticket.difficulty}
                   </span>
+                  {ticket.stack === "SYSTEM_DESIGN" && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                      Architecture
+                    </span>
+                  )}
                   <span className="text-xs text-slate-500">{ticket.codebase.name}</span>
                   <span className="text-xs text-slate-600">· {ticket.expectedMinutes} min</span>
                 </div>
@@ -153,13 +159,18 @@ export default function TicketsPage(): React.ReactElement {
 
               <div className="shrink-0 text-right">
                 {msg?.id === ticket.id ? (
-                  <p
-                    className={`text-xs mb-2 ${msg.ok ? "text-emerald-400" : "text-red-400"}`}
-                  >
+                  <p className={`text-xs mb-2 ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>
                     {msg.text}
                   </p>
                 ) : null}
-                {msg?.id === ticket.id && msg.ok ? (
+                {ticket.stack === "SYSTEM_DESIGN" ? (
+                  <Link
+                    href={`/submit?ticketId=${ticket.id}`}
+                    className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 text-sm transition-colors inline-block"
+                  >
+                    Write Design →
+                  </Link>
+                ) : msg?.id === ticket.id && msg.ok ? (
                   <Link
                     href="/dashboard"
                     className="rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 text-sm transition-colors"

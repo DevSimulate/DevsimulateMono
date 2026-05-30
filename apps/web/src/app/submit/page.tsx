@@ -22,6 +22,8 @@ interface Ticket {
   id: string;
   title: string;
   difficulty: "JUNIOR" | "MID" | "SENIOR";
+  stack: string;
+  description: string;
   expectedMinutes: number;
 }
 
@@ -65,6 +67,7 @@ const AI_OPTIONS: { value: AIDeclaration; label: string; sub: string }[] = [
 type Stage =
   | "loading"
   | "describe"
+  | "sd_write"
   | "analysing"
   | "q1"
   | "loading_q2"
@@ -73,12 +76,14 @@ type Stage =
   | "score"
   | "upgrade";
 
-const STEP_LABELS = ["Describe", "Review", "Q1", "Q2", "Score"];
+const STEP_LABELS_CODE   = ["Describe", "Review", "Q1", "Q2", "Score"];
+const STEP_LABELS_DESIGN = ["Write",    "Review", "Q1", "Q2", "Score"];
 
 function stepIndex(stage: Stage): number {
   const map: Record<Stage, number> = {
     loading:    0,
     describe:   0,
+    sd_write:   0,
     analysing:  1,
     q1:         2,
     loading_q2: 3,
@@ -117,6 +122,7 @@ function SubmitPageInner() {
   const [stage,        setStage]        = useState<Stage>("loading");
   const [ticket,       setTicket]       = useState<Ticket | null>(null);
   const [description,  setDescription]  = useState("");
+  const [designDoc,    setDesignDoc]    = useState("");
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [question1,    setQuestion1]    = useState("");
   const [question2,    setQuestion2]    = useState("");
@@ -141,7 +147,7 @@ function SubmitPageInner() {
       window.location.href = GITHUB_AUTH_URL;
       return;
     }
-    if (!ticketId || !prUrl) {
+    if (!ticketId) {
       setError("Missing ticket information. Please re-submit from the VS Code extension.");
       setStage("describe");
       return;
@@ -150,9 +156,16 @@ function SubmitPageInner() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
-      .then((data) => { if (data.data) setTicket(data.data); setStage("describe"); })
+      .then((data) => {
+        if (data.data) {
+          setTicket(data.data);
+          setStage(data.data.stack === "SYSTEM_DESIGN" ? "sd_write" : "describe");
+        } else {
+          setStage("describe");
+        }
+      })
       .catch(() => setStage("describe"));
-  }, [ticketId, prUrl, router]);
+  }, [ticketId, router]);
 
   // Elapsed timer — active during analysing stage
   useEffect(() => {
@@ -200,6 +213,31 @@ function SubmitPageInner() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed — please try again.");
       setStage("describe");
+    }
+  }
+
+  async function handleDesignSubmit() {
+    const token = getToken();
+    if (!token) return;
+    setError(null);
+    setStage("analysing");
+
+    try {
+      const r = await fetch(`${API_URL}/submissions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId, designDoc }),
+      });
+      const data = await r.json();
+      if (r.status === 402) { setStage("upgrade"); return; }
+      if (!r.ok) throw new Error(data.error ?? "Submission failed");
+
+      const sid: string = data.data.id;
+      setSubmissionId(sid);
+      await pollForQ1(sid, token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submission failed — please try again.");
+      setStage("sd_write");
     }
   }
 
@@ -353,9 +391,11 @@ function SubmitPageInner() {
     }
   }
 
-  const mins = Math.floor(timeLeft / 60).toString().padStart(2, "0");
-  const secs = (timeLeft % 60).toString().padStart(2, "0");
-  const si    = stepIndex(stage);
+  const mins      = Math.floor(timeLeft / 60).toString().padStart(2, "0");
+  const secs      = (timeLeft % 60).toString().padStart(2, "0");
+  const si         = stepIndex(stage);
+  const isDesign   = ticket?.stack === "SYSTEM_DESIGN";
+  const STEP_LABELS = isDesign ? STEP_LABELS_DESIGN : STEP_LABELS_CODE;
 
   if (stage === "loading") {
     return (
@@ -413,10 +453,17 @@ function SubmitPageInner() {
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-sm truncate mb-0.5" style={{ color: "#1A1A1A" }}>{ticket.title}</div>
-                <a href={prUrl} target="_blank" rel="noreferrer"
-                  className="text-xs font-mono truncate block hover:underline" style={{ color: "#5B5BD6" }}>
-                  {prUrl}
-                </a>
+                {!isDesign && prUrl && (
+                  <a href={prUrl} target="_blank" rel="noreferrer"
+                    className="text-xs font-mono truncate block hover:underline" style={{ color: "#5B5BD6" }}>
+                    {prUrl}
+                  </a>
+                )}
+                {isDesign && (
+                  <span className="text-xs font-medium" style={{ color: "#5B5BD6" }}>
+                    System Design Challenge · {ticket.expectedMinutes} min
+                  </span>
+                )}
               </div>
               <span className={clsx("text-xs font-bold rounded-full px-3 py-1 shrink-0", DIFFICULTY_COLOR[ticket.difficulty])}>
                 {ticket.difficulty}
@@ -463,25 +510,76 @@ function SubmitPageInner() {
           </div>
         )}
 
+        {/* ── Stage: System Design Write ── */}
+        {stage === "sd_write" && ticket && (
+          <div className="space-y-4 fade-in-up">
+            <div className="card p-6">
+              <div className="section-label mb-1">The Problem</div>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#6B6B6B" }}>
+                {ticket.description}
+              </div>
+            </div>
+
+            <div className="card p-6">
+              <div className="section-label mb-1">Your Design</div>
+              <p className="text-sm mb-4" style={{ color: "#6B6B6B" }}>
+                Write your complete system design answer. Cover all required components.
+                Be specific — name technologies, describe data flows, justify your choices.
+              </p>
+              <textarea
+                value={designDoc}
+                onChange={(e) => setDesignDoc(e.target.value)}
+                placeholder={"## Requirements & Scale\n\n## Architecture Overview\n\n## API Design\n\n## Data Model & Storage\n\n## Key Trade-offs\n\n## Scaling Strategy"}
+                rows={20}
+                className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
+                style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+              />
+              <div className="flex items-center justify-between mb-5">
+                <span className="text-xs font-medium" style={{ color: designDoc.length < 300 ? "#D97706" : "#0D9488" }}>
+                  {designDoc.length} chars
+                  {designDoc.length < 300 ? ` — need ${300 - designDoc.length} more` : " — ready"}
+                </span>
+                <span className="text-xs" style={{ color: "#6B6B6B" }}>Est. {ticket.expectedMinutes} min</span>
+              </div>
+              <button
+                onClick={handleDesignSubmit}
+                disabled={designDoc.trim().length < 300}
+                className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+              >
+                Submit for Review →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Stage: Analysing ── */}
         {stage === "analysing" && (
           <div className="card p-10 text-center fade-in-up">
             <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
-            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Analysing your PR…</div>
+            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>
+              {isDesign ? "Reviewing your design…" : "Analysing your PR…"}
+            </div>
             <div className="text-sm mb-1" style={{ color: "#6B6B6B" }}>
-              Claude is reading your diff and generating a question. Usually 60–90 seconds.
+              {isDesign
+                ? "Claude is evaluating your architecture and generating a follow-up question. Usually 30–60 seconds."
+                : "Claude is reading your diff and generating a question. Usually 60–90 seconds."}
             </div>
             <div className="text-xs font-mono mb-8" style={{ color: elapsed > 90 ? "#D97706" : "#6B6B6B" }}>
               {Math.floor(elapsed / 60).toString().padStart(2, "0")}:{(elapsed % 60).toString().padStart(2, "0")} elapsed
             </div>
             <div className="rounded-xl p-5 text-left space-y-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
               <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>What to expect</div>
-              {[
+              {(isDesign ? [
+                "Q1 targets a specific decision in your design — a trade-off, a component choice",
+                "After you answer Q1, Q2 is generated from your actual answer",
+                "You have 10 minutes total across both questions",
+                "Final score = design review (100 pts) + follow-up answers",
+              ] : [
                 "Q1 is specific to your actual code changes — exact variables and functions",
                 "After you answer Q1, Q2 is generated from your answer",
                 "You have 10 minutes total across both questions",
                 "Final score = PR review + follow-up answers combined",
-              ].map((tip) => (
+              ]).map((tip) => (
                 <div key={tip} className="flex items-start gap-2 text-xs" style={{ color: "#6B6B6B" }}>
                   <span className="shrink-0 mt-0.5" style={{ color: "#5B5BD6" }}>→</span>
                   <span>{tip}</span>
@@ -674,10 +772,10 @@ function SubmitPageInner() {
             <div className="card p-6">
               <div className="section-label mb-4">Score Breakdown</div>
               <div className="space-y-3">
-                <ScoreBar label="Diagnosis (40)"     value={result.scoreDiagnosis}     max={40} />
-                <ScoreBar label="Design (30)"        value={result.scoreDesign}        max={30} />
-                <ScoreBar label="Communication (20)" value={result.scoreCommunication} max={20} />
-                <ScoreBar label="Execution (10)"     value={result.scoreExecution}     max={10} />
+                <ScoreBar label={isDesign ? "Requirements (40)" : "Diagnosis (40)"}    value={result.scoreDiagnosis}     max={40} />
+                <ScoreBar label={isDesign ? "Architecture (30)" : "Design (30)"}       value={result.scoreDesign}        max={30} />
+                <ScoreBar label="Communication (20)"                                   value={result.scoreCommunication} max={20} />
+                <ScoreBar label={isDesign ? "Completeness (10)" : "Execution (10)"}   value={result.scoreExecution}     max={10} />
               </div>
             </div>
 

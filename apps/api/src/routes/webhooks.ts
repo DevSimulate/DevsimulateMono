@@ -127,6 +127,7 @@ router.post(
       // Enqueue async review — do NOT await, return 200 immediately
       const jobData: ReviewJobData = {
         submissionId: submission.id,
+        submissionType: "CODE",
         prUrl,
         prDescription,
         branchName,
