@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc && ts-node prisma/seed.ts",
-    "start": "node dist/index.js",
+    "build": "tsc",
+    "start": "ts-node prisma/seed.ts && node dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:seed": "ts-node prisma/seed.ts",
