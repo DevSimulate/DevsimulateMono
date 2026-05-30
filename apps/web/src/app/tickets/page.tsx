@@ -214,6 +214,13 @@ function TicketsList(): React.ReactElement {
                   >
                     Write Design →
                   </Link>
+                ) : msg?.id === ticket.id && msg.ok ? (
+                  <Link
+                    href="/dashboard"
+                    className="rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold px-4 py-2 text-sm transition-colors inline-block"
+                  >
+                    Go to Dashboard →
+                  </Link>
                 ) : ticket.stack === "PYTHON" ? (
                   <button
                     onClick={() => handleAssign(ticket.id)}

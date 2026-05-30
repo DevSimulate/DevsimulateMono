@@ -197,6 +197,12 @@ export default function DashboardPage() {
   const [assignments, setAssignments] = useState<TicketAssignment[]>([]);
   const [history, setHistory] = useState<ScoreHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ticketsHref, setTicketsHref] = useState("/tickets");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("ds_selected_stack");
+    if (saved) setTicketsHref(`/tickets?stack=${saved}`);
+  }, []);
 
   useEffect(() => {
     const token = getToken();
@@ -249,7 +255,7 @@ export default function DashboardPage() {
       <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
         <Link href="/"><Logo variant="horizontal" size={32} /></Link>
         <div className="flex items-center gap-5">
-          <Link href="/tickets" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
+          <Link href={ticketsHref} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
             onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
             onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
             Browse Tickets
@@ -292,7 +298,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </div>
-            <Link href="/tickets" className="text-xs font-semibold" style={{ color: "#5B5BD6" }}>
+            <Link href={ticketsHref} className="text-xs font-semibold" style={{ color: "#5B5BD6" }}>
               Browse all →
             </Link>
           </div>
@@ -304,7 +310,7 @@ export default function DashboardPage() {
               <div className="text-sm mb-5" style={{ color: "#6B6B6B" }}>
                 You have no active tickets. Pick a new one to keep building.
               </div>
-              <Link href="/tickets" className="btn-primary text-sm">Browse tickets →</Link>
+              <Link href={ticketsHref} className="btn-primary text-sm">Browse tickets →</Link>
             </div>
           ) : (
             <div className="space-y-4">

@@ -20,6 +20,7 @@ interface Card {
   logoBg: string;
   logoColor: string;
   stack: string;
+  stackKey?: string;
   difficulties: string[];
   ticketCount: string;
   active: boolean;
@@ -40,6 +41,7 @@ const CARDS: Card[] = [
     ticketCount: "10 tickets available",
     active: true,
     cornerBadge: { label: "● New", bg: "#EBEBFF", color: "#5B5BD6" },
+    stackKey: "SYSTEM_DESIGN",
     href: "/tickets?stack=SYSTEM_DESIGN",
   },
   {
@@ -54,6 +56,7 @@ const CARDS: Card[] = [
     ticketCount: "17 tickets available",
     active: true,
     cornerBadge: { label: "● Live", bg: "#DCFCE7", color: "#16a34a" },
+    stackKey: "DOTNET",
     href: "/tickets?stack=DOTNET",
   },
   {
@@ -68,6 +71,7 @@ const CARDS: Card[] = [
     ticketCount: "15 tickets available",
     active: true,
     cornerBadge: { label: "● New", bg: "#FEF3C7", color: "#92400E" },
+    stackKey: "PYTHON",
     href: "/tickets?stack=PYTHON",
   },
   {
@@ -203,7 +207,12 @@ export default function SelectCodebasePage() {
                     : "0 1px 3px rgba(0,0,0,0.04)",
                   animationDelay: `${i * 60}ms`,
                 }}
-                onClick={() => { if (card.active && card.href) router.push(card.href); }}
+                onClick={() => {
+                  if (card.active && card.href) {
+                    if (card.stackKey) localStorage.setItem("ds_selected_stack", card.stackKey);
+                    router.push(card.href);
+                  }
+                }}
                 onMouseEnter={e => {
                   if (card.active) {
                     const shadow = card.id === "system-design"
@@ -281,7 +290,11 @@ export default function SelectCodebasePage() {
                   {/* CTA — only on active card */}
                   {card.active && (
                     <button
-                      onClick={e => { e.stopPropagation(); router.push(card.href!); }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (card.stackKey) localStorage.setItem("ds_selected_stack", card.stackKey);
+                        router.push(card.href!);
+                      }}
                       className="btn-primary w-full text-sm text-center"
                     >
                       Start with {card.name} →
