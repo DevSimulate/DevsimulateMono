@@ -29,6 +29,20 @@ interface Card {
 
 const CARDS: Card[] = [
   {
+    id: "system-design",
+    name: "System Design Arena",
+    subtitle: "FAANG-style architecture challenges",
+    logoLabel: "SD",
+    logoBg: "#EBEBFF",
+    logoColor: "#5B5BD6",
+    stack: "Architecture",
+    difficulties: ["JUNIOR", "MID", "SENIOR"],
+    ticketCount: "10 tickets available",
+    active: true,
+    cornerBadge: { label: "● New", bg: "#EBEBFF", color: "#5B5BD6" },
+    href: "/tickets",
+  },
+  {
     id: "novatech",
     name: "NovaTech CRM",
     subtitle: "Enterprise order management system",
@@ -36,8 +50,8 @@ const CARDS: Card[] = [
     logoBg: "#6366f1",
     logoColor: "#fff",
     stack: ".NET 8",
-    difficulties: ["MID", "SENIOR"],
-    ticketCount: "8 tickets available",
+    difficulties: ["JUNIOR", "MID", "SENIOR"],
+    ticketCount: "17 tickets available",
     active: true,
     cornerBadge: { label: "● Live", bg: "#DCFCE7", color: "#16a34a" },
     href: "/onboarding/guide?codebase=novatech",
@@ -93,19 +107,6 @@ const CARDS: Card[] = [
     cornerBadge: { label: "FAANG Prep", bg: "#EBEBFF", color: "#5B5BD6" },
   },
   {
-    id: "system-design",
-    name: "System Design Arena",
-    subtitle: "Design distributed systems end-to-end",
-    logoLabel: "SD",
-    logoBg: "#FEF3C7",
-    logoColor: "#D97706",
-    stack: "Architecture",
-    difficulties: ["SENIOR"],
-    ticketCount: "Coming soon",
-    active: false,
-    cornerBadge: { label: "New", bg: "#FEF3C7", color: "#D97706" },
-  },
-  {
     id: "placeholder",
     name: "More stacks coming",
     subtitle: "Vote for what you want next",
@@ -130,7 +131,7 @@ export default function SelectCodebasePage() {
       {/* Beta banner */}
       <div className="w-full px-4 py-3 text-center text-sm font-medium"
         style={{ background: "#FEF9C3", borderBottom: "1px solid #FDE68A", color: "#92400E" }}>
-        🚧 DevSim is in beta — NovaTech CRM is live now. More codebases dropping soon.
+        🚧 DevSim is in beta — System Design Arena + NovaTech CRM are live now. More codebases dropping soon.
         Your feedback shapes what we build next.
       </div>
 
@@ -189,21 +190,31 @@ export default function SelectCodebasePage() {
                 className={`fade-in-up relative rounded-2xl flex flex-col overflow-hidden transition-all duration-200 ${card.active ? "cursor-pointer" : ""}`}
                 style={{
                   background: "#fff",
-                  border: card.active ? "2px solid #22c55e" : "1px solid #E4E2DD",
-                  boxShadow: card.active ? "0 0 0 3px rgba(34,197,94,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+                  border: card.active
+                    ? card.id === "system-design" ? "2px solid #5B5BD6" : "2px solid #22c55e"
+                    : "1px solid #E4E2DD",
+                  boxShadow: card.active
+                    ? card.id === "system-design" ? "0 0 0 3px rgba(91,91,214,0.12)" : "0 0 0 3px rgba(34,197,94,0.12)"
+                    : "0 1px 3px rgba(0,0,0,0.04)",
                   animationDelay: `${i * 60}ms`,
                 }}
                 onClick={() => { if (card.active && card.href) router.push(card.href); }}
                 onMouseEnter={e => {
                   if (card.active) {
+                    const shadow = card.id === "system-design"
+                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(91,91,214,0.25)"
+                      : "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(34,197,94,0.20)";
                     (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(34,197,94,0.20)";
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
                   }
                 }}
                 onMouseLeave={e => {
                   if (card.active) {
+                    const shadow = card.id === "system-design"
+                      ? "0 0 0 3px rgba(91,91,214,0.12)"
+                      : "0 0 0 3px rgba(34,197,94,0.12)";
                     (e.currentTarget as HTMLDivElement).style.transform = "";
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = "0 0 0 3px rgba(34,197,94,0.12)";
+                    (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
                   }
                 }}
               >
@@ -264,7 +275,7 @@ export default function SelectCodebasePage() {
                       onClick={e => { e.stopPropagation(); router.push(card.href!); }}
                       className="btn-primary w-full text-sm text-center"
                     >
-                      Start with NovaTech →
+                      Start with {card.name} →
                     </button>
                   )}
 
