@@ -938,8 +938,419 @@ In \`app/api/documents.py\`, \`ingest_document()\` calls \`await file.read()\` w
     });
   }
 
+  // ── TechCorp HRM codebase ─────────────────────────────────────────────────
+  const techCorpCodebase = await prisma.codebase.upsert({
+    where: { id: "techcorp-hrm-seed-id-001" },
+    update: {},
+    create: {
+      id: "techcorp-hrm-seed-id-001",
+      name: "TechCorp HRM",
+      stack: Stack.NODE,
+      repoUrl: "https://github.com/OSSAMA-prog-droid/TechCropCrm",
+      description: "A multi-tenant HR Management platform built with Node.js, TypeScript, Express, PostgreSQL, Redis, and BullMQ. Handles employee records, payroll, leave management, and department structure.",
+      companyLore: `TechCorp Solutions was founded in 2019 to build affordable HR software for small and mid-size businesses. The product grew faster than expected — what started as a simple employee directory now processes payroll for 340 companies and 85,000 employees.
+
+The engineering team is 8 developers split across two squads: Core Platform and Payroll. The codebase was initially built by two contractors who left in 2022. The current team inherited it with minimal documentation.
+
+Key architectural decisions engineers must understand:
+- Multi-tenancy is enforced by passing tenant_id on every query — there is NO row-level security at the database level. Any query that omits tenant_id exposes cross-tenant data.
+- JWT tokens expire after 8 hours. A Redis blacklist is maintained on logout BUT the auth middleware does not check it — logged-out tokens are still valid.
+- Payroll runs are processed via BullMQ background jobs. The worker retries all failures including permanent validation errors.
+- Leave balances are checked and deducted in two separate operations with no database lock — concurrent requests can overdraw the balance.
+- PDF payslips are generated synchronously using PDFKit — this blocks the event loop during generation.
+- The Redis cache has no TTL on any key — stale data accumulates indefinitely.
+
+Known production incidents:
+- Three customers in Singapore reported their leave expired on December 30 instead of December 31
+- A support ticket noted that a terminated employee could still log in the next day
+- A payroll admin accidentally deleted a department — 23 employees disappeared from all reports
+- The API slows to a crawl during end-of-month payroll runs (bulk PDF generation)`,
+    },
+  });
+
+  const techCorpTickets = [
+    {
+      id: "ticket-hrm-01-seed-id-001",
+      title: "HRM-01: Employee List Takes 40 Seconds to Load",
+      description: `The main employee dashboard loads in under 2 seconds for companies with fewer than 50 employees. For TechCorp's larger customers (200–500 employees) it takes 40–60 seconds and sometimes times out entirely.
+
+**What's happening:**
+\`GET /api/v1/employees\` calls \`getEmployeesWithDepartment()\` in \`employee.service.ts\`. Look at what happens after the initial employee fetch.
+
+**Your task:**
+1. Find the N+1 query pattern in \`getEmployeesWithDepartment()\`
+2. Replace it with a single SQL query using a JOIN between \`employees\` and \`departments\`
+3. The response shape must remain the same — each employee object should still include a \`department\` property (or \`null\` if unassigned)
+4. Measure the query count before and after: it should go from N+1 queries to exactly 1
+
+**Files:** \`src/services/employee.service.ts\`, \`src/repositories/employee.repository.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/services/employee.service.ts", "src/repositories/employee.repository.ts"],
+      rubric: {
+        diagnosis: "Did they identify the for-loop with a per-employee SELECT as the N+1 pattern? Did they understand that the number of queries scales linearly with employee count?",
+        design: "Did they rewrite it as a single LEFT JOIN query? Is the JOIN between employees and departments correct (LEFT JOIN to preserve employees without a department)?",
+        communication: "Did they explain why N+1 is invisible in dev (small dataset) but catastrophic in production (500 employees = 501 queries)?",
+        execution: "Does the fix use exactly 1 query? Is the response shape preserved (employee + department or null)?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-hrm-02-seed-id-002",
+      title: "HRM-02: Logged-Out Users Can Still Make API Requests",
+      description: `A security audit found that after calling \`POST /api/v1/auth/logout\`, the JWT token remains fully functional. An attacker who intercepts a token (from logs, a browser extension, or a network capture) can keep using it for up to 8 hours after the legitimate user logs out.
+
+**What's happening:**
+The logout endpoint calls \`authService.logout()\` which correctly adds the token to a Redis blacklist. But \`auth.middleware.ts\` never checks the blacklist — it only verifies the JWT signature.
+
+**Your task:**
+1. In \`auth.middleware.ts\`, after verifying the JWT signature, check Redis for the key \`blacklist:<token>\`
+2. If the key exists, reject the request with 401 \`"Token has been revoked"\`
+3. The Redis check should only add ~1ms of latency — use \`redis.get()\` not a scan
+
+**Files:** \`src/middleware/auth.middleware.ts\`, \`src/config/redis.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/middleware/auth.middleware.ts", "src/config/redis.ts"],
+      rubric: {
+        diagnosis: "Did they find that logout() correctly blacklists the token but requireAuth() never reads the blacklist? Did they trace the full flow: logout → Redis write → next request → Redis NOT checked?",
+        design: "Is the Redis check placed after JWT verification (to avoid a Redis lookup on already-invalid tokens)? Does it use redis.get() not a more expensive operation? Does it return 401 with a clear message?",
+        communication: "Did they explain the attack scenario — token interception after logout? Did they note the latency implication of adding a Redis round-trip to every authenticated request?",
+        execution: "Does the middleware reject requests using a blacklisted token? Is the check placed correctly (after signature verification, not before)?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-hrm-03-seed-id-003",
+      title: "HRM-03: Employees Can Book More Leave Than Their Balance Allows",
+      description: `HR managers are finding employees with negative leave balances. One employee used 28 days of annual leave against an entitlement of 21. It only happens when employees submit multiple leave requests at nearly the same time — the mobile app sometimes double-submits on poor connections.
+
+**What's happening:**
+\`requestLeave()\` in \`leave.service.ts\` reads the balance, checks if there's enough, then deducts. Two concurrent requests both read the same balance before either deducts — both pass the check.
+
+**Your task:**
+1. Fix the race condition in \`requestLeave()\` using a PostgreSQL advisory lock or an atomic UPDATE with a WHERE condition that checks the remaining balance
+2. The fix must prevent double-booking even under concurrent requests — a simple \`SELECT FOR UPDATE\` on the balance row is acceptable
+3. If the balance check fails due to a concurrent deduction, return the same "Insufficient balance" error
+
+**Files:** \`src/services/leave.service.ts\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/services/leave.service.ts"],
+      rubric: {
+        diagnosis: "Did they identify the read-check-write sequence with no lock as the root cause? Did they understand that the race window is between getBalance() and the UPDATE deduction?",
+        design: "Did they use SELECT FOR UPDATE, an atomic UPDATE WHERE remaining >= days, or a database transaction with row lock? Is the lock released correctly after the deduction?",
+        communication: "Did they explain why this is invisible in single-request testing? Did they describe the exact race window and why normal transactions don't prevent it without a lock?",
+        execution: "Does the fix prevent negative balances under concurrent requests? Is the error message the same as before so callers don't break?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-hrm-04-seed-id-004",
+      title: "HRM-04: API Memory Grows 50MB After Every Payroll Run",
+      description: `Ops has noticed that after each monthly payroll run, API memory jumps by ~50MB and never comes back down. After 6 payroll runs the server is using 400MB extra and starts swapping. Node.js emits \`MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 payrollProcessed listeners added.\`
+
+**What's happening:**
+\`notification.service.ts\` extends \`EventEmitter\`. \`sendPayrollNotifications()\` registers a new \`'payrollProcessed'\` listener for each employee on every call — listeners are never removed.
+
+**Your task:**
+1. Fix \`sendPayrollNotifications()\` in \`notification.service.ts\` so it does not register persistent listeners
+2. The simplest correct fix is to emit the event with the employee list as the payload and handle it in a single listener — or just call \`sendEmail()\` directly without using events
+3. After the fix, calling \`sendPayrollNotifications()\` 100 times must not increase listener count
+
+**Files:** \`src/services/notification.service.ts\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/services/notification.service.ts"],
+      rubric: {
+        diagnosis: "Did they find that this.on() inside a loop adds one listener per employee per call, and those listeners are never removed? Did they understand that EventEmitter listeners are permanent until explicitly removed?",
+        design: "Did they remove the this.on() pattern from inside the method? The cleanest fix is to call sendEmail() directly in the loop without using events, or emit once with all employees as payload. Did they avoid using this.once() in a loop (still leaks, just slower)?",
+        communication: "Did they explain why the MaxListenersExceededWarning is a symptom, not the root cause? Did they note the memory retention: each closure captures the emp object keeping it in memory?",
+        execution: "Does the fix keep listener count stable across multiple calls? Is the email notification behaviour preserved (all employees still get notified)?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-hrm-05-seed-id-005",
+      title: "HRM-05: Payroll Calculations Silently Return NaN",
+      description: `Finance has flagged payroll reports showing \`NaN\` in the net pay column for several employees. The payroll run succeeds with no errors — the bug is completely silent. Affected employees have active deductions set up in the system.
+
+**What's happening:**
+\`calculateNetPay()\` in \`payroll.service.ts\` calls \`this.calculateDeductions()\` which is an \`async\` function returning \`Promise<number>\`. But the \`await\` keyword is missing — \`deductions\` holds a \`Promise\` object, not a number. \`base - Promise\` evaluates to \`NaN\`.
+
+**Your task:**
+1. Find the missing \`await\` in \`calculateNetPay()\`
+2. Add it — the fix is one word
+3. Add a runtime guard: if \`netPay\` is \`NaN\` or negative, throw an Error before writing to the database rather than persisting an invalid value
+
+**Files:** \`src/services/payroll.service.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/services/payroll.service.ts"],
+      rubric: {
+        diagnosis: "Did they find the missing await on calculateDeductions()? Did they understand that async functions always return a Promise, and subtracting a Promise from a number yields NaN in JavaScript?",
+        design: "Did they add await? Did they add a NaN/negative guard before the DB write? A single isNaN() check and throw is sufficient.",
+        communication: "Did they explain why TypeScript doesn't catch this — calculateDeductions returns Promise<number> and the compiler allows arithmetic on it without strict null checks? Did they note it's completely silent (no throw, no log)?",
+        execution: "Does the fix make calculateNetPay() return the correct numeric value? Does the guard throw before a NaN value reaches the database?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-hrm-06-seed-id-006",
+      title: "HRM-06: Leave Expires a Day Early for Employees in Pakistan and Singapore",
+      description: `Three customers have complained that their employees' annual leave expired on December 30 instead of December 31. All affected employees are at companies based in Pakistan (UTC+5) or Singapore (UTC+8). UK and EU customers see no issue. The API servers are in UTC+0.
+
+**What's happening:**
+\`getLeaveYearExpiry()\` in \`leave.service.ts\` uses \`new Date()\` which returns local server time. On UTC+0 servers, December 31 local time equals December 31 UTC — no shift. For UTC+5/UTC+8 tenants, December 31 midnight local is December 30 at 19:00/16:00 UTC.
+
+**Your task:**
+1. Fix \`getLeaveYearExpiry()\` to return December 31 23:59:59 UTC regardless of the server timezone
+2. Use \`Date.UTC(year, 11, 31, 23, 59, 59)\` to construct the correct timestamp
+3. Ensure all date comparisons in leave expiry checks use UTC consistently
+
+**Files:** \`src/services/leave.service.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/services/leave.service.ts"],
+      rubric: {
+        diagnosis: "Did they find that new Date() uses local server time and that UTC+5/UTC+8 servers shift the December 31 boundary back by 5/8 hours? Did they understand why UTC+0 servers mask the bug?",
+        design: "Did they use Date.UTC() or new Date(Date.UTC(...)) to construct a UTC-specific timestamp? Is the fix consistent — are all other date comparisons in the file also using UTC?",
+        communication: "Did they explain why the bug is invisible on UTC+0 servers and in local dev? Did they recommend testing timezone-sensitive code with TZ=UTC+5 in CI?",
+        execution: "Does getLeaveYearExpiry() return exactly December 31 23:59:59 UTC regardless of server timezone? Is the year derived from UTC (new Date().getUTCFullYear()) not local time?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-hrm-07-seed-id-007",
+      title: "HRM-07: Employee Update Endpoint Vulnerable to Privilege Escalation",
+      description: `The security team found that \`PATCH /api/v1/employees/:id\` accepts any JSON payload and merges it directly onto the employee object. An authenticated EMPLOYEE-role user sent \`{ "role": "ADMIN" }\` in the request body and their role was updated. A more dangerous payload is \`{ "__proto__": { "isAdmin": true } }\` which poisons the prototype chain for all objects in the process.
+
+**What's happening:**
+\`updateEmployee()\` in \`employee.service.ts\` calls \`Object.assign(employee, updates)\` with the raw request body. No fields are filtered.
+
+**Your task:**
+1. Replace \`Object.assign(employee, updates)\` with an explicit allowlist of updatable fields
+2. Allowed fields for HR/ADMIN: \`first_name\`, \`last_name\`, \`job_title\`, \`department_id\`, \`base_salary\`, \`status\`
+3. Fields that must NEVER be updated via this endpoint: \`id\`, \`tenant_id\`, \`email\`, \`created_at\`
+4. The fix must also prevent prototype pollution — do not copy keys that start with \`__\`
+
+**Files:** \`src/services/employee.service.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/services/employee.service.ts"],
+      rubric: {
+        diagnosis: "Did they identify Object.assign(employee, updates) as the root cause? Did they understand both attack vectors: field injection (escalating role) and prototype pollution (__proto__)?",
+        design: "Did they use an explicit allowlist of fields rather than a denylist? Is the allowlist defined as a constant so it's easy to audit? Does it block __proto__ and constructor keys?",
+        communication: "Did they classify this as both a privilege escalation and a prototype pollution vulnerability? Did they recommend input validation at the route layer as an additional layer of defence?",
+        execution: "Can an attacker no longer update id, tenant_id, or add __proto__ keys via this endpoint? Does the allowlist approach prevent unknown future fields from being accepted automatically?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-hrm-08-seed-id-008",
+      title: "HRM-08: Redis Memory Growing Without Bound — Server OOM After 3 Months",
+      description: `The Redis instance started at 50MB and is now at 4.2GB after 3 months. It's projected to hit the 6GB limit next month. There are no eviction policies set. A \`redis-cli --scan\` shows millions of keys like \`employee:tenant-xxx:uuid\`, \`report:dept-yyy\` that are stale (referencing deleted employees and closed accounts).
+
+**What's happening:**
+\`cache.set()\` in \`utils/cache.ts\` calls \`redis.set(key, value)\` with no expiry argument. Every cached value lives in Redis forever.
+
+**Your task:**
+1. Add a default TTL of 300 seconds (5 minutes) to \`cache.set()\`
+2. Add an optional \`ttlSeconds\` parameter so callers can override the default for longer-lived data
+3. Update all \`cache.set()\` call sites to pass appropriate TTLs where the default is wrong
+
+**Files:** \`src/utils/cache.ts\`, \`src/services/employee.service.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/utils/cache.ts", "src/services/employee.service.ts"],
+      rubric: {
+        diagnosis: "Did they find that cache.set() uses redis.set() with no EX argument, leaving keys with no expiry? Did they understand the growth mechanism — every cache write is permanent?",
+        design: "Did they add EX with a default TTL? Did they make TTL configurable per call-site? Is the default TTL sensible (5-15 minutes for employee data)?",
+        communication: "Did they explain why TTL-less caches are a reliability risk (OOM) not just a performance risk? Did they recommend setting a maxmemory-policy on Redis as a safety net?",
+        execution: "Does cache.set() now call redis.set(key, value, 'EX', ttl)? Are all call sites updated? Is the TTL parameter typed as optional with a sensible default?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-hrm-09-seed-id-009",
+      title: "HRM-09: Login Authenticates Users Across Tenant Boundaries",
+      description: `A critical security incident: a user at Company A logged in successfully using Company B's employee email and their own password. The auth system returned Company B's employee record with Company A's JWT. This happened because two tenants onboarded employees with the same email address (common at companies where contractors work across clients).
+
+**What's happening:**
+\`findByEmail()\` in \`employee.repository.ts\` queries \`WHERE email = $1\` with no \`tenant_id\` filter. It returns the first matching row regardless of which tenant owns it.
+
+**Your task:**
+1. Add \`tenant_id\` as a required parameter to \`findByEmail()\`
+2. Update the query to \`WHERE email = $1 AND tenant_id = $2\`
+3. Update all call sites that use \`findByEmail()\` to pass the tenant ID
+4. Check if any other repository methods are missing the tenant filter
+
+**Files:** \`src/repositories/employee.repository.ts\`, \`src/services/auth.service.ts\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/repositories/employee.repository.ts", "src/services/auth.service.ts"],
+      rubric: {
+        diagnosis: "Did they find findByEmail() missing the tenant_id filter? Did they check all other repository methods and confirm findById() already has the filter correctly?",
+        design: "Did they add tenantId as a required (not optional) parameter? Did they update all call sites? Did they audit other methods for the same class of bug?",
+        communication: "Did they classify this as a multi-tenancy isolation vulnerability? Did they recommend a database-level audit of all queries touching the employees table to find any others missing tenant_id?",
+        execution: "Does findByEmail() now require and use tenant_id? Does login no longer return cross-tenant employees for matching emails?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-hrm-10-seed-id-010",
+      title: "HRM-10: Payroll Job Retries Permanent Errors 5 Times Wasting Queue Slots",
+      description: `The payroll job queue is filling up with jobs that retry 5 times before failing. Most of these are permanent errors: \`duplicate key value violates unique constraint (employee_id, period_month, period_year)\` — payroll was already processed for that period. Each retry waits exponentially (1s, 2s, 4s, 8s, 16s = 31 seconds wasted per job). During end-of-month runs this blocks other jobs.
+
+**What's happening:**
+The BullMQ worker in \`payroll.job.ts\` is configured with \`attempts: 5\` but never distinguishes between transient errors (network timeout, DB connection lost) and permanent errors (duplicate payroll period, employee not found).
+
+**Your task:**
+1. Import \`UnrecoverableError\` from \`bullmq\`
+2. In the worker handler, catch known permanent errors (duplicate constraint, employee not found) and re-throw as \`new UnrecoverableError(message)\`
+3. Transient errors (connection errors, timeouts) should still retry normally
+4. BullMQ moves \`UnrecoverableError\` jobs directly to the failed state without retrying
+
+**Files:** \`src/jobs/payroll.job.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/jobs/payroll.job.ts"],
+      rubric: {
+        diagnosis: "Did they identify that all errors are retried including permanent validation failures? Did they understand that UnrecoverableError is BullMQ's mechanism for non-retryable jobs?",
+        design: "Did they use UnrecoverableError for permanent failures (duplicate period, not found)? Are transient errors (network, timeout) still retried? Is the error classification reasonable?",
+        communication: "Did they explain the wasted queue capacity and latency from retrying permanent errors? Did they discuss how to distinguish transient from permanent errors (error message patterns, PostgreSQL error codes)?",
+        execution: "Do duplicate-period errors go directly to failed state without retrying? Do network errors still retry up to 5 times?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-hrm-11-seed-id-011",
+      title: "HRM-11: Password Reset Token Can Be Used Multiple Times",
+      description: `A security researcher reported that after using a password reset link, the same link remains valid and can be used again to set a new password. If an attacker intercepts the reset email (forwarded email, shared mailbox, phishing) they can reset the password again after the legitimate user already used it — effectively locking the user out.
+
+**What's happening:**
+\`resetPassword()\` in \`auth.service.ts\` validates the token and updates the password but never deletes the \`password_resets\` row. The token remains in the database and passes the \`expires_at > NOW()\` check on every subsequent use.
+
+**Your task:**
+1. After successfully updating the password, delete the used token: \`DELETE FROM password_resets WHERE token = $1\`
+2. Wrap the UPDATE and DELETE in a single database transaction so both succeed or both roll back
+3. Also invalidate any other active reset tokens for the same user (a user should only have one valid reset at a time)
+
+**Files:** \`src/services/auth.service.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/services/auth.service.ts"],
+      rubric: {
+        diagnosis: "Did they find the missing DELETE after the password update? Did they understand the attack scenario — intercepted link used after legitimate reset?",
+        design: "Did they delete the token after use? Did they wrap UPDATE + DELETE in a transaction? Did they also delete other active tokens for the same user?",
+        communication: "Did they explain the one-time-use requirement for reset tokens? Did they mention adding used_at timestamp as an alternative to deletion (for audit purposes)?",
+        execution: "Is the token deleted after successful use? Is the operation transactional? Can the same token no longer be used after the first use?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-hrm-12-seed-id-012",
+      title: "HRM-12: Payslip Download Freezes the Entire API for Several Seconds",
+      description: `When a payroll admin downloads payslips for the full company (200 employees), all other API requests time out for 8–12 seconds. The request queue backs up with hundreds of pending requests. Individual payslip downloads also cause a 2–3 second freeze for any concurrent users.
+
+**What's happening:**
+\`generatePayslip()\` in \`pdf.service.ts\` uses PDFKit's streaming API but collects the buffer synchronously inside the same event loop tick. This is pure CPU work with no async yield — Node.js cannot process any other callbacks until it completes.
+
+**Your task:**
+1. Refactor \`generatePayslip()\` to return \`Promise<Buffer>\` using PDFKit's stream events properly
+2. Use \`new Promise<Buffer>((resolve, reject) => { ... })\` wrapping the \`doc.on('end')\` and \`doc.on('error')\` events
+3. The caller in \`payroll.ts\` route must \`await\` the result
+4. For bulk payslip generation, process employees sequentially with \`await\` between each (do not Promise.all — that just parallelises the CPU blocking)
+
+**Files:** \`src/services/pdf.service.ts\`, \`src/routes/payroll.ts\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/services/pdf.service.ts", "src/routes/payroll.ts"],
+      rubric: {
+        diagnosis: "Did they identify that synchronous Buffer.concat inside the same tick blocks the event loop? Did they understand that wrapping sync code in a Promise does NOT make it async — it still blocks?",
+        design: "Did they wrap the PDFKit stream in a Promise that resolves on 'end' and rejects on 'error'? Is the result awaited in the route handler? Did they avoid Promise.all for bulk generation?",
+        communication: "Did they explain that Node.js is single-threaded and synchronous CPU work blocks all I/O? Did they mention worker_threads as an alternative for heavy CPU work?",
+        execution: "Does generatePayslip() return Promise<Buffer>? Does the event loop remain responsive during PDF generation? Is the route handler updated to await the result?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-hrm-13-seed-id-013",
+      title: "HRM-13: Internal Stack Traces Exposed in API Error Responses",
+      description: `During a routine test, a developer noticed that API errors return the full Node.js stack trace in the response body. Example response to a malformed request:
+\`\`\`json
+{
+  "error": "Cannot read properties of undefined",
+  "stack": "TypeError: Cannot read properties of undefined\\n    at EmployeeService.updateEmployee (C:\\\\app\\\\src\\\\services\\\\employee.service.ts:34:18)\\n    at..."
+}
+\`\`\`
+This exposes internal file paths, line numbers, and the tech stack to anyone making requests — information that directly assists attackers in targeting the application.
+
+**Your task:**
+1. Fix \`errorHandler\` in \`src/middleware/error.middleware.ts\` to only include \`stack\` in non-production environments
+2. In production (\`NODE_ENV === 'production'\`), return only \`{ error: "Internal server error" }\` for unhandled exceptions
+3. Keep the full error details in server-side logs regardless of environment
+4. For known operational errors (validation errors, not-found), the message is safe to return — only suppress stack traces for unexpected errors
+
+**Files:** \`src/middleware/error.middleware.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/middleware/error.middleware.ts"],
+      rubric: {
+        diagnosis: "Did they find the unconditional stack: err.stack in the response? Did they understand the information leakage risk — file paths and line numbers help attackers target exploits?",
+        design: "Is the stack only included when NODE_ENV !== 'production'? Does the production response return a generic message for unexpected errors? Are logs still written regardless of environment?",
+        communication: "Did they distinguish between operational errors (safe to surface) and programmer errors (stack should be hidden)? Did they mention that logging the full error server-side is non-negotiable for debugging?",
+        execution: "In production mode, does the response body contain no stack trace? Is the error still logged to console.error with the full stack? Is the fix just a NODE_ENV check?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-hrm-14-seed-id-014",
+      title: "HRM-14: Rate Limiter Bypassed by Spoofing X-Forwarded-For Header",
+      description: `A penetration tester demonstrated that the rate limiter at \`POST /api/v1/auth/login\` can be completely bypassed. By sending \`X-Forwarded-For: <random-ip>\` with each request, they ran 10,000 login attempts in under a minute — far exceeding the 100 req/min limit. This enables credential stuffing attacks against any tenant.
+
+**What's happening:**
+\`getRateLimitKey()\` in \`rateLimit.middleware.ts\` uses the \`X-Forwarded-For\` header as the rate limit key without any validation. An attacker can set this to a different value on every request.
+
+**Your task:**
+1. Remove the \`X-Forwarded-For\` based key — use \`req.socket.remoteAddress\` as the canonical IP
+2. If the app is genuinely behind a trusted reverse proxy (like Railway or Vercel), use the first IP from \`X-Forwarded-For\` ONLY if an environment variable \`TRUST_PROXY=true\` is set
+3. For the login endpoint specifically, also add a per-\`email\` rate limit (max 5 failed attempts per email per 15 minutes) in addition to the IP limit
+
+**Files:** \`src/middleware/rateLimit.middleware.ts\`, \`src/routes/auth.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/middleware/rateLimit.middleware.ts", "src/routes/auth.ts"],
+      rubric: {
+        diagnosis: "Did they find that getRateLimitKey() unconditionally trusts X-Forwarded-For? Did they understand the bypass — rotating this header gives a fresh limit window each time?",
+        design: "Did they fall back to req.socket.remoteAddress as the default? Did they make proxy trust opt-in via env var? Did they add a per-email rate limit on the login route?",
+        communication: "Did they explain why X-Forwarded-For is dangerous to trust without proxy configuration? Did they mention that the per-email limit catches distributed attacks that use many IPs?",
+        execution: "Can attackers no longer bypass the limit by rotating X-Forwarded-For? Is the per-email limit implemented on the login route? Is TRUST_PROXY opt-in not opt-out?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-hrm-15-seed-id-015",
+      title: "HRM-15: Deleting a Department Makes Its Employees Invisible in Reports",
+      description: `An HR admin deleted the \"Contractors\" department after all contractors had been converted to full-time employees. The next day, the payroll team reported that 23 employees were missing from the monthly payroll report. The employees still exist in the database but their \`department_id\` points to a deleted department — they are excluded from any query that JOINs to the departments table.
+
+**What's happening:**
+\`deleteDepartment()\` in \`department.service.ts\` deletes the department row but never clears or reassigns the \`department_id\` on employees who belonged to it. The console warning is emitted but ignored.
+
+**Your task:**
+1. Before deleting the department, set \`department_id = NULL\` for all employees who belong to it: \`UPDATE employees SET department_id = NULL WHERE department_id = $1 AND tenant_id = $2\`
+2. Wrap the employee update and department delete in a single database transaction
+3. Return an error (HTTP 409) if the department has a \`manager_id\` set — the manager assignment must be cleared first, or handle it automatically
+
+**Files:** \`src/services/department.service.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/services/department.service.ts"],
+      rubric: {
+        diagnosis: "Did they find the missing UPDATE employees SET department_id = NULL before the DELETE? Did they understand that dangling foreign keys cause employees to disappear from JOINs?",
+        design: "Did they add the UPDATE before the DELETE? Did they wrap both in a transaction? Did they handle the manager_id case?",
+        communication: "Did they explain why the console.warn is insufficient — it warns but still leaves the database in an inconsistent state? Did they mention adding a DB-level CASCADE or RESTRICT as an alternative?",
+        execution: "Are all employees in the deleted department reassigned to NULL department_id? Is the operation transactional? Do the employees now appear correctly in reports after deletion?",
+      },
+      expectedMinutes: 25,
+    },
+  ];
+
+  for (const t of techCorpTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.NODE, codebaseId: techCorpCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore tickets upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp tickets upserted.`
   );
 }

@@ -19,7 +19,7 @@ const STACK_META: Record<string, { label: string; color: string; bg: string }> =
   DOTNET:        { label: ".NET 8",            color: "#6366f1", bg: "#EEF2FF" },
   SYSTEM_DESIGN: { label: "Architecture",      color: "#5B5BD6", bg: "#EBEBFF" },
   PYTHON:        { label: "Python + LangChain", color: "#92400E", bg: "#FEF3C7" },
-  NODE:          { label: "Node.js",            color: "#0D9488", bg: "#CCFBF1" },
+  NODE:          { label: "Node.js + TypeScript", color: "#1D4ED8", bg: "#DBEAFE" },
 };
 
 interface Ticket {
