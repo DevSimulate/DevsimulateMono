@@ -2170,8 +2170,480 @@ The PostgreSQL sink in \`src/connectors/postgres_sink.py\` creates a \`ThreadedC
     });
   }
 
+  // ── InfraCore codebase ────────────────────────────────────────────────────
+  const infracoreCodebase = await prisma.codebase.upsert({
+    where: { id: "infracore-seed-id-001" },
+    update: {},
+    create: {
+      id: "infracore-seed-id-001",
+      name: "InfraCore",
+      stack: Stack.DEVOPS,
+      repoUrl: "https://github.com/OSSAMA-prog-droid/InfraCore",
+      description: "Infrastructure-as-code platform for Axiom Analytics — Terraform modules and Kubernetes manifests managing a production AWS environment processing 50M+ events/day.",
+      companyLore: `Axiom Analytics is a B2B SaaS startup founded in 2021 providing real-time event analytics for e-commerce platforms. The platform processes 50M+ events per day across 200+ enterprise customers.
+
+Infrastructure runs entirely on AWS — EKS for compute, RDS PostgreSQL for application data, ElastiCache Redis for caching, and S3 for event storage and ML model artifacts.
+
+The DevOps setup was bootstrapped by contractors in 2022 who built the initial Terraform modules and Kubernetes manifests, then handed over to Jordan (the first full-time DevOps hire) in late 2023. A second engineer, Sam, joined 3 months ago. Neither had full visibility into the contractors' original decisions.
+
+Key facts engineers must know:
+- The production EKS cluster runs across us-east-1a and us-east-1b
+- The primary RDS instance is PostgreSQL 15.4 on db.t3.large
+- Background workers handle Kafka event ingestion and ML pipeline runs
+- Terraform state is stored in S3; GitHub Actions applies changes on merge to main
+- Axiom is beginning a SOC 2 Type II audit in Q3 2026 — security issues are now critical
+- The engineering team has no on-call rotation yet; any outage is manually escalated`,
+    },
+  });
+
+  const infracoreTickets = [
+    {
+      id: "ticket-ic-01-seed-id-001",
+      title: "IC-01: Terraform State Lock Missing on Production Backend",
+      description: `Two engineers both ran \`terraform apply\` on the production environment at the same time last Thursday. One apply succeeded; the other corrupted the state file and left several resources in an unknown state. It took 4 hours to manually reconcile.
+
+**Root cause:**
+\`terraform/environments/production/backend.tf\` configures an S3 backend but has no \`dynamodb_table\` for state locking. Without a lock, two concurrent applies both read the current state, make their changes independently, and the last writer wins — corrupting state with a partial view of reality.
+
+**Your task:**
+1. Add a DynamoDB table resource in \`terraform/modules/storage/main.tf\` named \`axiom-terraform-state-lock\` with \`hash_key = "LockID"\` and \`billing_mode = "PAY_PER_REQUEST"\`
+2. Add \`dynamodb_table = "axiom-terraform-state-lock"\` to the S3 backend block in \`terraform/environments/production/backend.tf\`
+3. Explain why this prevents concurrent apply corruption
+
+**Files:** \`terraform/environments/production/backend.tf\`, \`terraform/modules/storage/main.tf\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["terraform/environments/production/backend.tf", "terraform/modules/storage/main.tf"],
+      rubric: {
+        diagnosis: "Did they correctly identify that the missing dynamodb_table is the cause of state corruption under concurrent applies? Did they understand that S3 alone provides no mutual exclusion?",
+        design: "Did they add the DynamoDB table with the correct LockID hash key? Did they add dynamodb_table to the backend config? Did they note that billing_mode PAY_PER_REQUEST is appropriate for low-frequency lock operations?",
+        communication: "Did they explain that Terraform acquires a lock by writing to DynamoDB before reading state, and releases it after apply completes? Did they explain why the corruption happened — last-writer-wins on S3?",
+        execution: "Is the DynamoDB resource correctly defined with hash_key = 'LockID'? Is the backend config updated with the table name? Would two concurrent applies now correctly block?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-ic-02-seed-id-002",
+      title: "IC-02: Production Database Has No Multi-AZ or Automated Backups",
+      description: `The us-east-1b availability zone had a 45-minute outage last month. During that window, Axiom's production database was completely unreachable — it was deployed as a single instance in us-east-1b with no standby replica. Customers were unable to use the platform for 45 minutes.
+
+Separately, the ops team discovered that \`backup_retention_period = 0\` means automated backups are disabled. If the instance were to be terminated or corrupted, there is no point-in-time recovery available.
+
+**Root cause in \`terraform/modules/database/main.tf\`:**
+- \`multi_az = false\` — no standby replica in a second AZ
+- \`backup_retention_period = 0\` — automated backups disabled
+
+**Your task:**
+1. Set \`multi_az = true\` so AWS maintains a synchronous standby in a second AZ with automatic failover
+2. Set \`backup_retention_period = 7\` for 7 days of point-in-time recovery
+3. Add \`backup_window = "03:00-04:00"\` and \`maintenance_window = "Mon:04:00-Mon:05:00"\` to control when these run
+4. Explain the RTO and RPO impact of each change
+
+**Files:** \`terraform/modules/database/main.tf\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["terraform/modules/database/main.tf"],
+      rubric: {
+        diagnosis: "Did they identify both multi_az=false and backup_retention_period=0 as separate reliability failures? Did they understand that multi_az protects against AZ failure while backups protect against data corruption/accidental deletion?",
+        design: "Did they set multi_az=true and backup_retention_period to at least 7? Did they add backup and maintenance windows to avoid peak hours? Did they mention that enabling multi_az on an existing instance triggers a brief failover?",
+        communication: "Did they explain RTO (multi_az gives sub-2-minute automatic failover vs hours of manual recovery) and RPO (backups give point-in-time recovery vs total loss)? Did they flag that the 45-minute outage was preventable?",
+        execution: "Are both multi_az=true and backup_retention_period>=7 present? Are backup/maintenance windows set to off-peak hours? Is the fix complete for both reliability issues?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-ic-03-seed-id-003",
+      title: "IC-03: Application IAM Role Has Wildcard Permissions",
+      description: `Security flagged this ahead of the SOC 2 audit: the IAM role attached to all application EC2 instances and EKS nodes has \`Action: "*"\` on \`Resource: "*"\`. Every running instance can perform any AWS API call on any resource in the account.
+
+During a routine dependency scan last week, a compromised npm package was found in one of the worker containers. If that package had been malicious and exfiltrated the EC2 instance metadata credentials, the attacker would have had full AWS account access — they could read all S3 data, delete the RDS instance, create new IAM users, and disable CloudTrail.
+
+**Root cause in \`terraform/modules/iam/main.tf\`:**
+The \`app_policy\` inline policy grants \`"Action": "*"\` and \`"Resource": "*"\`.
+
+**Your task:**
+1. Replace the wildcard policy with a least-privilege policy that grants only what the API actually needs:
+   - \`s3:GetObject\`, \`s3:PutObject\` on the assets and ml-artifacts buckets
+   - \`secretsmanager:GetSecretValue\` on \`arn:aws:secretsmanager:us-east-1:*:secret:axiom-*\`
+   - \`logs:CreateLogGroup\`, \`logs:CreateLogStream\`, \`logs:PutLogEvents\` on the axiom log group
+2. Explain the blast radius difference between the current policy and your fix
+
+**Files:** \`terraform/modules/iam/main.tf\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["terraform/modules/iam/main.tf"],
+      rubric: {
+        diagnosis: "Did they identify Action='*' Resource='*' as the core problem? Did they understand that EKS node roles use the same instance profile, so all pods inherit these permissions?",
+        design: "Did they replace the wildcard with specific actions on specific resources? Did they scope S3 permissions to the specific bucket ARNs? Did they scope Secrets Manager to the axiom prefix? Did they avoid over-granting?",
+        communication: "Did they explain least-privilege principle? Did they quantify the blast radius difference — wildcard = full account takeover vs scoped = read 2 specific S3 buckets? Did they mention the compromised package scenario?",
+        execution: "Is the new policy restricted to specific actions? Are resource ARNs scoped (not *)? Is the Secrets Manager ARN pattern correct? Would this policy still allow the app to function?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-ic-04-seed-id-004",
+      title: "IC-04: Bastion Security Group Allows SSH from All IPs",
+      description: `The network team noticed the bastion host security group allows inbound SSH (port 22) from \`0.0.0.0/0\`. This means any machine on the internet can attempt to connect to the bastion.
+
+Over the past 30 days, CloudWatch logs show 14,000 failed SSH authentication attempts from 340 unique IPs — all automated scanning bots probing for weak credentials. One of the attempts used a valid username (discovered via a public GitHub commit) with a dictionary password list.
+
+**Root cause in \`terraform/modules/networking/main.tf\`:**
+The \`axiom-bastion-sg\` security group ingress rule sets \`cidr_blocks = ["0.0.0.0/0"]\` on port 22.
+
+**Your task:**
+1. Change \`cidr_blocks\` to allow SSH only from the company VPN CIDR (\`203.0.113.0/24\`) instead of \`0.0.0.0/0\`
+2. Recommend a better long-term alternative to a bastion host (e.g. AWS Systems Manager Session Manager) and explain why it eliminates the attack surface entirely
+
+**Files:** \`terraform/modules/networking/main.tf\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["terraform/modules/networking/main.tf"],
+      rubric: {
+        diagnosis: "Did they identify 0.0.0.0/0 on port 22 as the issue? Did they understand the practical risk demonstrated by the 14,000 scan attempts in the logs?",
+        design: "Did they restrict cidr_blocks to a specific IP range? Did they recommend SSM Session Manager as the better alternative? Did they explain that SSM requires no open inbound ports at all?",
+        communication: "Did they explain that SSM Session Manager uses outbound HTTPS only — no inbound firewall rules needed? Did they mention that SSM also provides audit logging of all session commands automatically?",
+        execution: "Is 0.0.0.0/0 replaced with a specific CIDR? Is the recommendation for SSM Session Manager technically accurate? Would the fix stop the 14,000 daily scan attempts?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-ic-05-seed-id-005",
+      title: "IC-05: Production S3 Bucket Has Public Read ACL and No Versioning",
+      description: `The assets S3 bucket (\`axiom-production-assets\`) was configured with \`acl = "public-read"\` to serve customer-facing files. However, this exposes every object in the bucket — including internal config snapshots, ML model weights, and temporary processing files that engineers upload manually — to anyone with the URL.
+
+Additionally, there is no versioning on any bucket. Last week an engineer accidentally overwrote a production ML model with a staging version. There was no way to recover the previous version.
+
+**Root cause in \`terraform/modules/storage/main.tf\`:**
+- \`aws_s3_bucket_acl\` sets \`acl = "public-read"\` on the assets bucket
+- No \`aws_s3_bucket_versioning\` resource exists for any bucket
+
+**Your task:**
+1. Remove the \`aws_s3_bucket_acl\` resource entirely (default is private)
+2. Add an \`aws_s3_bucket_versioning\` resource for both \`assets\` and \`ml_artifacts\` buckets with \`status = "Enabled"\`
+3. Explain how to serve public assets correctly without a public-read bucket ACL (CloudFront + OAC)
+
+**Files:** \`terraform/modules/storage/main.tf\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["terraform/modules/storage/main.tf"],
+      rubric: {
+        diagnosis: "Did they identify the public-read ACL as exposing all objects? Did they identify that missing versioning caused the unrecoverable overwrite?",
+        design: "Did they remove the ACL resource? Did they add versioning for both buckets? Did they correctly describe CloudFront + OAC (Origin Access Control) as the right pattern for serving public assets?",
+        communication: "Did they explain that OAC restricts S3 access to CloudFront only, so the bucket stays private? Did they explain that versioning enables restore from any previous version?",
+        execution: "Is the public-read ACL resource removed? Is aws_s3_bucket_versioning added with status=Enabled for the right buckets? Is the CloudFront/OAC recommendation technically correct?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-ic-06-seed-id-006",
+      title: "IC-06: AWS Credentials and Secrets Hardcoded in terraform.tfvars",
+      description: `A security researcher submitted a responsible disclosure report this morning. They found live AWS access keys in \`terraform/environments/production/terraform.tfvars\` committed to the public GitHub repository. The keys have been rotated, but the file also contains the production database password, JWT secret, and Stripe API key.
+
+The file was committed by a contractor 18 months ago and has been publicly readable ever since.
+
+**Root cause:**
+\`terraform/environments/production/terraform.tfvars\` contains \`aws_access_key\`, \`aws_secret_key\`, \`db_password\`, and other secrets in plaintext. The file is tracked by git and was pushed to the public repository.
+
+**Your task:**
+1. Add \`terraform/environments/production/terraform.tfvars\` to \`.gitignore\` immediately
+2. Remove the credential variables from \`variables.tf\` and the provider block — instead configure AWS credentials via environment variables (\`AWS_ACCESS_KEY_ID\` / \`AWS_SECRET_ACCESS_KEY\`) or an IAM role
+3. Move \`db_password\` to AWS Secrets Manager and reference it with a \`data "aws_secretsmanager_secret_version"\` data source
+4. Describe what should have been done at the time of the original contractor commit to prevent this
+
+**Files:** \`terraform/environments/production/terraform.tfvars\`, \`.gitignore\`, \`terraform/environments/production/variables.tf\`, \`terraform/modules/database/main.tf\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["terraform/environments/production/terraform.tfvars", ".gitignore", "terraform/environments/production/variables.tf"],
+      rubric: {
+        diagnosis: "Did they identify that the file is tracked by git and publicly visible? Did they understand that rotating the keys is necessary but not sufficient — the historical commit still exists unless the repo is scrubbed?",
+        design: "Did they add the tfvars to .gitignore? Did they replace provider credential vars with environment variable usage? Did they describe Secrets Manager as the correct pattern for db_password?",
+        communication: "Did they explain that git history must be purged (git filter-branch or BFG Repo-Cleaner) to fully remove the secret? Did they mention pre-commit hooks or git-secrets to prevent future commits?",
+        execution: "Is .gitignore updated? Is the provider block updated to not use variables for credentials? Is the Secrets Manager data source pattern correct?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-ic-07-seed-id-007",
+      title: "IC-07: Production RDS Has No Deletion Protection",
+      description: `A junior engineer was cleaning up staging resources last Friday. They ran \`terraform destroy\` from the wrong terminal window — the one connected to the production environment instead of staging. Terraform deleted the production RDS instance in 3 minutes. Because \`skip_final_snapshot = true\`, no snapshot was taken.
+
+Data from the past 6 hours was permanently lost. The previous manual snapshot was 6 hours old.
+
+**Root cause in \`terraform/modules/database/main.tf\`:**
+- No \`lifecycle { prevent_destroy = true }\` block — Terraform will destroy the resource on \`terraform destroy\`
+- \`skip_final_snapshot = true\` — no snapshot is created on deletion
+- \`deletion_protection\` attribute is absent (defaults to false at the RDS API level)
+
+**Your task:**
+1. Add \`deletion_protection = true\` to the \`aws_db_instance\` resource — this makes the RDS API refuse any delete request
+2. Add a \`lifecycle\` block with \`prevent_destroy = true\` — this makes Terraform refuse to plan a destroy of this resource
+3. Change \`skip_final_snapshot = false\` and add \`final_snapshot_identifier = "axiom-production-db-final-\${formatdate("YYYY-MM-DD", timestamp())}"\`
+4. Explain why both \`deletion_protection\` and \`prevent_destroy\` are needed (they protect at different layers)
+
+**Files:** \`terraform/modules/database/main.tf\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["terraform/modules/database/main.tf"],
+      rubric: {
+        diagnosis: "Did they identify all three missing protections — deletion_protection, prevent_destroy lifecycle, and skip_final_snapshot=true? Did they understand that these are three independent layers of protection?",
+        design: "Did they add all three fixes? Did they provide a meaningful final_snapshot_identifier? Did they explain that prevent_destroy is Terraform-layer only (circumventable by removing the block) while deletion_protection is AWS API-layer?",
+        communication: "Did they explain the layered defense — prevent_destroy stops the plan, deletion_protection stops the AWS API call, and final_snapshot ensures recovery if both are bypassed? Did they recommend workspace isolation (different AWS accounts for prod vs staging)?",
+        execution: "Are all three protections present in the resource block? Is deletion_protection=true? Is prevent_destroy=true in a lifecycle block? Is skip_final_snapshot=false with a valid identifier?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-ic-08-seed-id-008",
+      title: "IC-08: API Deployment Has No Resource Limits or Requests",
+      description: `The API deployment has been crashing other workloads on shared nodes. When traffic spikes (e.g. end-of-day batch processing), API pods consume all available memory on the node, triggering OOM kills of the monitoring agents and worker pods that share the node.
+
+The Kubernetes scheduler also cannot make good placement decisions for the API pods because it has no idea how much CPU and memory each pod will need — it places them arbitrarily and they end up co-located on already-starved nodes.
+
+**Root cause in \`kubernetes/deployments/api-deployment.yaml\`:**
+No \`resources\` block is defined under the container spec.
+
+**Your task:**
+Add appropriate resource requests and limits to the API container:
+\`\`\`yaml
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+\`\`\`
+Explain the difference between requests (used for scheduling) and limits (enforced at runtime), and why setting limits lower than available node memory prevents the OOM kill cascade.
+
+**Files:** \`kubernetes/deployments/api-deployment.yaml\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["kubernetes/deployments/api-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify the missing resources block? Did they understand that without requests, pods can be co-scheduled on the same node until it runs out of memory?",
+        design: "Did they add both requests and limits? Are the values reasonable for an API pod? Did they explain that requests affect scheduling while limits trigger OOM kills?",
+        communication: "Did they explain that Kubernetes uses requests for bin-packing decisions and limits as hard enforcement? Did they note that limits > requests is intentional (allows bursting)?",
+        execution: "Is the resources block added under the container spec? Are both requests and limits defined for memory and cpu? Are the values sensible (not 0 or unreasonably high)?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-ic-09-seed-id-009",
+      title: "IC-09: Worker Pod Runs with Privileged Security Context",
+      description: `A penetration test found that the worker pods run with \`privileged: true\` in their security context. The tester demonstrated a container breakout: they mounted the host filesystem from inside the worker container and read \`/etc/kubernetes/pki/ca.crt\` (the cluster CA certificate) and the kubelet's service account token, giving them full cluster admin access.
+
+This is a critical finding that must be resolved before the SOC 2 audit.
+
+**Root cause in \`kubernetes/deployments/worker-deployment.yaml\`:**
+\`securityContext.privileged: true\` gives the container full access to the host kernel — equivalent to root on the node.
+
+**Your task:**
+Replace the privileged security context with a hardened one:
+\`\`\`yaml
+securityContext:
+  privileged: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+\`\`\`
+Explain what each field does and why \`readOnlyRootFilesystem: true\` blocks a common post-exploitation technique.
+
+**Files:** \`kubernetes/deployments/worker-deployment.yaml\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["kubernetes/deployments/worker-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify privileged=true as enabling container escape? Did they understand that a privileged container has the same kernel access as the host node?",
+        design: "Did they replace with all the hardened fields: privileged=false, allowPrivilegeEscalation=false, runAsNonRoot=true, readOnlyRootFilesystem=true, capabilities.drop=['ALL']? Did they explain each field?",
+        communication: "Did they explain that readOnlyRootFilesystem prevents the attacker from writing malware or modifying scripts in the container filesystem post-exploitation? Did they mention that dropping ALL capabilities and runAsNonRoot together remove almost all privilege escalation vectors?",
+        execution: "Is privileged set to false (or removed)? Are allowPrivilegeEscalation, runAsNonRoot, and readOnlyRootFilesystem all set? Are all capabilities dropped?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-ic-10-seed-id-010",
+      title: "IC-10: API Deployment Missing Liveness and Readiness Probes",
+      description: `Users are reporting intermittent 502 errors on the API. Investigation shows that during deployments, Kubernetes routes traffic to new API pods before they have finished connecting to the database and warming up their connection pool — the pod is running but not ready to serve requests.
+
+Additionally, there have been two incidents in the past month where an API pod entered a deadlock state and stopped responding to requests. Because there is no liveness probe, the pod was never restarted — it just sat there for hours returning no response while Kubernetes kept routing traffic to it.
+
+**Root cause in \`kubernetes/deployments/api-deployment.yaml\`:**
+No \`readinessProbe\` or \`livenessProbe\` defined.
+
+**Your task:**
+Add both probes to the API container:
+\`\`\`yaml
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  failureThreshold: 3
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+\`\`\`
+Explain the difference between readiness (controls traffic routing) and liveness (controls restart), and why \`initialDelaySeconds\` on the liveness probe must be longer than on the readiness probe.
+
+**Files:** \`kubernetes/deployments/api-deployment.yaml\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["kubernetes/deployments/api-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify missing probes as causing both the deployment 502s (no readiness probe) and the deadlock incidents (no liveness probe)?",
+        design: "Did they add both readiness and liveness probes? Is the liveness initialDelaySeconds longer than the readiness one? Did they explain why (liveness fires restart, which would crash-loop a pod that just needs time to start)?",
+        communication: "Did they clearly explain the semantic difference — readiness controls whether traffic is sent to the pod, liveness controls whether the pod is restarted? Did they explain failureThreshold?",
+        execution: "Are both probes present? Do they target /healthz on the correct port? Is initialDelaySeconds on liveness >= initialDelaySeconds on readiness? Is periodSeconds reasonable?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-ic-11-seed-id-011",
+      title: "IC-11: Database Credentials Stored in ConfigMap Instead of Secret",
+      description: `During an internal security review, the team found that \`kubernetes/configmaps/app-config.yaml\` contains the production database URL (including password), JWT signing secret, and other sensitive values in a ConfigMap.
+
+Any developer with \`kubectl get configmap\` access in the \`axiom\` namespace can read these values in plaintext. Additionally, ConfigMaps are often included in cluster backups and audit exports where secrets would be redacted.
+
+**Root cause in \`kubernetes/configmaps/app-config.yaml\`:**
+\`database_url\`, \`db_password\`, \`jwt_secret\`, and \`stripe_api_key\` are stored as ConfigMap data instead of Kubernetes Secrets.
+
+**Your task:**
+1. Remove all sensitive values from \`app-config.yaml\` — keep only non-sensitive config (\`api_url\`, \`redis_url\`, \`kafka_brokers\`, \`log_level\`)
+2. Create a new \`kubernetes/secrets/app-secrets.yaml\` using a Kubernetes Secret (note: values must be base64-encoded in the manifest)
+3. Update the \`api-deployment.yaml\` to reference the secret via \`secretKeyRef\` instead of \`configMapKeyRef\`
+4. Explain why Kubernetes Secrets are not truly secure by default and what the correct production approach is (External Secrets Operator + AWS Secrets Manager)
+
+**Files:** \`kubernetes/configmaps/app-config.yaml\`, \`kubernetes/deployments/api-deployment.yaml\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["kubernetes/configmaps/app-config.yaml", "kubernetes/deployments/api-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify that ConfigMap data is stored unencrypted in etcd and readable by anyone with kubectl access? Did they note that Secrets are also base64-only by default (not encrypted) but enable fine-grained RBAC and encryption-at-rest?",
+        design: "Did they remove credentials from the ConfigMap? Did they create a Secret manifest with base64-encoded values? Did they update the deployment to use secretKeyRef? Did they recommend External Secrets Operator + AWS Secrets Manager?",
+        communication: "Did they explain that Kubernetes Secrets are only as secure as etcd encryption and RBAC? Did they describe the External Secrets Operator pattern — secrets live in AWS Secrets Manager and are synced into K8s Secrets, never in git?",
+        execution: "Are sensitive keys removed from the ConfigMap? Is the Secret manifest correct with base64-encoded values? Is the deployment updated to use secretKeyRef? Is the External Secrets approach described correctly?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-ic-12-seed-id-012",
+      title: "IC-12: API Pod Bound to ClusterAdmin ServiceAccount",
+      description: `The security audit found the most critical issue in the cluster: \`api-service-account\` is bound to the \`cluster-admin\` ClusterRole via a ClusterRoleBinding. All three API pod replicas run under this ServiceAccount.
+
+The penetration tester demonstrated the impact: from inside an API pod, they ran:
+\`\`\`
+curl -s https://kubernetes.default/api/v1/namespaces --header "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+\`\`\`
+And received a full list of all namespaces, secrets, and resources in the cluster. They then deleted the monitoring namespace to prove unrestricted write access.
+
+**Root cause in \`kubernetes/rbac/roles.yaml\`:**
+\`ClusterRoleBinding axiom-api-admin-binding\` binds \`api-service-account\` to \`cluster-admin\`.
+
+**Your task:**
+1. Delete the \`ClusterRoleBinding\` that grants cluster-admin
+2. Create a minimal \`Role\` (not \`ClusterRole\`) in the \`axiom\` namespace with only the permissions the API actually needs: \`get\` and \`list\` on \`configmaps\`
+3. Create a \`RoleBinding\` to bind \`api-service-account\` to this new Role
+4. Explain the difference between a Role/RoleBinding (namespace-scoped) and ClusterRole/ClusterRoleBinding (cluster-wide), and why the API should never need cluster-wide permissions
+
+**Files:** \`kubernetes/rbac/roles.yaml\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["kubernetes/rbac/roles.yaml"],
+      rubric: {
+        diagnosis: "Did they identify the ClusterRoleBinding to cluster-admin as giving API pods unrestricted cluster-wide access? Did they understand that the service account token is auto-mounted into every pod?",
+        design: "Did they remove the ClusterRoleBinding? Did they create a namespace-scoped Role (not ClusterRole)? Is the Role limited to get/list on configmaps? Is a RoleBinding used (not ClusterRoleBinding)?",
+        communication: "Did they explain Role vs ClusterRole scope? Did they note that if the API doesn't need K8s API access at all, automountServiceAccountToken: false is even better? Did they explain the penetration test impact clearly?",
+        execution: "Is the ClusterRoleBinding removed or replaced? Is the new Role namespace-scoped with minimal permissions? Is RoleBinding (not ClusterRoleBinding) used for the api-service-account?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-ic-13-seed-id-013",
+      title: "IC-13: Frontend Deployment Has One Replica and No PodDisruptionBudget",
+      description: `During last month's Kubernetes node upgrade, the ops team drained nodes one at a time. When the node hosting the single frontend pod was drained, Kubernetes evicted the pod. The pod took 47 seconds to reschedule and start on a new node — during which the frontend returned 503 to all users.
+
+The incident report flagged two missing safeguards: multiple replicas so draining one node doesn't take down the only frontend instance, and a PodDisruptionBudget to ensure Kubernetes cannot evict all instances simultaneously.
+
+**Root cause in \`kubernetes/deployments/frontend-deployment.yaml\`:**
+- \`replicas: 1\` — single point of failure
+- No \`PodDisruptionBudget\` resource exists
+
+**Your task:**
+1. Change \`replicas: 1\` to \`replicas: 2\` so there is always at least one replica available during a node drain
+2. Create a PodDisruptionBudget in \`kubernetes/deployments/frontend-deployment.yaml\` (or a new file) with \`minAvailable: 1\`
+3. Explain why a PDB with \`minAvailable: 1\` would have prevented the outage even if \`replicas\` had stayed at 1
+
+**Files:** \`kubernetes/deployments/frontend-deployment.yaml\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["kubernetes/deployments/frontend-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify both the single replica and the missing PDB as contributing to the outage? Did they understand that even with 2 replicas, a PDB is needed to prevent both from being evicted simultaneously?",
+        design: "Did they set replicas to at least 2? Did they add a PodDisruptionBudget with minAvailable: 1 (or maxUnavailable: 1)? Is the PDB selector matching the frontend app label?",
+        communication: "Did they explain that a PDB with minAvailable: 1 would have blocked the drain of the node hosting the last frontend pod, even with replicas: 1? Did they explain voluntary vs involuntary disruptions?",
+        execution: "Is replicas set to >= 2? Is a PodDisruptionBudget resource present with the correct selector and minAvailable: 1? Would the PDB have prevented the specific outage scenario?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-ic-14-seed-id-014",
+      title: "IC-14: Worker Deployment Uses imagePullPolicy: Never",
+      description: `After the team shipped a critical security patch to the worker image last Tuesday, they pushed \`axiom/worker:3.2.2\` to the registry and updated the deployment manifest. However, worker pods on two of the three nodes kept running the old \`3.2.1\` image — the patched version never loaded.
+
+Investigation found \`imagePullPolicy: Never\` in the worker deployment. Kubernetes was using the \`3.2.1\` image cached on those nodes from a previous pull and never contacted the registry to check for the updated image.
+
+**Root cause in \`kubernetes/deployments/worker-deployment.yaml\`:**
+\`imagePullPolicy: Never\` prevents Kubernetes from ever pulling a new image from the registry.
+
+**Your task:**
+1. Change \`imagePullPolicy\` to \`IfNotPresent\` (correct for pinned semver tags like \`3.2.1\`)
+2. Explain when you would use \`Always\` vs \`IfNotPresent\` and why \`Never\` should only exist in local development environments
+3. Explain why using a mutable image tag (like \`:latest\`) with \`IfNotPresent\` is also dangerous
+
+**Files:** \`kubernetes/deployments/worker-deployment.yaml\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["kubernetes/deployments/worker-deployment.yaml"],
+      rubric: {
+        diagnosis: "Did they identify imagePullPolicy: Never as the reason cached old images were used? Did they understand the deployment was technically 'updated' but nodes pulled nothing?",
+        design: "Did they change to IfNotPresent? Did they correctly distinguish: Never=always use cache, IfNotPresent=pull if not on node, Always=always pull from registry? Did they explain the :latest + IfNotPresent trap?",
+        communication: "Did they explain that IfNotPresent is correct for pinned tags (since the same tag always means the same image), while Always is needed for mutable tags? Did they explain that :latest + IfNotPresent leads to different nodes running different versions?",
+        execution: "Is imagePullPolicy changed from Never to IfNotPresent? Are Always, IfNotPresent, and Never accurately described with correct use cases?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-ic-15-seed-id-015",
+      title: "IC-15: Database Password Printed to GitHub Actions Log",
+      description: `A new engineer opened a pull request this morning, noticed the GitHub Actions log from the last deploy, and shared a screenshot in Slack: the log clearly shows \`Deploying with DB password: Pr0duct10n#DB2024!\` and the JWT secret. The logs are visible to all 23 repository collaborators and are retained by GitHub for 90 days.
+
+The password has been rotated, but the CI pipeline still contains the \`echo\` statements that caused the leak.
+
+**Root cause in \`.github/workflows/deploy.yml\`:**
+The "Debug deployment config" step uses \`echo "... ${{ secrets.DB_PASSWORD }}"\`. GitHub Actions interpolates the secret value into the shell command before it runs, so the expanded plaintext appears in the log.
+
+**Your task:**
+1. Delete the entire "Debug deployment config" step from the workflow
+2. Explain why GitHub's secret masking is not a reliable safeguard (give at least two bypass scenarios)
+3. If you need to verify a secret is configured without printing it, show the correct approach using an \`if:\` condition or \`[[ -n "$VAR" ]]\` check
+
+**Files:** \`.github/workflows/deploy.yml\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: [".github/workflows/deploy.yml"],
+      rubric: {
+        diagnosis: "Did they identify that ${{ secrets.X }} is interpolated before shell execution, printing the raw value to stdout? Did they understand this is a design-time error, not a runtime one?",
+        design: "Did they remove the debug step? Did they give two valid masking bypass scenarios (e.g. base64 encoding, character-by-character echo, truncation)? Did they show a safe alternative like [[ -n \"$DB_PASSWORD\" ]] && echo 'DB_PASSWORD is set'?",
+        communication: "Did they explain that GitHub's masking only covers the exact stored value and known transformations? Did they mention that secrets printed to logs are also captured by any third-party action in the same job?",
+        execution: "Is the debug step removed? Are at least two masking bypass scenarios described accurately? Is a safe verification alternative shown?",
+      },
+      expectedMinutes: 20,
+    },
+  ];
+
+  for (const t of infracoreTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.DEVOPS, codebaseId: infracoreCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge tickets upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore tickets upserted.`
   );
 }

@@ -15,6 +15,7 @@ enum Stack {
   REACT
   SYSTEM_DESIGN
   PYTHON
+  DEVOPS
 }
 
 enum Difficulty {

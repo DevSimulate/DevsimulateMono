@@ -21,6 +21,7 @@ const STACK_META: Record<string, { label: string; color: string; bg: string }> =
   PYTHON:        { label: "Python + LangChain",  color: "#92400E", bg: "#FEF3C7" },
   NODE:          { label: "Node.js + TypeScript", color: "#1D4ED8", bg: "#DBEAFE" },
   REACT:         { label: "React + TypeScript",  color: "#0369A1", bg: "#E0F2FE" },
+  DEVOPS:        { label: "Terraform + K8s",     color: "#065F46", bg: "#ECFDF5" },
 };
 
 interface Ticket {

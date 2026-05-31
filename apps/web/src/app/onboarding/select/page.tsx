@@ -120,6 +120,21 @@ const CARDS: Card[] = [
     href: "/tickets?codebaseId=dataforge-seed-id-001",
   },
   {
+    id: "infracore",
+    name: "InfraCore",
+    subtitle: "Terraform + Kubernetes infrastructure platform",
+    logoLabel: "⚙",
+    logoBg: "#ECFDF5",
+    logoColor: "#065F46",
+    stack: "Terraform + Kubernetes",
+    stackKey: "DEVOPS",
+    difficulties: ["JUNIOR", "MID", "SENIOR"],
+    ticketCount: "15 tickets available",
+    active: true,
+    cornerBadge: { label: "● New", bg: "#ECFDF5", color: "#065F46" },
+    href: "/tickets?codebaseId=infracore-seed-id-001",
+  },
+  {
     id: "searchcore",
     name: "SearchCore",
     subtitle: "FAANG-style search system",
@@ -157,7 +172,7 @@ export default function SelectCodebasePage() {
       {/* Beta banner */}
       <div className="w-full px-4 py-3 text-center text-sm font-medium"
         style={{ background: "#FEF9C3", borderBottom: "1px solid #FDE68A", color: "#92400E" }}>
-        🚧 DevSim is in beta — System Design Arena, NovaTech CRM, RAGCore, TechCorp HRM, ShopFront, and DataForge are live now. More codebases dropping soon.
+        🚧 DevSim is in beta — System Design Arena, NovaTech CRM, RAGCore, TechCorp HRM, ShopFront, DataForge, and InfraCore are live now. More codebases dropping soon.
         Your feedback shapes what we build next.
       </div>
 
@@ -222,6 +237,7 @@ export default function SelectCodebasePage() {
                     : card.id === "techcorp" ? "2px solid #1D4ED8"
                     : card.id === "shopfront" ? "2px solid #0369A1"
                     : card.id === "dataforge" ? "2px solid #C2410C"
+                    : card.id === "infracore" ? "2px solid #059669"
                     : "2px solid #22c55e"
                     : "1px solid #E4E2DD",
                   boxShadow: card.active
@@ -230,6 +246,7 @@ export default function SelectCodebasePage() {
                     : card.id === "techcorp" ? "0 0 0 3px rgba(29,78,216,0.12)"
                     : card.id === "shopfront" ? "0 0 0 3px rgba(3,105,161,0.12)"
                     : card.id === "dataforge" ? "0 0 0 3px rgba(194,65,12,0.12)"
+                    : card.id === "infracore" ? "0 0 0 3px rgba(5,150,105,0.12)"
                     : "0 0 0 3px rgba(34,197,94,0.12)"
                     : "0 1px 3px rgba(0,0,0,0.04)",
                   animationDelay: `${i * 60}ms`,
@@ -252,6 +269,8 @@ export default function SelectCodebasePage() {
                       ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(3,105,161,0.25)"
                       : card.id === "dataforge"
                       ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(194,65,12,0.25)"
+                      : card.id === "infracore"
+                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(5,150,105,0.25)"
                       : "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(34,197,94,0.20)";
                     (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
                     (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
@@ -269,6 +288,8 @@ export default function SelectCodebasePage() {
                       ? "0 0 0 3px rgba(3,105,161,0.12)"
                       : card.id === "dataforge"
                       ? "0 0 0 3px rgba(194,65,12,0.12)"
+                      : card.id === "infracore"
+                      ? "0 0 0 3px rgba(5,150,105,0.12)"
                       : "0 0 0 3px rgba(34,197,94,0.12)";
                     (e.currentTarget as HTMLDivElement).style.transform = "";
                     (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
