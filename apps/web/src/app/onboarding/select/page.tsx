@@ -166,6 +166,14 @@ const CARDS: Card[] = [
 export default function SelectCodebasePage() {
   const router = useRouter();
 
+  function navigate(card: Card) {
+    if (!card.active || !card.href) return;
+    if (card.stackKey) localStorage.setItem("ds_selected_stack", card.stackKey);
+    const guideUrl = `/onboarding/guide${card.href.includes("codebaseId") ? `?codebaseId=${card.href.split("codebaseId=")[1]}` : ""}`;
+    const seen = localStorage.getItem("ds_guide_seen");
+    router.push(seen ? card.href : guideUrl);
+  }
+
   return (
     <main className="bg-grid min-h-screen" style={{ background: "#F7F6F3" }}>
 
@@ -251,12 +259,7 @@ export default function SelectCodebasePage() {
                     : "0 1px 3px rgba(0,0,0,0.04)",
                   animationDelay: `${i * 60}ms`,
                 }}
-                onClick={() => {
-                  if (card.active && card.href) {
-                    if (card.stackKey) localStorage.setItem("ds_selected_stack", card.stackKey);
-                    router.push(card.href);
-                  }
-                }}
+                onClick={() => navigate(card)}
                 onMouseEnter={e => {
                   if (card.active) {
                     const shadow = card.id === "system-design"
@@ -350,11 +353,7 @@ export default function SelectCodebasePage() {
                   {/* CTA — only on active card */}
                   {card.active && (
                     <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        if (card.stackKey) localStorage.setItem("ds_selected_stack", card.stackKey);
-                        router.push(card.href!);
-                      }}
+                      onClick={e => { e.stopPropagation(); navigate(card); }}
                       className="btn-primary w-full text-sm text-center"
                     >
                       Start with {card.name} →

@@ -193,6 +193,7 @@ function GuideContent() {
   }, []);
 
   function handleGetStarted() {
+    localStorage.setItem("ds_guide_seen", "true");
     if (getToken()) {
       window.location.href = ticketsHref;
     } else {
