@@ -62,9 +62,10 @@ router.post(
  */
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   const stack = req.query["stack"] as string | undefined;
+  const codebaseId = req.query["codebaseId"] as string | undefined;
 
   try {
-    const tickets = await listTickets(stack);
+    const tickets = await listTickets(stack, codebaseId);
     res.json({ data: tickets });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list tickets";

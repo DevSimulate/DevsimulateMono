@@ -73,13 +73,17 @@ export async function assignTicket(
 }
 
 /**
- * Returns all available tickets, optionally filtered by stack.
+ * Returns all available tickets, optionally filtered by stack and/or codebaseId.
  */
 export async function listTickets(
-  stack?: string
+  stack?: string,
+  codebaseId?: string
 ): Promise<TicketWithCodebase[]> {
   return prisma.ticket.findMany({
-    where: stack ? { stack: stack as Ticket["stack"] } : undefined,
+    where: {
+      ...(stack ? { stack: stack as Ticket["stack"] } : {}),
+      ...(codebaseId ? { codebaseId } : {}),
+    },
     include: { codebase: true },
     orderBy: { createdAt: "desc" },
   });

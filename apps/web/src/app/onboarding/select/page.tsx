@@ -72,7 +72,7 @@ const CARDS: Card[] = [
     active: true,
     cornerBadge: { label: "● New", bg: "#FEF3C7", color: "#92400E" },
     stackKey: "PYTHON",
-    href: "/tickets?stack=PYTHON",
+    href: "/tickets?codebaseId=ragcore-seed-id-001",
   },
   {
     id: "techcorp",
@@ -117,7 +117,7 @@ const CARDS: Card[] = [
     ticketCount: "15 tickets available",
     active: true,
     cornerBadge: { label: "● New", bg: "#FFF7ED", color: "#C2410C" },
-    href: "/tickets?stack=PYTHON",
+    href: "/tickets?codebaseId=dataforge-seed-id-001",
   },
   {
     id: "searchcore",

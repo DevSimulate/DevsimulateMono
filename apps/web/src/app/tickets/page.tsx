@@ -50,6 +50,7 @@ function TicketsList(): React.ReactElement {
   const router = useRouter();
   const searchParams = useSearchParams();
   const stack = searchParams.get("stack") ?? undefined;
+  const codebaseId = searchParams.get("codebaseId") ?? undefined;
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,16 +61,20 @@ function TicketsList(): React.ReactElement {
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      localStorage.setItem("ds_submit_return", `/tickets${stack ? `?stack=${stack}` : ""}`);
+      const returnParams = new URLSearchParams();
+      if (stack) returnParams.set("stack", stack);
+      if (codebaseId) returnParams.set("codebaseId", codebaseId);
+      localStorage.setItem("ds_submit_return", `/tickets${returnParams.size ? `?${returnParams}` : ""}`);
       window.location.href = GITHUB_AUTH_URL;
       return;
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     const headers = { Authorization: `Bearer ${token}` };
-    const ticketsUrl = stack
-      ? `${apiUrl}/tickets?stack=${stack}`
-      : `${apiUrl}/tickets`;
+    const params = new URLSearchParams();
+    if (stack) params.set("stack", stack);
+    if (codebaseId) params.set("codebaseId", codebaseId);
+    const ticketsUrl = `${apiUrl}/tickets${params.size ? `?${params}` : ""}`;
 
     Promise.all([
       axios.get<{ data: Ticket[] }>(ticketsUrl, { headers }),
