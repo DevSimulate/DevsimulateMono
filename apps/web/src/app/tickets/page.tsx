@@ -86,7 +86,7 @@ function TicketsList(): React.ReactElement {
       })
       .catch(() => null)
       .finally(() => setLoading(false));
-  }, [router, stack]);
+  }, [router, stack, codebaseId]);
 
   async function handleAssign(ticketId: string): Promise<void> {
     const token = getToken();
