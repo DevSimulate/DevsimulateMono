@@ -1,77 +1,86 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-import simpleGit, { SimpleGit } from "simple-git";
+import simpleGit, { SimpleGit, SimpleGitOptions } from "simple-git";
 import { Ticket, Codebase } from "../types";
 
 type TicketWithCodebase = Ticket & { codebase: Codebase };
 
+let _resolvedGitBinary: string | null = null;
+
 /**
- * Finds the directory that contains the git executable and patches it into
- * process.env.PATH so that `spawn("git", ...)` resolves without needing a
- * custom binary path (which simple-git rejects if it contains spaces).
- *
- * Call this once at extension activation before any simpleGit() usage.
+ * Resolves the absolute path to the git executable. Returns "git" as a
+ * fallback so simpleGit still tries the system PATH.
  */
-export function ensureGitOnPath(): void {
-  // Already on PATH — nothing to do
+function resolveGitBinary(): string {
+  if (_resolvedGitBinary !== null) {
+    return _resolvedGitBinary;
+  }
+
+  // 1. Already on PATH — use it as-is
   try {
     const { execFileSync } = require("child_process") as typeof import("child_process");
     execFileSync("git", ["--version"], { timeout: 2000 });
-    return;
-  } catch { /* not on PATH yet */ }
+    _resolvedGitBinary = "git";
+    return _resolvedGitBinary;
+  } catch { /* not on PATH */ }
 
-  const gitDir = findGitDir();
-  if (!gitDir) return;
-
-  const sep = process.platform === "win32" ? ";" : ":";
-  const current = process.env["PATH"] ?? "";
-  if (!current.includes(gitDir)) {
-    process.env["PATH"] = `${gitDir}${sep}${current}`;
-  }
-}
-
-function findGitDir(): string | undefined {
-  // 1. VS Code built-in git extension API
+  // 2. VS Code built-in git extension API (most reliable on Windows/Mac)
   try {
     const ext = vscode.extensions.getExtension("vscode.git");
     const api = ext?.exports?.getAPI?.(1);
-    if (api?.git?.path) {
-      return path.dirname(api.git.path as string);
+    if (api?.git?.path && fs.existsSync(api.git.path as string)) {
+      _resolvedGitBinary = api.git.path as string;
+      return _resolvedGitBinary;
     }
   } catch { /* ignore */ }
 
-  // 2. VS Code git.path setting
+  // 3. VS Code git.path setting
   try {
     const cfg = vscode.workspace.getConfiguration("git");
     const cfgPath = cfg.get<string | string[]>("path");
     if (cfgPath) {
       const p = Array.isArray(cfgPath) ? cfgPath[0] : cfgPath;
-      return path.dirname(p);
+      if (p && fs.existsSync(p)) {
+        _resolvedGitBinary = p;
+        return _resolvedGitBinary;
+      }
     }
   } catch { /* ignore */ }
 
-  // 3. Common Windows install locations
+  // 4. Common Windows install locations
   if (process.platform === "win32") {
     const candidates = [
-      "C:\\Program Files\\Git\\cmd",
-      "C:\\Program Files\\Git\\bin",
-      "C:\\Program Files (x86)\\Git\\cmd",
-      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd`,
-      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd`,
+      "C:\\Program Files\\Git\\cmd\\git.exe",
+      "C:\\Program Files\\Git\\bin\\git.exe",
+      "C:\\Program Files (x86)\\Git\\cmd\\git.exe",
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd\\git.exe`,
+      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd\\git.exe`,
     ];
-    for (const dir of candidates) {
-      if (dir && fs.existsSync(path.join(dir, "git.exe"))) {
-        return dir;
+    for (const p of candidates) {
+      if (p && fs.existsSync(p)) {
+        _resolvedGitBinary = p;
+        return _resolvedGitBinary;
       }
     }
   }
 
-  return undefined;
+  _resolvedGitBinary = "git";
+  return _resolvedGitBinary;
+}
+
+/** @deprecated PATH patching is no longer needed — kept for backwards compat. */
+export function ensureGitOnPath(): void {
+  resolveGitBinary();
 }
 
 function makeGit(baseDir?: string): SimpleGit {
-  return baseDir ? simpleGit(baseDir) : simpleGit();
+  const binary = resolveGitBinary();
+  const opts: Partial<SimpleGitOptions> = { binary };
+  if (baseDir) {
+    opts.baseDir = baseDir;
+  }
+  return simpleGit(opts);
 }
 
 /**
