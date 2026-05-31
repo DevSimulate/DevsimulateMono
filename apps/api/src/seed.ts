@@ -5,6 +5,11 @@ const prisma = new PrismaClient();
 export async function runSeed(): Promise<void> {
   console.log("[seed] Seeding database...");
 
+  // Ensure enum values added after initial migration exist in the DB.
+  // ALTER TYPE ADD VALUE cannot run inside a transaction, so we use
+  // $executeRawUnsafe in autocommit mode before any upserts.
+  await prisma.$executeRawUnsafe(`ALTER TYPE "Stack" ADD VALUE IF NOT EXISTS 'DEVOPS'`);
+
   const codebase = await prisma.codebase.upsert({
     where: { id: "novatech-crm-seed-id-001" },
     update: {},
