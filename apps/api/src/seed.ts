@@ -1759,8 +1759,419 @@ The async IIFE in \`ProductPage.tsx\`'s \`useEffect\` has no \`try/catch\`. When
     });
   }
 
+  // ── DataForge codebase ────────────────────────────────────────────────────
+  const dataforgeCodebase = await prisma.codebase.upsert({
+    where: { id: "dataforge-seed-id-001" },
+    update: {},
+    create: {
+      id: "dataforge-seed-id-001",
+      name: "DataForge",
+      stack: Stack.PYTHON,
+      repoUrl: "https://github.com/OSSAMA-prog-droid/DataForge",
+      description: "A Python + Kafka + Spark data pipeline platform that ingests data from operational databases and event streams, transforms with Apache Spark, and loads into a PostgreSQL data warehouse.",
+      companyLore: `DataForge is a B2B SaaS platform that helps mid-market companies move data from their operational databases and event streams into a centralised data warehouse for analytics. Founded in 2021, the company grew from a single-client engagement into a product after three more clients signed up within 6 months.
+
+The engineering team is 8 developers. The codebase was originally a single-client proof-of-concept and was productised faster than expected. Several critical bugs were introduced during the rapid productisation phase and have not been caught in code review.
+
+Key architectural decisions engineers must know:
+- Data flows: Source DB / REST API → Kafka topic → Spark batch job (every 15 min) → PostgreSQL warehouse
+- Deduplication is handled via Redis with a key per event_id. The TTL must exceed the Kafka retry window or duplicates slip through
+- Watermarks track the last-processed timestamp per pipeline and are stored in Redis. They must use UTC — local server time causes wrong aggregation windows for non-UTC deployments
+- Spark checkpoints are used for streaming state recovery. The checkpoint path must be persistent — /tmp is wiped on container restart
+- The DLQ (dead letter queue) topic receives all failed records but has no consumer — failed records accumulate until Kafka retention expires
+- Source connector credentials (DB passwords, API keys) are stored in the source_credentials table as plaintext JSON
+
+Known production incidents in the last 60 days:
+- Financial reports showing NaN for merchant revenue windows where any transaction had a NULL amount
+- 25,000 transaction records silently lost during a 2-minute deployment window (offset reset bug)
+- Redis memory grew from 50MB to 4.2GB over 3 months — dedup keys never expire properly
+- Duplicate rows in the warehouse after an end-of-day batch overran the 15-minute scheduler window`,
+    },
+  });
+
+  const dataforgeTickets = [
+    {
+      id: "ticket-df-01-seed-id-001",
+      title: "DF-01: 25,000 Records Lost Every Time the Consumer Restarts",
+      description: `Operations reports that every deployment or consumer restart results in a gap in the warehouse data. The gap corresponds exactly to the messages produced during the deployment window. No errors appear in the logs — the consumer simply starts from the wrong position.
+
+**What's happening:**
+The Kafka consumer in \`src/kafka/consumer.py\` is configured with \`auto.offset.reset='latest'\`. When the consumer restarts with no committed offset for a partition, it starts from the latest available message — skipping everything produced during the downtime window. At DataForge's ingest rate of ~50,000 events/min, a 30-second deploy window loses ~25,000 records permanently.
+
+**Your task:**
+1. Change \`auto.offset.reset\` from \`'latest'\` to \`'earliest'\` in \`get_consumer()\`
+2. This ensures that if the consumer has no committed offset, it reads from the beginning of the topic rather than the end
+3. Verify the test \`tests/test_consumer.py::TestOffsetReset::test_consumer_configured_with_latest_offset\` now demonstrates the fix
+
+**Files:** \`src/kafka/consumer.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/kafka/consumer.py"],
+      rubric: {
+        diagnosis: "Did they find auto.offset.reset='latest' as the root cause? Did they understand that 'latest' means 'start from the tip of the topic if no committed offset exists', which causes records produced during downtime to be permanently skipped?",
+        design: "Did they change to 'earliest'? Did they understand that this works correctly in combination with committed offsets — on a healthy restart the consumer resumes from the committed position, not from the very beginning of the topic?",
+        communication: "Did they explain the difference between 'latest' (start at tip if no offset) and 'earliest' (start at beginning if no offset)? Did they quantify the data loss rate based on ingest volume?",
+        execution: "Is auto.offset.reset changed to 'earliest'? Does the consumer now resume from the committed offset on restart rather than skipping ahead?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-df-02-seed-id-002",
+      title: "DF-02: One Malformed Record Stops the Entire Pipeline",
+      description: `The data engineering team reports that the transaction pipeline occasionally stops processing completely. Investigation shows a single malformed record in the Kafka topic caused the consumer process to crash. All records produced after that point are unprocessed until the consumer is manually restarted.
+
+**What's happening:**
+\`run_consumer()\` in \`src/kafka/consumer.py\` has no try/except around the record processing. When \`json.loads()\` fails on a malformed payload or the handler raises an exception, the error propagates out of the poll loop and crashes the consumer. All subsequent messages in the partition are blocked.
+
+**Your task:**
+1. Wrap the record processing block (json.loads + handler call) in try/except inside the poll loop
+2. On exception: call \`send_to_dlq(raw, error, topic)\` to route the bad record to the dead letter queue
+3. Log the error and continue — one bad record must not stop the pipeline
+4. After the fix, a consumer processing [good, bad, good] records must process all 3, sending the bad one to the DLQ
+
+**Files:** \`src/kafka/consumer.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/kafka/consumer.py"],
+      rubric: {
+        diagnosis: "Did they find the missing try/except in the poll loop? Did they understand that any unhandled exception in the while True loop terminates the entire consumer, not just the current message?",
+        design: "Did they wrap only the per-record processing (not the entire poll loop) in try/except? Did they send failed records to the DLQ rather than silently dropping them? Did they continue the loop after the exception?",
+        communication: "Did they explain the blast radius — one bad record out of millions stops all processing? Did they explain the DLQ pattern and why it's better than silently skipping bad records?",
+        execution: "Does the consumer continue after a bad record? Is the bad record sent to the DLQ? Are good records before and after the bad one still processed?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-df-03-seed-id-003",
+      title: "DF-03: Customer PII Written to Application Logs — GDPR Violation",
+      description: `The DPO (Data Protection Officer) has flagged a GDPR violation after discovering that customer email addresses, phone numbers, and SSNs are written to the application logs at DEBUG level. The logs are shipped to a third-party aggregator (Datadog) and retained for 90 days. Several customer records from EU tenants are present in the logs.
+
+**What's happening:**
+\`log_record()\` and \`log_record_error()\` in \`src/utils/logging.py\` log the full record dict including all PII fields: \`email\`, \`phone\`, \`ssn\`, \`date_of_birth\`, \`card_last_four\`, \`ip_address\`. This violates GDPR Article 5 (data minimisation) and creates a secondary data store of PII that was never disclosed in the privacy policy.
+
+**Your task:**
+1. Add a \`scrub_pii(record: dict) -> dict\` function that removes all keys in \`PII_FIELDS\` from a copy of the record before logging
+2. Update \`log_record()\` and \`log_record_error()\` to call \`scrub_pii(record)\` before passing to the logger
+3. Log only the record ID and type — never the full payload at any log level
+
+**Files:** \`src/utils/logging.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/utils/logging.py"],
+      rubric: {
+        diagnosis: "Did they find that log_record() passes the full record dict to structlog.debug()? Did they identify all PII_FIELDS as the sensitive fields? Did they note both log_record and log_record_error have the same issue?",
+        design: "Did they scrub at the logging layer (not the call sites)? Did they create a copy of the record rather than mutating the original? Did they apply scrubbing to both log functions?",
+        communication: "Did they cite GDPR Article 5 or equivalent? Did they explain the secondary exposure risk — logs shipped to Datadog create a secondary data store? Did they recommend a log retention policy review?",
+        execution: "Does the scrubbed log contain no PII_FIELDS keys? Is the original record dict unchanged after logging? Are both log_record and log_record_error fixed?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-df-04-seed-id-004",
+      title: "DF-04: Spark Job Reads 180M Rows Every 15 Minutes",
+      description: `The Spark transactions job is scheduled every 15 minutes but takes 45+ minutes to complete. Profiling shows it reads all 180M rows from the transactions table on every run, processes ~50K new rows, then discards the rest. The cluster bill doubled last month.
+
+**What's happening:**
+\`read_transactions()\` in \`src/spark/jobs/transactions.py\` calls \`spark.read.jdbc(url, table="transactions")\` with no WHERE clause. The \`watermark\` parameter is accepted but never applied. The full table is scanned on every run.
+
+**Your task:**
+1. Pass the watermark as a JDBC predicate: \`predicates=[f"created_at > '{watermark.isoformat()}'"]\`
+2. This reduces the scan from 180M rows to ~50K rows per run — a 3,600× improvement
+3. Ensure the watermark is advanced after each successful run so the next run picks up from where this one left off
+
+**Files:** \`src/spark/jobs/transactions.py\`, \`src/pipeline/watermark.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/spark/jobs/transactions.py", "src/pipeline/watermark.py"],
+      rubric: {
+        diagnosis: "Did they find that the watermark parameter is accepted but never used in the JDBC read? Did they understand that reading 180M rows to process 50K is the root cause of both the latency and the cost?",
+        design: "Did they add the predicates parameter to spark.read.jdbc()? Did they use the correct column (created_at)? Did they ensure the watermark is advanced after a successful run?",
+        communication: "Did they quantify the improvement (180M → 50K rows = 3,600× less data read)? Did they explain why the current approach defeats the purpose of incremental processing?",
+        execution: "Does the job now read only rows newer than the watermark? Is the predicate correctly formatted for the JDBC driver? Is the watermark advanced after the job completes?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-df-05-seed-id-005",
+      title: "DF-05: Duplicate Transactions in Warehouse — Dedup TTL Too Short",
+      description: `Finance has flagged duplicate transaction records in the warehouse. Investigation shows the same transaction_id appearing twice in warehouse.transactions for ~0.8% of records. This is corrupting revenue aggregations by hundreds of thousands of dollars per month.
+
+**What's happening:**
+The Redis deduplication TTL in \`src/pipeline/dedup.py\` is set to 60 seconds. Kafka's default producer retry window is up to 5 minutes. When a producer retries a failed publish after 90 seconds, the dedup key has expired — \`is_duplicate()\` returns False and the event is processed a second time.
+
+**Your task:**
+1. Increase \`DEDUP_TTL_SECONDS\` from 60 to 600 (10 minutes) — at least 2× the maximum Kafka retry window
+2. Document why this value was chosen in a comment
+3. Consider whether the dedup key should also include the pipeline_id to avoid collisions across pipelines
+
+**Files:** \`src/pipeline/dedup.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/pipeline/dedup.py"],
+      rubric: {
+        diagnosis: "Did they find the DEDUP_TTL_SECONDS = 60 and understand that 60 seconds < 5-minute Kafka retry window? Did they quantify the duplicate rate (0.8%) and its financial impact?",
+        design: "Did they increase the TTL to at least 600 seconds? Did they explain the relationship between TTL and Kafka retry window? Did they consider pipeline_id isolation?",
+        communication: "Did they explain the timing window — why a 60s TTL is insufficient given Kafka's retry behaviour? Did they mention the financial impact of duplicate records in aggregations?",
+        execution: "Is DEDUP_TTL_SECONDS increased to 600 or higher? Does the comment explain the reasoning? Is the fix a single-line change with clear justification?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-df-06-seed-id-006",
+      title: "DF-06: Kafka Producer Silently Loses Messages on Broker Failover",
+      description: `During last month's Kafka broker rolling upgrade, the data team noticed a 3-minute gap in warehouse data corresponding exactly to the leader election window. No producer errors were logged — the messages appeared to succeed. Post-incident analysis confirmed ~150,000 records were permanently lost.
+
+**What's happening:**
+The Kafka producer in \`src/kafka/producer.py\` is configured with \`acks='1'\`. With acks=1, the broker confirms the write after only the partition leader acknowledges it. If the leader crashes before replicating to followers, the message is lost — but the producer receives no error.
+
+**Your task:**
+1. Change \`acks\` from \`'1'\` to \`'all'\` in the producer config
+2. Add \`'enable.idempotence': True\` to prevent duplicate messages on retry
+3. Add \`'max.in.flight.requests.per.connection': 5\` (required with idempotence)
+4. These three settings together guarantee exactly-once delivery to the broker
+
+**Files:** \`src/kafka/producer.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/kafka/producer.py"],
+      rubric: {
+        diagnosis: "Did they find acks='1' and understand that it only waits for the leader, not the replicas? Did they distinguish between the producer getting a success response and the data actually being safe?",
+        design: "Did they set acks='all'? Did they add enable.idempotence=True? Did they understand that idempotence requires max.in.flight.requests.per.connection <= 5?",
+        communication: "Did they explain the leader failover scenario — leader acknowledges, crashes before replicating, follower is elected with no knowledge of the message? Did they explain the idempotence requirement?",
+        execution: "Are all three config changes in place? Is the combination of acks=all + enable.idempotence the correct approach for durable delivery?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-df-07-seed-id-007",
+      title: "DF-07: Failed Records Pile Up in DLQ Forever — No Consumer Exists",
+      description: `The Kafka DLQ topic \`dataforge.dlq\` has accumulated 2.3 million messages over 6 months. These are records that failed validation or processing. When the 7-day Kafka retention window expires, they are permanently deleted with no retry, no alert, and no visibility. DataForge has no idea which client data was affected.
+
+**What's happening:**
+\`send_to_dlq()\` in \`src/kafka/dlq.py\` correctly routes failed records to the DLQ topic. But \`drain_dlq()\` — the consumer that should retry them — raises \`NotImplementedError\`. The DLQ is a write-only dead end.
+
+**Your task:**
+1. Implement a \`drain_dlq()\` consumer that reads from \`dataforge.dlq\`
+2. For each DLQ record: increment \`retry_count\`, attempt to reprocess, and on success commit the offset
+3. After 3 retries, move the record to a permanent failure log (a DB table or a separate \`dataforge.dlq.permanent\` topic)
+4. Add an alert threshold: if DLQ depth exceeds 10,000 records, log a \`CRITICAL\` warning
+
+**Files:** \`src/kafka/dlq.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/kafka/dlq.py"],
+      rubric: {
+        diagnosis: "Did they find drain_dlq() raises NotImplementedError and confirm no DLQ consumer exists anywhere in the codebase? Did they understand the retention risk — 7-day window means unprocessed records are permanently lost?",
+        design: "Did they implement a DLQ consumer with retry logic? Did they implement a max retry limit with permanent failure handling? Did they add depth monitoring?",
+        communication: "Did they explain the business impact — client data silently discarded without notice? Did they recommend SLA-based alerting on DLQ depth?",
+        execution: "Does drain_dlq() consume from the DLQ topic? Does it retry records with incrementing retry_count? Does it handle permanent failures after max retries?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-df-08-seed-id-008",
+      title: "DF-08: Spark Jobs OOM on End-of-Day Batches",
+      description: `Every weekday between 17:00 and 18:00 UTC, the Spark transactions job fails with \`java.lang.OutOfMemoryError: GC overhead limit exceeded\`. The job runs fine during off-peak hours. The failure corresponds to end-of-day transaction volumes which are 4× the average — about 2 million records per 15-minute window.
+
+**What's happening:**
+\`get_spark_session()\` in \`src/spark/session.py\` creates a SparkSession with no memory configuration. The default executor memory is 512MB. A 2M-row partition of transaction records averages ~800 bytes/row = ~1.6GB, which does not fit in 512MB. Spark attempts garbage collection repeatedly until the GC overhead limit is exceeded.
+
+**Your task:**
+1. Add \`.config("spark.executor.memory", "4g")\` to the SparkSession builder
+2. Add \`.config("spark.driver.memory", "2g")\`
+3. Add \`.config("spark.sql.shuffle.partitions", "200")\` to control post-shuffle partition count
+4. Add \`.config("spark.dynamicAllocation.enabled", "true")\` so the cluster scales with load
+
+**Files:** \`src/spark/session.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/spark/session.py"],
+      rubric: {
+        diagnosis: "Did they find the missing memory config in get_spark_session()? Did they calculate that 2M rows × 800 bytes = 1.6GB which exceeds the 512MB default executor memory?",
+        design: "Did they set executor.memory to at least 4g? Did they also configure driver.memory? Did they add shuffle.partitions and consider dynamic allocation?",
+        communication: "Did they explain the relationship between partition size, record count, and executor memory? Did they recommend testing with production-scale data in staging?",
+        execution: "Are all four .config() calls added? Is the memory sizing justified based on the actual data volume? Does the session builder chain remain readable?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-df-09-seed-id-009",
+      title: "DF-09: Pipeline Reprocesses From Scratch After Every Container Restart",
+      description: `Every time the DataForge API container is restarted (deploy, crash, scale event), the Spark streaming jobs restart from the beginning of the Kafka topic. This causes hours of reprocessing, massive duplicate writes to the warehouse, and significant cloud spend. Last week's deploy took 4 hours to catch up.
+
+**What's happening:**
+The Spark checkpoint directory is set to \`/tmp/dataforge/checkpoints\` in \`src/pipeline/manager.py\`. The \`/tmp\` filesystem is ephemeral on containers — it is wiped on every restart. Without a valid checkpoint, Spark has no recovery point and reprocesses from the configured offset reset position.
+
+**Your task:**
+1. Change \`CHECKPOINT_DIR\` from \`/tmp/dataforge/checkpoints\` to a persistent path
+2. For cloud deployments: use an S3 or GCS URI (e.g. \`s3a://dataforge-checkpoints/\`)
+3. For on-prem: mount a persistent volume at \`/data/checkpoints\` and use that path
+4. Add the checkpoint path to \`.env.example\` as \`CHECKPOINT_DIR\` with a sensible default
+
+**Files:** \`src/pipeline/manager.py\`, \`.env.example\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/pipeline/manager.py", ".env.example"],
+      rubric: {
+        diagnosis: "Did they find CHECKPOINT_DIR = '/tmp/...' and understand that /tmp is ephemeral on containers? Did they connect the checkpoint loss to the reprocessing-from-scratch behaviour?",
+        design: "Did they move the checkpoint path to a persistent location? Did they make it configurable via env var? Did they update .env.example?",
+        communication: "Did they explain why /tmp is wrong for containers (ephemeral, not shared across replicas)? Did they discuss the S3 vs persistent volume trade-off?",
+        execution: "Is CHECKPOINT_DIR changed to read from an env var with a non-/tmp default? Is the env var documented in .env.example? Does the path work for both local and cloud deployments?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-df-10-seed-id-010",
+      title: "DF-10: Peak Load Exhausts PostgreSQL Connection Pool — All Services Fail",
+      description: `During end-of-day batch processing, the API starts returning 500 errors for all requests. The PostgreSQL logs show: \`FATAL: remaining connection slots are reserved for non-replication superuser connections\`. DataForge's API, monitoring, and Spark JDBC connections all fail simultaneously for 8–12 minutes.
+
+**What's happening:**
+The PostgreSQL sink in \`src/connectors/postgres_sink.py\` creates a \`ThreadedConnectionPool\` with \`maxconn=50\`. DataForge runs 8 pipeline workers. At peak load all 8 workers open their pools: 8 × 50 = 400 connections. PostgreSQL's default \`max_connections\` is 100. The DB refuses further connections, breaking every service.
+
+**Your task:**
+1. Reduce \`maxconn\` from 50 to 8 per worker (8 workers × 8 = 64 connections, safely under the 100 limit)
+2. Add a \`SINK_POOL_MAX_CONN\` environment variable so the limit is configurable without code changes
+3. Add a comment explaining the formula: total_connections = workers × maxconn must be < DB max_connections
+
+**Files:** \`src/connectors/postgres_sink.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/connectors/postgres_sink.py"],
+      rubric: {
+        diagnosis: "Did they find maxconn=50 and calculate 8 workers × 50 = 400 > 100 DB limit? Did they understand that the pool limit applies per-process, not globally?",
+        design: "Did they reduce maxconn to a value where workers × maxconn < DB max_connections? Did they make it configurable via env var? Did they add the formula comment?",
+        communication: "Did they explain the capacity calculation? Did they recommend setting max_connections on PostgreSQL to an explicit value rather than relying on the default?",
+        execution: "Is maxconn reduced to a safe value? Is it configurable via env var? Does the comment explain the sizing formula?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-df-11-seed-id-011",
+      title: "DF-11: Hourly Aggregations Off by 5–8 Hours for Non-UTC Customers",
+      description: `Two enterprise customers based in Pakistan (UTC+5) and Singapore (UTC+8) report that their hourly revenue reports show wrong totals. Transactions that occurred at 11 PM local time appear in the next day's report. UK customers see no issues. The API servers run in UTC+0.
+
+**What's happening:**
+\`advance_watermark()\` in \`src/pipeline/watermark.py\` uses \`datetime.now()\` — local server time. On UTC+0 servers this equals UTC, masking the bug. For tenants whose Spark clusters or source databases are in UTC+5 or UTC+8, the watermark boundary is shifted by the timezone offset, causing hourly window boundaries to be wrong.
+
+**Your task:**
+1. Replace all \`datetime.now()\` calls in \`watermark.py\` with \`datetime.utcnow()\` or \`datetime.now(tz=timezone.utc)\`
+2. Ensure the stored ISO string includes timezone information: \`watermark.isoformat()\` on a timezone-aware datetime produces \`"2026-05-31T22:00:00+00:00"\`
+3. Audit \`src/spark/jobs/\` for any other \`datetime.now()\` calls and fix them
+
+**Files:** \`src/pipeline/watermark.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/pipeline/watermark.py"],
+      rubric: {
+        diagnosis: "Did they find datetime.now() in advance_watermark() and understand it returns local server time? Did they explain why UTC+0 servers mask the bug?",
+        design: "Did they replace datetime.now() with datetime.utcnow() or datetime.now(tz=timezone.utc)? Did they ensure the stored ISO format includes timezone offset?",
+        communication: "Did they explain the timezone shift mechanism — local midnight on UTC+5 is 19:00 UTC, causing the wrong hourly bucket? Did they recommend testing in non-UTC CI environments?",
+        execution: "Are all datetime.now() calls replaced? Is the stored watermark timezone-aware? Does the ISO string in Redis now include '+00:00'?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-df-12-seed-id-012",
+      title: "DF-12: Spark Merchant Enrichment Join Takes 45 Minutes",
+      description: `The transactions enrichment job is scheduled every 15 minutes but consistently takes 45+ minutes, causing the next run to overlap. The Spark UI shows a single stage taking 44 minutes with 180M rows shuffled across all executors. The join itself produces only 180M enriched rows from a 180M transaction table and an 800-row lookup table.
+
+**What's happening:**
+\`enrich_with_merchant()\` in \`src/spark/jobs/transactions.py\` joins a 180M-row transactions DataFrame with an 800-row \`merchant_categories\` DataFrame using a plain Spark join. Spark chooses a sort-merge join, shuffling all 180M rows across the network. With \`broadcast()\`, Spark would send the 800-row table to every executor in memory, completing in under 2 minutes.
+
+**Your task:**
+1. Wrap \`merchant_categories\` in \`pyspark.sql.functions.broadcast()\` before the join
+2. Import: \`from pyspark.sql import functions as F\`
+3. Change: \`transactions.join(F.broadcast(merchant_categories), on="merchant_id", how="left")\`
+4. The fix is one line — the performance improvement is 20–30×
+
+**Files:** \`src/spark/jobs/transactions.py\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/spark/jobs/transactions.py"],
+      rubric: {
+        diagnosis: "Did they identify the sort-merge join on a 180M × 800 table as the root cause? Did they understand that broadcast join is appropriate when one side is small enough to fit in executor memory?",
+        design: "Did they add F.broadcast() around merchant_categories? Is the threshold correct — 800 rows is well within the default broadcast threshold of 10MB?",
+        communication: "Did they explain why Spark chose sort-merge join by default (it doesn't know the table is small without a hint or stats)? Did they quantify the improvement (45 min → 2 min)?",
+        execution: "Is F.broadcast() applied to the small table? Is the join result correct (same rows, same schema)? Is the fix a single-line change?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-df-13-seed-id-013",
+      title: "DF-13: Source Connector Passwords Stored as Plaintext in Database",
+      description: `A security audit found that the \`source_credentials\` table contains plaintext database passwords, API keys, and S3 secret keys for all connected client data sources. Any developer with SELECT access to the table, any database backup file, or any SQL injection vulnerability anywhere in the API exposes all connected source credentials simultaneously.
+
+**What's happening:**
+\`save_credentials()\` in \`src/utils/credentials.py\` stores the credentials dict directly as a JSON column with no encryption. The \`SourceCredential\` model uses \`Column(JSON)\` with no encryption layer.
+
+**Your task:**
+1. Add \`cryptography\` to \`requirements.txt\`
+2. Implement \`encrypt_credentials(data: dict) -> bytes\` using \`Fernet\` symmetric encryption with a key from an env var \`CREDENTIALS_ENCRYPTION_KEY\`
+3. Implement \`decrypt_credentials(ciphertext: bytes) -> dict\`
+4. Update \`save_credentials()\` to encrypt before storing and \`load_credentials()\` to decrypt after loading
+5. Change the column type from \`JSON\` to \`LargeBinary\` to store the ciphertext
+
+**Files:** \`src/utils/credentials.py\`, \`src/models/pipeline.py\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/utils/credentials.py", "src/models/pipeline.py"],
+      rubric: {
+        diagnosis: "Did they find the plaintext JSON storage? Did they identify both the attack vectors: direct DB access AND application-level SQLi? Did they list the affected credential types (DB passwords, API keys, S3 secrets)?",
+        design: "Did they use Fernet (or equivalent AES-256)? Is the encryption key stored in an env var, not in code? Did they change the column type to store bytes? Did they handle key rotation considerations?",
+        communication: "Did they explain the blast radius — one DB read exposes all client source credentials simultaneously? Did they recommend secrets manager (Vault, AWS Secrets Manager) as a stronger alternative?",
+        execution: "Are credentials encrypted before storage? Are they decrypted only at pipeline runtime? Is the key stored securely (env var, not hardcoded)? Does the column type correctly store ciphertext?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-df-14-seed-id-014",
+      title: "DF-14: NaN in Revenue Reports Whenever a Transaction Has a NULL Amount",
+      description: `Finance reports that merchant revenue dashboards intermittently show 'NaN' for avg_transaction_value. The pattern: it always affects merchants who had at least one failed payment capture (where amount was not populated — stored as NULL). One NULL in a merchant's hourly window makes the entire window show NaN, corrupting the revenue report for that merchant for that hour.
+
+**What's happening:**
+\`calculate_merchant_metrics()\` and \`calculate_hourly_totals()\` in \`src/spark/jobs/aggregations.py\` call \`F.avg("amount")\` without filtering NULL values first. In Spark, \`avg()\` propagates NULL — if any input row has NULL amount, the aggregate result is NULL/NaN.
+
+**Your task:**
+1. Add \`.filter(F.col("amount").isNotNull())\` before each aggregation that uses \`amount\`
+2. Alternatively, use \`F.avg(F.when(F.col("amount").isNotNull(), F.col("amount")))\` inline
+3. Apply the fix to all three aggregation functions: \`calculate_hourly_totals\`, \`calculate_merchant_metrics\`, \`calculate_daily_summary\`
+4. After the fix, a merchant with [100, 200, NULL] should have avg_transaction_value = 150.0, not NaN
+
+**Files:** \`src/spark/jobs/aggregations.py\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/spark/jobs/aggregations.py"],
+      rubric: {
+        diagnosis: "Did they find F.avg() without null filtering and understand that Spark's avg() propagates NULL when any input is NULL? Did they identify all three affected aggregation functions?",
+        design: "Did they add the null filter before aggregating? Did they apply it to all three functions? Did they choose the filter approach vs the conditional approach and justify it?",
+        communication: "Did they explain why NULL propagation is the default behaviour in SQL/Spark (following IEEE semantics)? Did they note that SUM handles NULL differently from AVG (SUM ignores NULL, AVG propagates it)?",
+        execution: "Does calculate_merchant_metrics return avg=150.0 for [100, 200, NULL]? Are all three aggregation functions fixed? Is the NULL filter applied before the groupBy?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-df-15-seed-id-015",
+      title: "DF-15: Concurrent Pipeline Runs Write Duplicate Rows to Warehouse",
+      description: `The warehouse team found 340,000 duplicate rows in warehouse.transactions after last Tuesday's end-of-day batch. Investigation shows two pipeline runs for the same pipeline_id were active simultaneously — both read the same watermark, processed the same Kafka offsets, and wrote the same records to the warehouse. This happens when a run exceeds 15 minutes and the scheduler triggers a second run before the first completes.
+
+**What's happening:**
+\`run_pipeline()\` in \`src/pipeline/manager.py\` checks \`pipeline.is_running\` before starting, but the check and the subsequent update are separate non-atomic operations. Two concurrent callers can both read \`is_running=False\` before either sets it to \`True\` — both proceed to start a run.
+
+**Your task:**
+1. Replace the is_running check with a PostgreSQL advisory lock: \`SELECT pg_try_advisory_lock(hashtext(pipeline_id))\`
+2. If the lock is not acquired (another run holds it), return \`"already_running"\` immediately
+3. Release the lock when the run completes: \`SELECT pg_advisory_unlock(hashtext(pipeline_id))\`
+4. This makes the guard atomic at the database level — no race condition is possible
+
+**Files:** \`src/pipeline/manager.py\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/pipeline/manager.py"],
+      rubric: {
+        diagnosis: "Did they identify the TOCTOU (time-of-check-time-of-use) race condition in the is_running check? Did they understand that two concurrent readers both see is_running=False before either writes True?",
+        design: "Did they use a database advisory lock or Redis distributed lock (SET NX EX)? Is the lock acquired before any work begins? Is it released in a finally block? Is the lock key derived from pipeline_id?",
+        communication: "Did they explain TOCTOU and why the is_running flag in application code can never be race-condition-free? Did they compare advisory lock vs Redis SET NX as alternative approaches?",
+        execution: "Is the advisory lock (or Redis NX lock) acquired atomically before the run starts? Is it released in the finally block? Does a second concurrent call correctly return 'already_running'?",
+      },
+      expectedMinutes: 55,
+    },
+  ];
+
+  for (const t of dataforgeTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.PYTHON, codebaseId: dataforgeCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront tickets upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge tickets upserted.`
   );
 }
