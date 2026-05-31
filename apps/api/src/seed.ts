@@ -2614,7 +2614,7 @@ Investigation found \`imagePullPolicy: Never\` in the worker deployment. Kuberne
 The password has been rotated, but the CI pipeline still contains the \`echo\` statements that caused the leak.
 
 **Root cause in \`.github/workflows/deploy.yml\`:**
-The "Debug deployment config" step uses \`echo "... ${{ secrets.DB_PASSWORD }}"\`. GitHub Actions interpolates the secret value into the shell command before it runs, so the expanded plaintext appears in the log.
+The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"\`. GitHub Actions interpolates the secret value into the shell command before it runs, so the expanded plaintext appears in the log.
 
 **Your task:**
 1. Delete the entire "Debug deployment config" step from the workflow
