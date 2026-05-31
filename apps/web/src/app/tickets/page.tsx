@@ -16,10 +16,11 @@ const GITHUB_AUTH_URL =
   )}`;
 
 const STACK_META: Record<string, { label: string; color: string; bg: string }> = {
-  DOTNET:        { label: ".NET 8",            color: "#6366f1", bg: "#EEF2FF" },
-  SYSTEM_DESIGN: { label: "Architecture",      color: "#5B5BD6", bg: "#EBEBFF" },
-  PYTHON:        { label: "Python + LangChain", color: "#92400E", bg: "#FEF3C7" },
+  DOTNET:        { label: ".NET 8",              color: "#6366f1", bg: "#EEF2FF" },
+  SYSTEM_DESIGN: { label: "Architecture",        color: "#5B5BD6", bg: "#EBEBFF" },
+  PYTHON:        { label: "Python + LangChain",  color: "#92400E", bg: "#FEF3C7" },
   NODE:          { label: "Node.js + TypeScript", color: "#1D4ED8", bg: "#DBEAFE" },
+  REACT:         { label: "React + TypeScript",  color: "#0369A1", bg: "#E0F2FE" },
 };
 
 interface Ticket {
@@ -191,6 +192,11 @@ function TicketsList(): React.ReactElement {
                   {ticket.stack === "PYTHON" && (
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 border-amber-500/20">
                       Python
+                    </span>
+                  )}
+                  {ticket.stack === "REACT" && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full border" style={{ background: "#E0F2FE", color: "#0369A1", borderColor: "#BAE6FD" }}>
+                      React
                     </span>
                   )}
                   <span className="text-xs text-slate-500">{ticket.codebase.name}</span>
