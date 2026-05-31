@@ -145,7 +145,15 @@ function TicketsList(): React.ReactElement {
             </span>
           )}
         </div>
-        <span className="text-slate-600 text-sm ml-auto">{tickets.length} tickets</span>
+        <div className="ml-auto flex items-center gap-4">
+          <Link
+            href={`/onboarding/guide${codebaseId ? `?codebaseId=${codebaseId}` : ""}`}
+            className="text-slate-400 hover:text-white text-xs font-medium transition-colors"
+          >
+            ? How it works
+          </Link>
+          <span className="text-slate-600 text-sm">{tickets.length} tickets</span>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-4">

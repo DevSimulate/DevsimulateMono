@@ -44,11 +44,11 @@ const STEPS: {
     num: "02",
     icon: "🗂️",
     color: "#CCFBF1",
-    title: "Select NovaTech CRM",
+    title: "Select your codebase",
     lines: [
-      "NovaTech CRM is the only live codebase right now.",
-      'Click "Start with NovaTech" on the green-bordered card.',
-      "You arrive on this guide page.",
+      "Choose the stack you want to practice — .NET, Python, Node.js, React, DevOps, and more.",
+      "Click the codebase card that matches your target role.",
+      "You land on the ticket list for that codebase.",
     ],
     note: null,
     done: true,
@@ -73,11 +73,11 @@ const STEPS: {
     title: "Browse tickets and assign yourself one",
     lines: [
       "The Tickets page shows all available NovaTech CRM bugs.",
-      "Each card shows: difficulty (MID or SENIOR), the bug title, files involved, and expected time.",
+      "Each card shows: difficulty (JUNIOR, MID, or SENIOR), the bug title, files involved, and expected time.",
       "Pick a ticket that fits your level and click Assign to me.",
       "The ticket is now locked to your account and a branch name is generated automatically.",
     ],
-    note: "Start with a MID ticket on your first attempt. SENIOR tickets assume deep familiarity with the codebase.",
+    note: "Start with a JUNIOR or MID ticket on your first attempt. SENIOR tickets assume deep familiarity with the codebase.",
   },
   {
     num: "05",
@@ -113,8 +113,8 @@ const STEPS: {
     title: "Clone the codebase — extension sets up the repo",
     lines: [
       'Click "Clone Codebase" next to your ticket in the VS Code sidebar.',
-      "A folder picker opens — choose where you want to clone NovaTech CRM.",
-      "The extension automatically clones the repo and creates your branch (e.g. devsim/nova-47).",
+      "A folder picker opens — choose where you want to clone the repo.",
+      "The extension automatically clones the repo and creates your branch.",
       "VS Code reopens with the cloned folder. Your branch is already checked out — ready to code.",
     ],
     note: null,
@@ -183,8 +183,10 @@ const STEPS: {
 
 function GuideContent() {
   const searchParams = useSearchParams();
-  const codebase = searchParams.get("codebase") ?? "novatech";
+  const codebaseId = searchParams.get("codebaseId") ?? undefined;
   const [authed, setAuthed] = useState<boolean | null>(null);
+
+  const ticketsHref = codebaseId ? `/tickets?codebaseId=${codebaseId}` : "/tickets";
 
   useEffect(() => {
     setAuthed(!!getToken());
@@ -192,9 +194,9 @@ function GuideContent() {
 
   function handleGetStarted() {
     if (getToken()) {
-      window.location.href = "/tickets";
+      window.location.href = ticketsHref;
     } else {
-      localStorage.setItem("ds_submit_return", "/tickets");
+      localStorage.setItem("ds_submit_return", ticketsHref);
       window.location.href = GITHUB_AUTH_URL;
     }
   }
@@ -204,12 +206,12 @@ function GuideContent() {
 
       {/* Nav */}
       <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href="/onboarding/select"
+        <Link href={ticketsHref}
           className="text-sm font-medium transition-colors"
           style={{ color: "#6B6B6B" }}
           onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
           onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
-          ← Back
+          ← Back to tickets
         </Link>
         <Logo variant="horizontal" size={32} />
         <div className="w-16" />
@@ -219,13 +221,11 @@ function GuideContent() {
 
         {/* Header */}
         <div className="text-center mb-12 fade-in-up">
-          {codebase === "novatech" && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4 text-xs font-bold"
-              style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-              NovaTech CRM · .NET 8
-            </div>
-          )}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4 text-xs font-bold"
+            style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+            How DevSimulate works
+          </div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4" style={{ color: "#1A1A1A" }}>
             Complete walkthrough —<br />
             <span className="gradient-text">start to scored PR</span>
