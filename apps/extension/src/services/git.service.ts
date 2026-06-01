@@ -153,8 +153,8 @@ export async function cloneAndOpenCodebase(
 }
 
 /**
- * Creates a new branch at HEAD if it does not already exist, then checks it out.
- * If the branch already exists locally, just checks it out.
+ * Creates a new branch at HEAD if it does not already exist, checks it out,
+ * then pushes it to origin with --set-upstream so plain `git push` works.
  */
 async function ensureBranch(git: SimpleGit, branchName: string): Promise<void> {
   const branches = await git.branch();
@@ -163,6 +163,8 @@ async function ensureBranch(git: SimpleGit, branchName: string): Promise<void> {
     await git.checkout(branchName);
   } else {
     await git.checkoutLocalBranch(branchName);
+    // Push immediately so the upstream tracking is set — user can just run `git push`
+    await git.push(["--set-upstream", "origin", branchName]);
   }
 }
 

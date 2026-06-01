@@ -63,8 +63,8 @@ export async function assignTicket(
     include: { codebase: true },
   });
 
-  const slug = slugify(ticket.title);
-  const branchName = `ds/ticket-${ticketId.slice(0, 8)}-${slug}`;
+  const slug = slugify(ticket.title).slice(0, 40);
+  const branchName = `ds/${ticketId.slice(0, 8)}-${slug}`;
 
   return prisma.ticketAssignment.create({
     data: { userId, ticketId, branchName },
