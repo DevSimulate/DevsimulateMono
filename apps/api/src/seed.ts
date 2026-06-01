@@ -17,7 +17,7 @@ export async function runSeed(): Promise<void> {
       id: "novatech-crm-seed-id-001",
       name: "NovaTech CRM",
       stack: Stack.DOTNET,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/novatech-crm",
+      repoUrl: "https://github.com/DevSimulator/novatech-crm",
       description: "A mid-market CRM system serving 2,000+ enterprise clients. Built in .NET 6 with a SQL Server backend and Angular frontend.",
       companyLore: `NovaTech Solutions was founded in 2014 by two ex-Salesforce engineers who believed the SMB market was underserved by bloated enterprise CRM tools.
 
@@ -536,7 +536,7 @@ Write your complete design below. This is an infrastructure-level design — be 
       id: "ragcore-seed-id-001",
       name: "RAGCore",
       stack: Stack.PYTHON,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/ragcore",
+      repoUrl: "https://github.com/DevSimulator/ragcore",
       description: "A production-grade Retrieval-Augmented Generation (RAG) API built with FastAPI, LangChain, ChromaDB, and PostgreSQL. Multi-tenant document ingestion, semantic search, and conversational Q&A.",
       companyLore: `RAGCore is a B2B SaaS product that allows enterprise customers to upload their internal documents and query them using natural language through an OpenAI-powered RAG pipeline.
 
@@ -951,7 +951,7 @@ In \`app/api/documents.py\`, \`ingest_document()\` calls \`await file.read()\` w
       id: "techcorp-hrm-seed-id-001",
       name: "TechCorp HRM",
       stack: Stack.NODE,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/TechCropCrm",
+      repoUrl: "https://github.com/DevSimulator/TechCropCrm",
       description: "A multi-tenant HR Management platform built with Node.js, TypeScript, Express, PostgreSQL, Redis, and BullMQ. Handles employee records, payroll, leave management, and department structure.",
       companyLore: `TechCorp Solutions was founded in 2019 to build affordable HR software for small and mid-size businesses. The product grew faster than expected — what started as a simple employee directory now processes payroll for 340 companies and 85,000 employees.
 
@@ -1362,7 +1362,7 @@ This exposes internal file paths, line numbers, and the tech stack to anyone mak
       id: "shopfront-seed-id-001",
       name: "ShopFront",
       stack: Stack.REACT,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/shopfront",
+      repoUrl: "https://github.com/DevSimulator/shopfront",
       description: "A React 18 + TypeScript e-commerce storefront with Vite, React Router v6, and Axios. Powers a mid-market marketplace serving 40,000 daily active shoppers.",
       companyLore: `ShopFront is a consumer e-commerce platform that launched its React frontend 18 months ago after migrating from a server-rendered PHP monolith. The migration was completed under a hard deadline to meet a Black Friday launch and several architectural shortcuts were taken.
 
@@ -1772,7 +1772,7 @@ The async IIFE in \`ProductPage.tsx\`'s \`useEffect\` has no \`try/catch\`. When
       id: "dataforge-seed-id-001",
       name: "DataForge",
       stack: Stack.PYTHON,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/DataForge",
+      repoUrl: "https://github.com/DevSimulator/DataForge",
       description: "A Python + Kafka + Spark data pipeline platform that ingests data from operational databases and event streams, transforms with Apache Spark, and loads into a PostgreSQL data warehouse.",
       companyLore: `DataForge is a B2B SaaS platform that helps mid-market companies move data from their operational databases and event streams into a centralised data warehouse for analytics. Founded in 2021, the company grew from a single-client engagement into a product after three more clients signed up within 6 months.
 
@@ -2183,7 +2183,7 @@ The PostgreSQL sink in \`src/connectors/postgres_sink.py\` creates a \`ThreadedC
       id: "infracore-seed-id-001",
       name: "InfraCore",
       stack: Stack.DEVOPS,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/InfraCore",
+      repoUrl: "https://github.com/DevSimulator/InfraCore",
       description: "Infrastructure-as-code platform for Axiom Analytics — Terraform modules and Kubernetes manifests managing a production AWS environment processing 50M+ events/day.",
       companyLore: `Axiom Analytics is a B2B SaaS startup founded in 2021 providing real-time event analytics for e-commerce platforms. The platform processes 50M+ events per day across 200+ enterprise customers.
 
