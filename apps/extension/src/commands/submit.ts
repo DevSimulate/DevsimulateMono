@@ -161,6 +161,16 @@ export async function submitCommand(
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Submission failed";
-    vscode.window.showErrorMessage(`DevSimulate: ${message}`);
+    if (message === "Not authenticated") {
+      const choice = await vscode.window.showInformationMessage(
+        "DevSimulate: Connect your web session first.",
+        "Connect"
+      );
+      if (choice === "Connect") {
+        vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+      }
+    } else {
+      vscode.window.showErrorMessage(`DevSimulate: ${message}`);
+    }
   }
 }

@@ -50,6 +50,16 @@ export async function cloneCommand(
     await cloneAndOpenCodebase(picked.ticket, picked.branchName, user.githubUsername);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to clone codebase";
-    vscode.window.showErrorMessage(`DevSimulate: ${message}`);
+    if (message === "Not authenticated") {
+      const choice = await vscode.window.showInformationMessage(
+        "DevSimulate: Connect your web session first.",
+        "Connect"
+      );
+      if (choice === "Connect") {
+        vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+      }
+    } else {
+      vscode.window.showErrorMessage(`DevSimulate: ${message}`);
+    }
   }
 }
