@@ -161,11 +161,17 @@ async function handleCloneFromDeepLink(
 
   try {
     const apiUrl = getApiUrl();
-    const res = await axios.get<{ data: FullAssignment }>(
-      `${apiUrl}/tickets/assignments/${assignmentId}`,
+
+    // Use /tickets/assigned (already deployed) and filter by ID
+    const res = await axios.get<{ data: FullAssignment[] }>(
+      `${apiUrl}/tickets/assigned`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    const assignment = res.data.data;
+    const assignment = res.data.data.find((a) => a.id === assignmentId);
+    if (!assignment) {
+      vscode.window.showErrorMessage("DevSimulate: Assignment not found. Make sure you are logged in with the correct account.");
+      return;
+    }
     const user = await getCurrentUser(context);
     if (!user) return;
 
