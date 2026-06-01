@@ -134,8 +134,10 @@ async function handleCloneFromDeepLink(
 ): Promise<void> {
   const token = await getToken(context);
   if (!token) {
+    // Save the intent so it runs automatically after the user connects
+    await context.globalState.update("ds_pending_clone", assignmentId);
     const choice = await vscode.window.showInformationMessage(
-      "DevSimulate: Connect your web session first to use this feature.",
+      "DevSimulate: Connect your web session first — your ticket will open automatically after.",
       "Connect"
     );
     if (choice === "Connect") {
@@ -202,6 +204,13 @@ async function handleDeepLinkAuth(
     vscode.window.showInformationMessage(
       `DevSimulate: Welcome, ${user.githubUsername}! You're connected.`
     );
+
+    // Replay any pending clone intent from before the user was logged in
+    const pendingClone = context.globalState.get<string>("ds_pending_clone");
+    if (pendingClone) {
+      await context.globalState.update("ds_pending_clone", undefined);
+      await handleCloneFromDeepLink(pendingClone, context, sidebar);
+    }
   } catch {
     vscode.window.showErrorMessage(
       "DevSimulate: Connection failed. The link may have expired — please try again."
