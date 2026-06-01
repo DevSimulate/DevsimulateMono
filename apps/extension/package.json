@@ -2,7 +2,7 @@
   "name": "devsimulate",
   "displayName": "DevSimulate",
   "description": "Developer training platform — solve real tickets, get scored by AI",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "publisher": "devsimulate-app",
   "engines": {
     "vscode": "^1.85.0"
