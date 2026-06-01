@@ -37,7 +37,7 @@ export default function VsCodeLinkPage(): React.ReactElement {
       .then((r) => r.json())
       .then((body: { data?: { token: string }; error?: string }) => {
         if (!body.data?.token) throw new Error(body.error ?? "Failed to generate link token");
-        const vsUri = `vscode://devsimulate-app.devsimulate/auth?token=${body.data.token}`;
+        const vsUri = `vscode://devsimulate-app.devsimulate/auth?token=${encodeURIComponent(body.data.token)}`;
         window.location.href = vsUri;
       })
       .catch((err: unknown) => {
