@@ -59,7 +59,10 @@ export function ensureGitOnPath(): void { resolveGitBinary(); }
 
 function makeGit(baseDir?: string): SimpleGit {
   const binary = resolveGitBinary();
-  const opts: Partial<SimpleGitOptions> = { binary };
+  const opts: Partial<SimpleGitOptions> = {
+    binary,
+    unsafe: { allowUnsafeCustomBinary: true },
+  };
   if (baseDir) opts.baseDir = baseDir;
   return simpleGit(opts);
 }
