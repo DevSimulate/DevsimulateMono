@@ -105,19 +105,29 @@ export async function submitCommand(
     let prUrl: string;
 
     if (prs.length === 0) {
+      const pushReminder = await vscode.window.showInformationMessage(
+        `No open PR found for branch '${assignment.branchName}'. Push your commits first, then create a PR on GitHub.`,
+        "Open GitHub (create PR)",
+        "Cancel"
+      );
+
+      if (pushReminder !== "Open GitHub (create PR)") return;
+
+      // main...branch?expand=1 opens the PR form directly with base already set
+      const compareBranch = assignment.branchName.replace(/#/g, "%23");
       await vscode.env.openExternal(
         vscode.Uri.parse(
-          `https://github.com/${parsed.owner}/${parsed.repo}/compare/${encodeURIComponent(assignment.branchName)}`
+          `https://github.com/${parsed.owner}/${parsed.repo}/compare/main...${compareBranch}?expand=1`
         )
       );
 
       const prUrl = await vscode.window.showInputBox({
-        prompt: "Create your PR on GitHub, then paste the PR URL here",
+        prompt: "Once your PR is open on GitHub, copy the URL and paste it here",
         placeHolder: "https://github.com/you/novatech-crm/pull/1",
         ignoreFocusOut: true,
         validateInput: (v) => {
           if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
-            return "Must be a valid GitHub PR URL";
+            return "Must be a valid GitHub PR URL (e.g. https://github.com/you/repo/pull/1)";
           }
           return undefined;
         },
