@@ -93,21 +93,27 @@ export async function cloneAndOpenCodebase(
   branchName: string,
   githubUsername: string
 ): Promise<void> {
-  const repoName = ticket.codebase.repoUrl.split("/").pop()?.replace(/\.git$/, "") ?? "codebase";
-  const forkUrl = `https://github.com/${githubUsername}/${repoName}`;
-  const forkPageUrl = `${ticket.codebase.repoUrl}/fork`;
+  const repoUrl = ticket.codebase.repoUrl;
+  const repoName = repoUrl.split("/").pop()?.replace(/\.git$/, "") ?? "codebase";
+  const repoOwner = repoUrl.split("/").slice(-2)[0] ?? "";
+  const isOwner = repoOwner.toLowerCase() === githubUsername.toLowerCase();
 
-  // Step 1 — open the GitHub fork page and wait for confirmation
-  await vscode.env.openExternal(vscode.Uri.parse(forkPageUrl));
+  // If the user owns the repo they can push directly — no fork needed
+  const cloneUrl = isOwner ? repoUrl : `https://github.com/${githubUsername}/${repoName}`;
 
-  const confirmed = await vscode.window.showInformationMessage(
-    `Fork "${repoName}" to your GitHub account, then click Continue.`,
-    { modal: true },
-    "Continue — I've forked it"
-  );
+  if (!isOwner) {
+    // Step 1 — open the GitHub fork page and wait for confirmation
+    await vscode.env.openExternal(vscode.Uri.parse(`${repoUrl}/fork`));
 
-  if (!confirmed) {
-    return;
+    const confirmed = await vscode.window.showInformationMessage(
+      `Fork "${repoName}" to your GitHub account, then click Continue.`,
+      { modal: true },
+      "Continue — I've forked it"
+    );
+
+    if (!confirmed) {
+      return;
+    }
   }
 
   // Step 2 — folder picker
@@ -138,7 +144,7 @@ export async function cloneAndOpenCodebase(
         const existingGit = makeGit(targetDir);
         const remotes = await existingGit.getRemotes(true);
         const origin = remotes.find((r) => r.name === "origin");
-        const isTheirFork = origin?.refs?.fetch?.toLowerCase().includes(`/${githubUsername.toLowerCase()}/`);
+        const isTheirFork = origin?.refs?.fetch?.toLowerCase().includes(`/${githubUsername.toLowerCase()}/`) || isOwner;
 
         if (isTheirFork) {
           progress.report({ message: "Fork already cloned — switching branch..." });
@@ -153,10 +159,12 @@ export async function cloneAndOpenCodebase(
         progress.report({ message: "Cloning your fork..." });
 
         try {
-          await makeGit().clone(forkUrl, targetDir, ["--progress", "--depth", "1"]);
+          await makeGit().clone(cloneUrl, targetDir, ["--progress", "--depth", "1"]);
         } catch {
           throw new Error(
-            `Could not clone your fork. Make sure the fork was created at: ${forkUrl}`
+            isOwner
+              ? `Could not clone the repository from: ${cloneUrl}`
+              : `Could not clone your fork. Make sure the fork was created at: ${cloneUrl}`
           );
         }
 
@@ -189,6 +197,35 @@ async function ensureBranch(git: SimpleGit, branchName: string): Promise<void> {
     // Push immediately so the upstream tracking is set — user can just run `git push`
     await git.push(["--set-upstream", "origin", branchName]);
   }
+}
+
+/**
+ * Watches for a push on the given branch by monitoring the remote ref file.
+ * Fires onPushed once when the branch appears on origin.
+ */
+export function watchForPush(
+  repoDir: string,
+  branchName: string,
+  onPushed: () => void
+): vscode.Disposable {
+  const refGlob = new vscode.RelativePattern(
+    vscode.Uri.file(path.join(repoDir, ".git", "refs", "remotes", "origin")),
+    "**"
+  );
+  let fired = false;
+  const watcher = vscode.workspace.createFileSystemWatcher(refGlob);
+  const handler = () => {
+    if (fired) return;
+    const refFile = path.join(repoDir, ".git", "refs", "remotes", "origin", ...branchName.split("/"));
+    if (fs.existsSync(refFile)) {
+      fired = true;
+      watcher.dispose();
+      onPushed();
+    }
+  };
+  watcher.onDidCreate(handler);
+  watcher.onDidChange(handler);
+  return watcher;
 }
 
 /**

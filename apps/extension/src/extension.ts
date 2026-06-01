@@ -4,11 +4,13 @@ import { SidebarProvider } from "./views/sidebar";
 import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
-import { getCurrentUser, storeToken, getApiUrl } from "./services/auth.service";
+import { getCurrentUser, storeToken, getApiUrl, getToken } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
-import { ensureGitOnPath } from "./services/git.service";
-import { LoginResponse } from "./types";
+import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase } from "./services/git.service";
+import { LoginResponse, TicketAssignment, Ticket, Codebase } from "./types";
+
+type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
 
 /**
  * Extension activation entry point.
@@ -68,15 +70,23 @@ export async function activate(
     })
   );
 
-  // Handle vscode://devsimulate.devsimulate/auth?token=<link-token>
+  // Handle vscode://devsimulate-app.devsimulate/auth  and  /clone
   context.subscriptions.push(
     vscode.window.registerUriHandler({
       handleUri: async (uri: vscode.Uri) => {
+        const params = new URLSearchParams(uri.query);
+
         if (uri.path === "/auth") {
-          const params = new URLSearchParams(uri.query);
           const linkToken = params.get("token");
           if (linkToken) {
             await handleDeepLinkAuth(linkToken, context, sidebar);
+          }
+        }
+
+        if (uri.path === "/clone") {
+          const assignmentId = params.get("assignmentId");
+          if (assignmentId) {
+            await handleCloneFromDeepLink(assignmentId, context, sidebar);
           }
         }
       },
@@ -114,6 +124,58 @@ async function hydrateInitialState(
     });
   } catch {
     // Startup hydration failure is non-fatal — sidebar will show login view
+  }
+}
+
+async function handleCloneFromDeepLink(
+  assignmentId: string,
+  context: vscode.ExtensionContext,
+  sidebar: SidebarProvider
+): Promise<void> {
+  const token = await getToken(context);
+  if (!token) {
+    const choice = await vscode.window.showInformationMessage(
+      "DevSimulate: Connect your web session first to use this feature.",
+      "Connect"
+    );
+    if (choice === "Connect") {
+      vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+    }
+    return;
+  }
+
+  try {
+    const apiUrl = getApiUrl();
+    const res = await axios.get<{ data: FullAssignment }>(
+      `${apiUrl}/tickets/assignments/${assignmentId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const assignment = res.data.data;
+    const user = await getCurrentUser(context);
+    if (!user) return;
+
+    await cloneAndOpenCodebase(assignment.ticket, assignment.branchName, user.githubUsername);
+
+    // Watch for push — when branch appears on origin, prompt to submit
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders?.[0]) {
+      const repoDir = workspaceFolders[0].uri.fsPath;
+      const disposable = watchForPush(repoDir, assignment.branchName, async () => {
+        const choice = await vscode.window.showInformationMessage(
+          `DevSimulate: Branch pushed! Ready to submit your PR for "${assignment.ticket.title}"?`,
+          "Submit PR →",
+          "Later"
+        );
+        if (choice === "Submit PR →") {
+          vscode.commands.executeCommand("devsimulate.submitPR");
+        }
+      });
+      context.subscriptions.push(disposable);
+    }
+
+    sidebar.update({ assignments: [assignment] });
+  } catch {
+    vscode.window.showErrorMessage("DevSimulate: Failed to load assignment. Please try again.");
   }
 }
 

@@ -359,10 +359,21 @@ export default function DashboardPage() {
                       ))}
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs" style={{ color: "#6B6B6B" }}>
-                      <span>Branch: <code className="font-mono" style={{ color: "#1A1A1A" }}>{a.branchName}</code></span>
-                      <span>·</span>
-                      <span>Est. {ticket.expectedMinutes} min</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 text-xs" style={{ color: "#6B6B6B" }}>
+                        <span>Branch: <code className="font-mono" style={{ color: "#1A1A1A" }}>{a.branchName}</code></span>
+                        <span>·</span>
+                        <span>Est. {ticket.expectedMinutes} min</span>
+                      </div>
+                      <a
+                        href={`vscode://devsimulate-app.devsimulate/clone?assignmentId=${a.id}`}
+                        className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors"
+                        style={{ background: "#5B5BD6", color: "white" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#4747C2")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "#5B5BD6")}
+                      >
+                        ⚡ Open in VS Code
+                      </a>
                     </div>
                   </div>
                 );

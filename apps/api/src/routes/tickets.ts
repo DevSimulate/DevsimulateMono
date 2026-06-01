@@ -57,6 +57,28 @@ router.post(
 );
 
 /**
+ * GET /tickets/assignments/:id
+ * Returns a single assignment (with ticket + codebase) owned by the current user.
+ */
+router.get("/assignments/:id", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const assignment = await prisma.ticketAssignment.findFirst({
+      where: { id: req.params.id, userId },
+      include: { ticket: { include: { codebase: true } } },
+    });
+    if (!assignment) {
+      res.status(404).json({ error: "Assignment not found" });
+      return;
+    }
+    res.json({ data: assignment });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to fetch assignment";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * GET /tickets
  * Lists all available tickets. Optional query param: ?stack=DOTNET
  */
