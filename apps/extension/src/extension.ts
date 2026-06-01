@@ -63,6 +63,19 @@ export async function activate(
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("devsimulate.pasteCode", async () => {
+      const code = await vscode.window.showInputBox({
+        prompt: "Paste the connection code from devsimulate.com/auth/vscode-link",
+        placeHolder: "Paste code here…",
+        ignoreFocusOut: true,
+      });
+      if (code?.trim()) {
+        await handleDeepLinkAuth(code.trim(), context, sidebar);
+      }
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("devsimulate.refresh", async () => {
       sidebar.update({ refreshing: true });
       await hydrateInitialState(context, sidebar);
