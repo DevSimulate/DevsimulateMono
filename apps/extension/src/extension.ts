@@ -212,8 +212,9 @@ async function handleCloneFromDeepLink(
     }
 
     sidebar.update({ assignments: [assignment] });
-  } catch {
-    vscode.window.showErrorMessage("DevSimulate: Failed to load assignment. Please try again.");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    vscode.window.showErrorMessage(`DevSimulate: ${msg}`);
   }
 }
 
