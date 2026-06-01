@@ -1,7 +1,6 @@
 **
-!README.md
-!LICENSE.txt
-!package.json
+!out/**
 !media/**
-!out/extension.js
-!out/extension.js.map
+!package.json
+!README.md
+!LICENSE
