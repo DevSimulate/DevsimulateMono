@@ -52,6 +52,7 @@ export async function loginWithGitHub(
     `https://github.com/login/oauth/authorize` +
     `?client_id=${clientId}` +
     `&scope=read:user,user:email` +
+    `&redirect_uri=${encodeURIComponent("https://www.devsimulate.com/auth/callback")}` +
     `&state=vscode`;
 
   await vscode.env.openExternal(vscode.Uri.parse(authUrl));
