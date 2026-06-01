@@ -173,7 +173,7 @@ export async function seedDemo(): Promise<void> {
       },
       create: {
         id: c.submissionId, userId: c.userId, ticketId: TICKET_ID,
-        prUrl: `https://github.com/DevSimulator/novatech-crm/pull/${100 + i}`,
+        prUrl: `https://github.com/DevSimulate/novatech-crm/pull/${100 + i}`,
         prDescription: c.claudeReview.summary,
         branchName: `fix/nova-47-${c.githubUsername}`,
         status: SubmissionStatus.REVIEWED,
