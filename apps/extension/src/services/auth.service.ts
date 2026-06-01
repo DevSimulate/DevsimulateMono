@@ -46,7 +46,7 @@ export async function loginWithGitHub(
   context: vscode.ExtensionContext
 ): Promise<User | undefined> {
   const apiUrl = getApiUrl();
-  const clientId = "e32b15a84a5333ab95f9";
+  const clientId = "0v231ifojnuE5exAlpSf";
 
   const authUrl =
     `https://github.com/login/oauth/authorize` +
