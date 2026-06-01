@@ -7,7 +7,7 @@ import { submitCommand } from "./commands/submit";
 import { getCurrentUser, storeToken, getApiUrl, getToken } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
-import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase } from "./services/git.service";
+import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest } from "./services/git.service";
 import { LoginResponse, TicketAssignment, Ticket, Codebase } from "./types";
 
 type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
@@ -182,13 +182,30 @@ async function handleCloneFromDeepLink(
     if (workspaceFolders?.[0]) {
       const repoDir = workspaceFolders[0].uri.fsPath;
       const disposable = watchForPush(repoDir, assignment.branchName, async () => {
-        const choice = await vscode.window.showInformationMessage(
-          `DevSimulate: Branch pushed! Ready to submit your PR for "${assignment.ticket.title}"?`,
-          "Submit PR →",
-          "Later"
-        );
-        if (choice === "Submit PR →") {
-          vscode.commands.executeCommand("devsimulate.submitPR");
+        vscode.window.showInformationMessage("DevSimulate: Push detected — creating PR automatically…");
+        try {
+          const prUrl = await createPullRequest(
+            repoDir,
+            assignment.branchName,
+            assignment.ticket.title,
+            assignment.ticket.codebase.repoUrl
+          );
+          const submitUrl =
+            `https://www.devsimulate.com/submit` +
+            `?ticketId=${encodeURIComponent(assignment.ticketId)}` +
+            `&prUrl=${encodeURIComponent(prUrl)}` +
+            `&branchName=${encodeURIComponent(assignment.branchName)}`;
+          await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
+          vscode.window.showInformationMessage("DevSimulate: PR created! Submit form opened — describe your fix.");
+        } catch {
+          // Fallback to manual submit if auto-PR fails
+          const choice = await vscode.window.showInformationMessage(
+            `DevSimulate: Branch pushed! Open submit form?`,
+            "Submit PR →"
+          );
+          if (choice === "Submit PR →") {
+            vscode.commands.executeCommand("devsimulate.submitPR");
+          }
         }
       });
       context.subscriptions.push(disposable);
