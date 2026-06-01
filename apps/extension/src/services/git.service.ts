@@ -84,17 +84,33 @@ function makeGit(baseDir?: string): SimpleGit {
 }
 
 /**
- * Clones the codebase repository to a user-selected folder, creates the
- * correct DevSimulate branch, and opens it in VS Code.
- *
- * Handles the "already cloned" case by skipping the clone and just switching
- * to the correct branch.
+ * Guides the user to fork the codebase repo, then clones their fork,
+ * creates the ticket branch, pushes it with upstream tracking, and opens
+ * the folder in VS Code.
  */
 export async function cloneAndOpenCodebase(
   ticket: TicketWithCodebase,
-  branchName: string
+  branchName: string,
+  githubUsername: string
 ): Promise<void> {
-  // Show folder picker
+  const repoName = ticket.codebase.repoUrl.split("/").pop()?.replace(/\.git$/, "") ?? "codebase";
+  const forkUrl = `https://github.com/${githubUsername}/${repoName}`;
+  const forkPageUrl = `${ticket.codebase.repoUrl}/fork`;
+
+  // Step 1 — open the GitHub fork page and wait for confirmation
+  await vscode.env.openExternal(vscode.Uri.parse(forkPageUrl));
+
+  const confirmed = await vscode.window.showInformationMessage(
+    `Fork "${repoName}" to your GitHub account, then click Continue.`,
+    { modal: true },
+    "Continue — I've forked it"
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  // Step 2 — folder picker
   const selected = await vscode.window.showOpenDialog({
     canSelectFiles: false,
     canSelectFolders: true,
@@ -108,7 +124,6 @@ export async function cloneAndOpenCodebase(
   }
 
   const parentDir = selected[0].fsPath;
-  const repoName = ticket.codebase.repoUrl.split("/").pop()?.replace(/\.git$/, "") ?? "codebase";
   const targetDir = path.join(parentDir, repoName);
 
   await vscode.window.withProgress(
@@ -118,33 +133,41 @@ export async function cloneAndOpenCodebase(
       cancellable: false,
     },
     async (progress) => {
-      const git: SimpleGit = makeGit();
-
       if (fs.existsSync(targetDir)) {
-        progress.report({ message: "Repository already exists — switching branch..." });
+        // Check if the existing folder is already the user's fork
+        const existingGit = makeGit(targetDir);
+        const remotes = await existingGit.getRemotes(true);
+        const origin = remotes.find((r) => r.name === "origin");
+        const isTheirFork = origin?.refs?.fetch?.toLowerCase().includes(`/${githubUsername.toLowerCase()}/`);
 
-        const repoGit = makeGit(targetDir);
-        await ensureBranch(repoGit, branchName);
+        if (isTheirFork) {
+          progress.report({ message: "Fork already cloned — switching branch..." });
+          await ensureBranch(existingGit, branchName);
+        } else {
+          throw new Error(
+            `The folder "${repoName}" already exists but points to a different remote. ` +
+            `Delete it or choose a different parent folder.`
+          );
+        }
       } else {
-        progress.report({ message: "Cloning repository..." });
+        progress.report({ message: "Cloning your fork..." });
 
-        await git.clone(ticket.codebase.repoUrl, targetDir, [
-          "--progress",
-          "--depth",
-          "1",
-        ]);
+        try {
+          await makeGit().clone(forkUrl, targetDir, ["--progress", "--depth", "1"]);
+        } catch {
+          throw new Error(
+            `Could not clone your fork. Make sure the fork was created at: ${forkUrl}`
+          );
+        }
 
-        progress.report({ message: "Creating branch..." });
-
-        const repoGit = makeGit(targetDir);
-        await ensureBranch(repoGit, branchName);
+        progress.report({ message: "Creating branch and pushing..." });
+        await ensureBranch(makeGit(targetDir), branchName);
       }
 
       progress.report({ message: "Opening in VS Code..." });
     }
   );
 
-  // Open the cloned folder as the workspace
   await vscode.commands.executeCommand(
     "vscode.openFolder",
     vscode.Uri.file(targetDir),
