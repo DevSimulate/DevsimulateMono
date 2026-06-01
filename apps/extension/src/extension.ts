@@ -1,12 +1,14 @@
 import * as vscode from "vscode";
+import axios from "axios";
 import { SidebarProvider } from "./views/sidebar";
 import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
-import { getCurrentUser } from "./services/auth.service";
+import { getCurrentUser, storeToken, getApiUrl } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
 import { ensureGitOnPath } from "./services/git.service";
+import { LoginResponse } from "./types";
 
 /**
  * Extension activation entry point.
@@ -66,6 +68,21 @@ export async function activate(
     })
   );
 
+  // Handle vscode://devsimulate.devsimulate/auth?token=<link-token>
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      handleUri: async (uri: vscode.Uri) => {
+        if (uri.path === "/auth") {
+          const params = new URLSearchParams(uri.query);
+          const linkToken = params.get("token");
+          if (linkToken) {
+            await handleDeepLinkAuth(linkToken, context, sidebar);
+          }
+        }
+      },
+    })
+  );
+
   // Hydrate sidebar on startup if already logged in
   await hydrateInitialState(context, sidebar);
 }
@@ -97,6 +114,36 @@ async function hydrateInitialState(
     });
   } catch {
     // Startup hydration failure is non-fatal — sidebar will show login view
+  }
+}
+
+async function handleDeepLinkAuth(
+  linkToken: string,
+  context: vscode.ExtensionContext,
+  sidebar: SidebarProvider
+): Promise<void> {
+  try {
+    const apiUrl = getApiUrl();
+    const res = await axios.post<{ data: LoginResponse }>(
+      `${apiUrl}/auth/vscode-exchange`,
+      { token: linkToken }
+    );
+    const { token, user } = res.data.data;
+    await storeToken(context, token);
+
+    const [assignments, submission] = await Promise.all([
+      getAssignedTickets(context),
+      getLatestReview(context),
+    ]);
+
+    sidebar.update({ user, assignments, submission: submission ?? null });
+    vscode.window.showInformationMessage(
+      `DevSimulate: Welcome, ${user.githubUsername}! You're connected.`
+    );
+  } catch {
+    vscode.window.showErrorMessage(
+      "DevSimulate: Connection failed. The link may have expired — please try again."
+    );
   }
 }
 

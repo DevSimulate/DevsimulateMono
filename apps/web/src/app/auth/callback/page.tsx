@@ -16,9 +16,10 @@ function CallbackHandler(): React.ReactElement {
   const code = params.get("code");
   const state = params.get("state");
   const isVsCode = state === "vscode";
+  const isVsCodeLink = state === "vscode-link";
 
   useEffect(() => {
-    // VS Code flow — just display the code, do not exchange it here
+    // Legacy VS Code flow — just display the code, do not exchange it here
     if (isVsCode) return;
 
     if (!code) {
@@ -32,6 +33,11 @@ function CallbackHandler(): React.ReactElement {
       .post<{ data: LoginResponse }>(`${apiUrl}/auth/github`, { code })
       .then((res) => {
         storeToken(res.data.data.token);
+        if (isVsCodeLink) {
+          // After OAuth, continue the VS Code deep-link flow
+          window.location.replace("/auth/vscode-link");
+          return;
+        }
         const returnUrl = localStorage.getItem("ds_submit_return");
         if (returnUrl) {
           localStorage.removeItem("ds_submit_return");
@@ -45,7 +51,7 @@ function CallbackHandler(): React.ReactElement {
           "Login failed. The GitHub code may have expired — please try again."
         );
       });
-  }, [code, isVsCode, params, router]);
+  }, [code, isVsCode, isVsCodeLink, params, router]);
 
   if (error) {
     return (

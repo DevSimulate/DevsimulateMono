@@ -46,7 +46,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this._pushState();
           break;
         case "login":
-          vscode.commands.executeCommand("devsimulate.login");
+          vscode.env.openExternal(
+            vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link")
+          );
           break;
         case "cloneCodebase":
           vscode.commands.executeCommand("devsimulate.cloneCodebase");
