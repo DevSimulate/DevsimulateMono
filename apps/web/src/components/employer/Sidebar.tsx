@@ -1,8 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearToken } from "@/lib/auth";
+import { clearToken, getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
 import {
   LayoutDashboard,
@@ -28,9 +29,21 @@ const NAV = [
   { href: "/employer/settings",    label: "Settings",     icon: Settings },
 ];
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [profile, setProfile] = useState<{ orgName: string; githubUsername: string; email: string | null } | null>(null);
+
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API}/employer/campaigns/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => { if (j.data) setProfile(j.data); })
+      .catch(() => null);
+  }, []);
 
   function handleLogout() {
     clearToken();
@@ -102,11 +115,13 @@ export default function Sidebar() {
         <div className="flex items-center gap-2.5 px-1 mb-2">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
             style={{ background: "#1e1b4b", color: "#818cf8" }}>
-            T
+            {(profile?.orgName ?? "?").charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white truncate">TechCorp Inc.</div>
-            <div className="text-xs truncate" style={{ color: "#555555" }}>admin@techcorp.io</div>
+            <div className="text-xs font-semibold text-white truncate">{profile?.orgName ?? "—"}</div>
+            <div className="text-xs truncate" style={{ color: "#555555" }}>
+              {profile?.email ?? (profile ? `@${profile.githubUsername}` : "Not signed in")}
+            </div>
           </div>
         </div>
 

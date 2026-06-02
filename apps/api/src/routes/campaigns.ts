@@ -6,11 +6,43 @@ import { Difficulty, CampaignStatus, CandidateStatus } from "@prisma/client";
 import crypto from "crypto";
 
 const router = Router();
-router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 }
+
+// ─── PUBLIC routes (no auth) — must be defined before the auth gate ──────────────
+
+/**
+ * GET /campaigns/apply/:slug  (PUBLIC)
+ * Returns campaign details for a candidate opening the apply link before login.
+ */
+router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const campaign = await prisma.campaign.findUnique({
+      where: { shareableSlug: req.params.slug },
+      include: { codebase: { select: { name: true, description: true } } },
+    });
+    if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
+      res.status(404).json({ error: "Campaign not found or closed" });
+      return;
+    }
+    res.json({
+      data: {
+        id: campaign.id,
+        roleName: campaign.roleName,
+        companyName: campaign.companyName,
+        difficulty: campaign.difficulty,
+        codebase: campaign.codebase,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load campaign" });
+  }
+});
+
+// ─── Everything below requires authentication ───────────────────────────────────
+router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
 
 async function getOrgForUser(userId: string): Promise<string | null> {
   const member = await prisma.orgMember.findFirst({
@@ -74,35 +106,6 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create campaign";
     res.status(500).json({ error: message });
-  }
-});
-
-/**
- * GET /campaigns/apply/:slug
- * Public-facing: returns campaign details for a candidate opening the apply link.
- * Any authenticated user (the candidate) can view it.
- */
-router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
-  try {
-    const campaign = await prisma.campaign.findUnique({
-      where: { shareableSlug: req.params.slug },
-      include: { codebase: { select: { name: true, description: true } } },
-    });
-    if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
-      res.status(404).json({ error: "Campaign not found or closed" });
-      return;
-    }
-    res.json({
-      data: {
-        id: campaign.id,
-        roleName: campaign.roleName,
-        companyName: campaign.companyName,
-        difficulty: campaign.difficulty,
-        codebase: campaign.codebase,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to load campaign" });
   }
 });
 
@@ -221,6 +224,35 @@ router.post("/join", async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to join campaign";
     res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /campaigns/me
+ * Returns the employer's org + identity for the sidebar.
+ */
+router.get("/me", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const member = await prisma.orgMember.findFirst({
+      where: { userId },
+      orderBy: { joinedAt: "asc" },
+      include: { org: { select: { name: true } }, user: { select: { githubUsername: true, email: true } } },
+    });
+    if (!member) {
+      res.json({ data: null });
+      return;
+    }
+    res.json({
+      data: {
+        orgName: member.org.name,
+        githubUsername: member.user.githubUsername,
+        email: member.user.email,
+        role: member.role,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
 
