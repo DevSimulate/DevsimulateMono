@@ -134,10 +134,22 @@ function SubmitPageInner() {
   const [feedbackRating, setFeedbackRating] = useState<number>(0);
   const [feedbackText,   setFeedbackText]   = useState("");
   const [feedbackSent,   setFeedbackSent]   = useState(false);
-  const [timeLeft,     setTimeLeft]     = useState(600);
+  const [timeLeft,     setTimeLeft]     = useState(900);
   const [elapsed,      setElapsed]      = useState(0);
+  const [pasteCount,   setPasteCount]   = useState(0);
+  const [pasteWarn,    setPasteWarn]    = useState(false);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Blocks paste into the answer boxes and records the attempt. The Q&A is
+  // generated live from the candidate's own code — there's no legitimate reason
+  // to paste a long answer, so a paste attempt is logged as an integrity signal.
+  function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    setPasteCount((n) => n + 1);
+    setPasteWarn(true);
+    setTimeout(() => setPasteWarn(false), 4000);
+  }
 
   // Auth check + ticket fetch
   useEffect(() => {
@@ -178,10 +190,10 @@ function SubmitPageInner() {
     return () => { if (elapsedRef.current) clearInterval(elapsedRef.current); };
   }, [stage]);
 
-  // 10-minute countdown — active during q1 and q2 stages
+  // 15-minute countdown — active during q1 and q2 stages
   useEffect(() => {
     if (stage === "q1") {
-      setTimeLeft(600);
+      setTimeLeft(900);
       timerRef.current = setInterval(() => {
         setTimeLeft((t) => { if (t <= 1) { clearInterval(timerRef.current!); return 0; } return t - 1; });
       }, 1000);
@@ -360,7 +372,7 @@ function SubmitPageInner() {
       const r = await fetch(`${API_URL}/submissions/${submissionId}/followup`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ answer1, answer2, aiDeclaration: declaration }),
+        body: JSON.stringify({ answer1, answer2, aiDeclaration: declaration, pasteAttempts: pasteCount }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Scoring failed");
@@ -572,12 +584,12 @@ function SubmitPageInner() {
               {(isDesign ? [
                 "Q1 targets a specific decision in your design — a trade-off, a component choice",
                 "After you answer Q1, Q2 is generated from your actual answer",
-                "You have 10 minutes total across both questions",
+                "You have 15 minutes total across both questions",
                 "Final score = design review (100 pts) + follow-up answers",
               ] : [
                 "Q1 is specific to your actual code changes — exact variables and functions",
                 "After you answer Q1, Q2 is generated from your answer",
-                "You have 10 minutes total across both questions",
+                "You have 15 minutes total across both questions",
                 "Final score = PR review + follow-up answers combined",
               ]).map((tip) => (
                 <div key={tip} className="flex items-start gap-2 text-xs" style={{ color: "#6B6B6B" }}>
@@ -609,12 +621,20 @@ function SubmitPageInner() {
             <textarea
               value={answer1}
               onChange={(e) => setAnswer1(e.target.value)}
-              placeholder="Your answer…"
+              onPaste={handleAnswerPaste}
+              placeholder="Type your answer — pasting is disabled…"
               rows={6}
               disabled={timeLeft === 0}
-              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-5 disabled:opacity-50"
-              style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
+              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
             />
+            {pasteWarn && (
+              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Pasting is disabled. Write your own understanding — paste attempts are recorded and lower your integrity score.
+              </div>
+            )}
+            <div className="mb-3" />
 
             <div className="rounded-xl border px-4 py-3 mb-5 text-xs" style={{ borderColor: "#E4E2DD", background: "#EBEBFF", color: "#5B5BD6" }}>
               After you submit this answer, Q2 will be generated based on what you wrote.
@@ -658,12 +678,20 @@ function SubmitPageInner() {
             <textarea
               value={answer2}
               onChange={(e) => setAnswer2(e.target.value)}
-              placeholder="Your answer…"
+              onPaste={handleAnswerPaste}
+              placeholder="Type your answer — pasting is disabled…"
               rows={6}
               disabled={timeLeft === 0}
-              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-5 disabled:opacity-50"
-              style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
+              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
             />
+            {pasteWarn && (
+              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Pasting is disabled. Write your own understanding — paste attempts are recorded and lower your integrity score.
+              </div>
+            )}
+            <div className="mb-3" />
 
             <div className="rounded-xl border p-4 mb-5 space-y-2" style={{ borderColor: "#E4E2DD", background: "white" }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>

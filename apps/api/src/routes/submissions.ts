@@ -272,10 +272,11 @@ router.get("/:id/followup", async (req: Request, res: Response): Promise<void> =
  */
 router.post("/:id/followup", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { answer1, answer2, aiDeclaration } = req.body as {
+  const { answer1, answer2, aiDeclaration, pasteAttempts } = req.body as {
     answer1?: string;
     answer2?: string;
     aiDeclaration?: string;
+    pasteAttempts?: number;
   };
 
   const validDeclarations = ["NO_AI_USED", "AI_USED_FOR_PHRASING", "AI_USED_FOR_UNDERSTANDING", "AI_USED_FOR_ANSWER"];
@@ -306,6 +307,18 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
     if (!followUp) {
       res.status(404).json({ error: "Follow-up questions not found" });
       return;
+    }
+
+    // Behavioral integrity signal: paste attempts into the Q&A boxes raise risk.
+    // The questions are generated from the candidate's own code — pasting a long
+    // answer has no legitimate use. +20 risk per attempt, capped at 60.
+    if (pasteAttempts && pasteAttempts > 0) {
+      const pasteRisk = Math.min(pasteAttempts * 20, 60);
+      const newRisk = Math.min((submission.riskScore ?? 0) + pasteRisk, 100);
+      await prisma.submission.update({
+        where: { id: submission.id },
+        data: { riskScore: newRisk },
+      });
     }
 
     if (followUp.answeredAt) {
