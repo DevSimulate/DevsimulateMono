@@ -138,8 +138,11 @@ function SubmitPageInner() {
   const [elapsed,      setElapsed]      = useState(0);
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
+  const [copyWarn,     setCopyWarn]     = useState(false);
+  const [writeTimeLeft, setWriteTimeLeft] = useState(0);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const writeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Blocks paste into the answer boxes and records the attempt. The Q&A is
   // generated live from the candidate's own code — there's no legitimate reason
@@ -149,6 +152,14 @@ function SubmitPageInner() {
     setPasteCount((n) => n + 1);
     setPasteWarn(true);
     setTimeout(() => setPasteWarn(false), 4000);
+  }
+
+  // Blocks copying the question / problem text so candidates can't lift it into
+  // an external AI tool. Shows a warning when they try.
+  function handleQuestionCopy(e: React.ClipboardEvent<HTMLElement>) {
+    e.preventDefault();
+    setCopyWarn(true);
+    setTimeout(() => setCopyWarn(false), 4000);
   }
 
   // Auth check + ticket fetch
@@ -202,6 +213,20 @@ function SubmitPageInner() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [stage]);
+
+  // System-design write timer — counts down the ticket's estimated minutes
+  // while the candidate writes their design doc.
+  useEffect(() => {
+    if (stage === "sd_write" && ticket) {
+      setWriteTimeLeft(ticket.expectedMinutes * 60);
+      writeRef.current = setInterval(() => {
+        setWriteTimeLeft((t) => { if (t <= 1) { clearInterval(writeRef.current!); return 0; } return t - 1; });
+      }, 1000);
+    } else {
+      if (writeRef.current) clearInterval(writeRef.current);
+    }
+    return () => { if (writeRef.current) clearInterval(writeRef.current); };
+  }, [stage, ticket]);
 
   async function handleDescriptionSubmit() {
     const token = getToken();
@@ -532,9 +557,27 @@ function SubmitPageInner() {
         {/* ── Stage: System Design Write ── */}
         {stage === "sd_write" && ticket && (
           <div className="space-y-4 fade-in-up">
+            {/* Write timer */}
+            <div className="card p-4 flex items-center justify-between">
+              <span className="text-xs font-medium" style={{ color: "#6B6B6B" }}>Time remaining to write your design</span>
+              <span className="text-sm font-mono font-bold tabular-nums" style={{
+                color: writeTimeLeft < 120 ? "#DC2626" : writeTimeLeft < 300 ? "#D97706" : "#1A1A1A",
+              }}>
+                ⏱ {Math.floor(writeTimeLeft / 60).toString().padStart(2, "0")}:{(writeTimeLeft % 60).toString().padStart(2, "0")}
+              </span>
+            </div>
+
+            {copyWarn && (
+              <div className="rounded-lg px-3 py-2 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Copying the problem is disabled. Read it here — copying it elsewhere is recorded and affects your score.
+              </div>
+            )}
+
             <div className="card p-6">
               <div className="section-label mb-1">The Problem</div>
-              <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#6B6B6B" }}>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap select-none"
+                onCopy={handleQuestionCopy} style={{ color: "#6B6B6B" }}>
                 {ticket.description}
               </div>
             </div>
@@ -628,9 +671,16 @@ function SubmitPageInner() {
               </span>
             </div>
 
-            <div className="rounded-xl p-4 mb-5" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{question1}</p>
+            <div className="rounded-xl p-4 mb-2" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <p className="text-sm font-semibold leading-relaxed select-none" onCopy={handleQuestionCopy} style={{ color: "#1A1A1A" }}>{question1}</p>
             </div>
+            {copyWarn && (
+              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Copying the question is disabled — it affects your integrity score.
+              </div>
+            )}
+            <div className="mb-3" />
 
             <textarea
               value={answer1}
@@ -686,8 +736,14 @@ function SubmitPageInner() {
             </div>
 
             <div className="rounded-xl p-4 mb-5" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{question2}</p>
+              <p className="text-sm font-semibold leading-relaxed select-none" onCopy={handleQuestionCopy} style={{ color: "#1A1A1A" }}>{question2}</p>
             </div>
+            {copyWarn && (
+              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Copying the question is disabled — it affects your integrity score.
+              </div>
+            )}
 
             <textarea
               value={answer2}

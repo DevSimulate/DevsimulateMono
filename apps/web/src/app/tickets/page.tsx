@@ -70,6 +70,13 @@ function TicketsList(): React.ReactElement {
       return;
     }
 
+    // No codebase chosen → don't dump every ticket from every codebase.
+    // Send the user to pick a codebase first.
+    if (!stack && !codebaseId) {
+      router.replace("/onboarding/select");
+      return;
+    }
+
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     const headers = { Authorization: `Bearer ${token}` };
     const params = new URLSearchParams();
