@@ -54,17 +54,46 @@ function resolveGitBinary(): string {
   return _resolvedGitBinary;
 }
 
-/** @deprecated PATH patching is no longer needed — kept for backwards compat. */
-export function ensureGitOnPath(): void { resolveGitBinary(); }
+export function ensureGitOnPath(): void {
+  try {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    execFileSync("git", ["--version"], { timeout: 2000 });
+    return; // already on PATH
+  } catch { /* not on PATH */ }
+
+  const gitDir = resolveGitDir();
+  if (!gitDir) return;
+  const sep = process.platform === "win32" ? ";" : ":";
+  const current = process.env["PATH"] ?? "";
+  if (!current.includes(gitDir)) {
+    process.env["PATH"] = `${gitDir}${sep}${current}`;
+  }
+}
+
+function resolveGitDir(): string | undefined {
+  try {
+    const ext = vscode.extensions.getExtension("vscode.git");
+    const api = ext?.exports?.getAPI?.(1);
+    if (api?.git?.path) return path.dirname(api.git.path as string);
+  } catch { /* ignore */ }
+
+  if (process.platform === "win32") {
+    const candidates = [
+      "C:\\Program Files\\Git\\cmd",
+      "C:\\Program Files\\Git\\bin",
+      `${process.env["LOCALAPPDATA"] ?? ""}\\Programs\\Git\\cmd`,
+      `${process.env["USERPROFILE"] ?? ""}\\AppData\\Local\\Programs\\Git\\cmd`,
+    ];
+    for (const dir of candidates) {
+      if (dir && fs.existsSync(path.join(dir, "git.exe"))) return dir;
+    }
+  }
+  return undefined;
+}
 
 function makeGit(baseDir?: string): SimpleGit {
-  const binary = resolveGitBinary();
-  const opts: Partial<SimpleGitOptions> = {
-    binary,
-    unsafe: { allowUnsafeCustomBinary: true },
-  };
-  if (baseDir) opts.baseDir = baseDir;
-  return simpleGit(opts);
+  if (baseDir) return simpleGit(baseDir);
+  return simpleGit();
 }
 
 /**
