@@ -1,0 +1,1 @@
+ALTER TABLE "Submission" ADD COLUMN "pasteAttempts" INTEGER NOT NULL DEFAULT 0;

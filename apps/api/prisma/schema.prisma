@@ -150,6 +150,7 @@ model Submission {
   scoreExecution     Int?
   claudeReview       Json?
   riskScore          Int                 @default(0)
+  pasteAttempts      Int                 @default(0)
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
   user               User                @relation(fields: [userId], references: [id])

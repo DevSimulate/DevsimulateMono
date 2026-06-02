@@ -29,8 +29,21 @@ function authBand(authScore: number): "HIGH" | "MEDIUM" | "LOW" {
   return "LOW";
 }
 
-/** Conservative: requires BOTH low authenticity AND a hard declaration mismatch. */
-function isFlagged(authScore: number, mismatch: boolean): boolean {
+/**
+ * Flags a candidate for human review. Fires on ANY of:
+ *  - low authenticity AND a hard declaration mismatch (text + self-report), OR
+ *  - paste attempts into the Q&A boxes (behavioral fact), OR
+ *  - a suspiciously fast completion for the difficulty (behavioral fact).
+ * Behavioral signals are deterministic, so they can flag on their own.
+ */
+function isFlagged(
+  authScore: number,
+  mismatch: boolean,
+  pasteAttempts = 0,
+  suspiciouslyFast = false
+): boolean {
+  if (pasteAttempts > 0) return true;
+  if (suspiciouslyFast) return true;
   return authScore < 50 && mismatch;
 }
 
@@ -442,7 +455,7 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
           },
           orderBy: { scoreTotal: "desc" },
           include: {
-            ticket: { select: { title: true, difficulty: true } },
+            ticket: { select: { title: true, difficulty: true, expectedMinutes: true } },
             followUp: {
               select: {
                 aiDeclaration: true, scoreBonus: true, declarationMismatch: true,
@@ -452,7 +465,19 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
             },
           },
         });
-        return { ...c, submission };
+
+        // Time-on-task — flag a finish under 20% of the ticket estimate
+        let suspiciouslyFast = false;
+        if (submission) {
+          const assignment = await prisma.ticketAssignment.findFirst({
+            where: { userId: c.userId, ticketId: submission.ticketId },
+          });
+          if (assignment) {
+            const minutesTaken = (submission.submittedAt.getTime() - assignment.assignedAt.getTime()) / 60000;
+            suspiciouslyFast = minutesTaken < submission.ticket.expectedMinutes * 0.2;
+          }
+        }
+        return { ...c, submission, suspiciouslyFast };
       })
     );
 
@@ -490,7 +515,8 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
       const total = c.submission?.scoreTotal ?? 0;
       const authScore = toAuthScore(c.submission?.riskScore ?? 0);
       const mismatch = c.submission?.followUp?.declarationMismatch ?? false;
-      const flagged = isFlagged(authScore, mismatch);
+      const pastes = c.submission?.pasteAttempts ?? 0;
+      const flagged = isFlagged(authScore, mismatch, pastes, c.suspiciouslyFast);
       return {
         ...c,
         rank: (pageNum - 1) * pageSize + i + 1,

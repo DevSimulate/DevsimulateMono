@@ -317,7 +317,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       const newRisk = Math.min((submission.riskScore ?? 0) + pasteRisk, 100);
       await prisma.submission.update({
         where: { id: submission.id },
-        data: { riskScore: newRisk },
+        data: { riskScore: newRisk, pasteAttempts },
       });
     }
 
