@@ -281,6 +281,23 @@ model CampaignCandidate {
   campaign     Campaign        @relation(fields: [campaignId], references: [id])
   user         User            @relation(fields: [userId], references: [id])
   submission   Submission?     @relation(fields: [submissionId], references: [id])
+  decisions    CandidateDecision[]
 
   @@unique([campaignId, userId])
+}
+
+// Append-only audit trail of employer decisions. Proves human-in-the-loop:
+// every status change records who made it, when, and whether the candidate
+// was integrity-flagged at the moment of the decision.
+model CandidateDecision {
+  id          String            @id @default(cuid())
+  candidateId String
+  changedBy   String
+  fromStatus  String
+  toStatus    String
+  wasFlagged  Boolean           @default(false)
+  createdAt   DateTime          @default(now())
+  candidate   CampaignCandidate @relation(fields: [candidateId], references: [id])
+
+  @@index([candidateId])
 }

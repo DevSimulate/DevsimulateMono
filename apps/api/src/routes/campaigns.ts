@@ -11,6 +11,38 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 }
 
+// ─── Integrity helpers (ported from the proven demo dashboard logic) ─────────────
+// Authenticity is surfaced as an advisory signal — it NEVER changes a candidate's
+// rank (rank is pure PR score) and NEVER auto-rejects anyone. The flag only fires
+// when authenticity is low AND Claude set the hard declarationMismatch — i.e. the
+// candidate's answers contradict their OWN declaration.
+
+/** riskScore (0-100) → authenticity (0-100). Higher = more authentic. */
+function toAuthScore(riskScore: number): number {
+  return Math.max(0, Math.min(100, 100 - riskScore));
+}
+
+/** High ≥ 70 · Medium 40–69 · Low < 40 */
+function authBand(authScore: number): "HIGH" | "MEDIUM" | "LOW" {
+  if (authScore >= 70) return "HIGH";
+  if (authScore >= 40) return "MEDIUM";
+  return "LOW";
+}
+
+/** Conservative: requires BOTH low authenticity AND a hard declaration mismatch. */
+function isFlagged(authScore: number, mismatch: boolean): boolean {
+  return authScore < 50 && mismatch;
+}
+
+/** Advisory verdict combining skill + integrity WITHOUT merging into one number. */
+function verdict(total: number, authScore: number, flagged: boolean): "STRONG_YES" | "YES" | "MAYBE" | "NO" {
+  if (flagged || total < 50) return "NO";
+  if (total > 80 && authScore > 80) return "STRONG_YES";
+  if (total > 70 && authScore > 65) return "YES";
+  if (total > 60) return "MAYBE";
+  return "NO";
+}
+
 // ─── PUBLIC routes (no auth) — must be defined before the auth gate ──────────────
 
 /**
@@ -413,7 +445,7 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
             ticket: { select: { title: true, difficulty: true } },
             followUp: {
               select: {
-                aiDeclaration: true, scoreBonus: true,
+                aiDeclaration: true, scoreBonus: true, declarationMismatch: true,
                 question1: true, question2: true, answer1: true, answer2: true,
                 claudeFeedback: true,
               },
@@ -454,11 +486,24 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
       ? results[Math.floor(results.length * 0.2)]?.submission?.scoreTotal ?? 0
       : 80;
 
-    const withRank = paginated.map((c, i) => ({
-      ...c,
-      rank: (pageNum - 1) * pageSize + i + 1,
-      recommended: (c.submission?.scoreTotal ?? 0) >= Math.max(top20Threshold, 70),
-    }));
+    const withRank = paginated.map((c, i) => {
+      const total = c.submission?.scoreTotal ?? 0;
+      const authScore = toAuthScore(c.submission?.riskScore ?? 0);
+      const mismatch = c.submission?.followUp?.declarationMismatch ?? false;
+      const flagged = isFlagged(authScore, mismatch);
+      return {
+        ...c,
+        rank: (pageNum - 1) * pageSize + i + 1,
+        // Integrity signals — advisory only, never change rank, never auto-reject
+        authScore,
+        authBand: authBand(authScore),
+        flagged,
+        verdict: verdict(total, authScore, flagged),
+        // Recommended is gated on NOT flagged — a flagged candidate is never
+        // auto-recommended, but is never auto-hidden either.
+        recommended: !flagged && total >= Math.max(top20Threshold, 70),
+      };
+    });
 
     res.json({ data: withRank, total, page: pageNum, pageSize });
   } catch (err) {
@@ -520,10 +565,37 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
     });
     if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
 
+    const current = await prisma.campaignCandidate.findUnique({
+      where: { id: req.params.candidateId },
+    });
+    if (!current) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+    // Was this candidate integrity-flagged at decision time? (for the audit record)
+    const sub = await prisma.submission.findFirst({
+      where: { userId: current.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+      orderBy: { scoreTotal: "desc" },
+      include: { followUp: { select: { declarationMismatch: true } } },
+    });
+    const wasFlagged = sub
+      ? isFlagged(toAuthScore(sub.riskScore), sub.followUp?.declarationMismatch ?? false)
+      : false;
+
     const updated = await prisma.campaignCandidate.update({
       where: { id: req.params.candidateId },
       data: { status },
     });
+
+    // Append-only audit record — proves a human made this call
+    await prisma.candidateDecision.create({
+      data: {
+        candidateId: req.params.candidateId,
+        changedBy: userId,
+        fromStatus: current.status,
+        toStatus: status,
+        wasFlagged,
+      },
+    });
+
     res.json({ data: updated });
   } catch (err) {
     res.status(500).json({ error: "Failed to update candidate" });

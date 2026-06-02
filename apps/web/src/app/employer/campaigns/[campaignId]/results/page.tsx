@@ -26,11 +26,31 @@ const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
   REJECTED:    { bg: "#450a0a", color: "#f87171" },
 };
 
+type Verdict = "STRONG_YES" | "YES" | "MAYBE" | "NO";
+type AuthBand = "HIGH" | "MEDIUM" | "LOW";
+
+const VERDICT_META: Record<Verdict, { label: string; bg: string; color: string }> = {
+  STRONG_YES: { label: "Strong Yes", bg: "#052e16", color: "#4ade80" },
+  YES:        { label: "Yes",        bg: "#0d2818", color: "#34d399" },
+  MAYBE:      { label: "Maybe",      bg: "#422006", color: "#fbbf24" },
+  NO:         { label: "No",         bg: "#450a0a", color: "#f87171" },
+};
+
+const AUTH_META: Record<AuthBand, { label: string; color: string }> = {
+  HIGH:   { label: "High",   color: "#4ade80" },
+  MEDIUM: { label: "Medium", color: "#fbbf24" },
+  LOW:    { label: "Low",    color: "#f87171" },
+};
+
 interface Candidate {
   id: string;
   rank: number;
   recommended: boolean;
   status: string;
+  authScore: number;
+  authBand: AuthBand;
+  flagged: boolean;
+  verdict: Verdict;
   user: { id: string; githubUsername: string; email: string | null };
   submission: {
     prUrl: string | null;
@@ -103,6 +123,16 @@ export default function ResultsPage() {
     );
   }
 
+  // Select every clean Yes / Strong Yes — flagged candidates are excluded so a
+  // suspicious candidate is never bulk-selected. The employer still reviews
+  // flagged ones individually.
+  function selectTopPicks() {
+    const picks = candidates
+      .filter((c) => !c.flagged && (c.verdict === "STRONG_YES" || c.verdict === "YES"))
+      .map((c) => c.id);
+    setSelected(new Set(picks));
+  }
+
   function toggleAi(d: AIDeclaration) {
     setAiFilters((prev) => {
       const next = new Set(prev);
@@ -163,6 +193,12 @@ export default function ResultsPage() {
             {campaign?.companyName} · {candidates.length} scored candidates
           </p>
         </div>
+        <button onClick={selectTopPicks}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+          style={{ background: "#1e1b4b", border: "1px solid #312e81" }}
+          title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
+          <Star size={14} /> Select Top Picks
+        </button>
         <button onClick={exportCsv}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
           style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
@@ -229,7 +265,7 @@ export default function ResultsPage() {
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
                         onChange={toggleAll} style={{ accentColor: "#6366f1" }} />
                     </th>
-                    {["#", "Candidate", "Total", "Diag", "Design", "Comms", "Exec", "AI", "Status", ""].map((h) => (
+                    {["#", "Candidate", "Total", "Diag", "Design", "Comms", "Exec", "Authenticity", "Verdict", "AI", "Status", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider"
                         style={{ color: "#444444" }}>{h}</th>
                     ))}
@@ -277,6 +313,27 @@ export default function ResultsPage() {
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreDesign ?? "—"}</td>
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreCommunication ?? "—"}</td>
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreExecution ?? "—"}</td>
+                        {/* Authenticity — advisory chip, never changes rank */}
+                        <td className="px-3 py-3">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: AUTH_META[c.authBand].color }} />
+                            <span style={{ color: AUTH_META[c.authBand].color }}>{AUTH_META[c.authBand].label}</span>
+                            {c.flagged && (
+                              <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded"
+                                style={{ background: "#450a0a", color: "#f87171" }}
+                                title="Answers contradict the candidate's own AI declaration — review before deciding">
+                                Review
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        {/* Verdict — advisory, combines skill + integrity without merging the number */}
+                        <td className="px-3 py-3">
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: VERDICT_META[c.verdict].bg, color: VERDICT_META[c.verdict].color }}>
+                            {VERDICT_META[c.verdict].label}
+                          </span>
+                        </td>
                         <td className="px-3 py-3">
                           {aiMeta && (
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
