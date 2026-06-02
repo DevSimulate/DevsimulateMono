@@ -95,6 +95,23 @@ function stepIndex(stage: Stage): number {
   return map[stage];
 }
 
+// Faint tiled identity watermark over question text. Doesn't prevent a
+// screenshot, but makes any leaked screenshot traceable to the candidate.
+function Watermark({ text }: { text: string }) {
+  if (!text) return null;
+  const tile = `${text} · ${new Date().toLocaleDateString()}`;
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden select-none"
+      style={{ opacity: 0.05, zIndex: 0 }}>
+      <div style={{ transform: "rotate(-20deg)", whiteSpace: "nowrap", lineHeight: "3.5rem", fontSize: 13, fontWeight: 700, color: "#1A1A1A" }}>
+        {Array.from({ length: 14 }).map((_, i) => (
+          <div key={i}>{Array.from({ length: 8 }).map((__, j) => <span key={j} className="mr-8">{tile}</span>)}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ScoreBar({ label, value, max }: { label: string; value: number | null; max: number }) {
   const pct = value !== null ? Math.round((value / max) * 100) : 0;
   return (
@@ -139,6 +156,8 @@ function SubmitPageInner() {
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
   const [copyWarn,     setCopyWarn]     = useState(false);
+  const [blurCount,    setBlurCount]    = useState(0);
+  const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -189,6 +208,27 @@ function SubmitPageInner() {
       })
       .catch(() => setStage("describe"));
   }, [ticketId, router]);
+
+  // Fetch the candidate's GitHub username for the integrity watermark
+  useEffect(() => {
+    const token = getToken();
+    if (!token) return;
+    fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => { if (j.data?.githubUsername) setUsername(j.data.githubUsername); })
+      .catch(() => null);
+  }, []);
+
+  // Tab-switch / focus-loss counter — active while writing or answering.
+  // Leaving the tab during a timed assessment is recorded as an integrity signal
+  // (e.g. switching to an AI tool or to take a screenshot).
+  useEffect(() => {
+    const watched = ["describe", "sd_write", "q1", "q2"];
+    if (!watched.includes(stage)) return;
+    const onHidden = () => { if (document.hidden) setBlurCount((n) => n + 1); };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [stage]);
 
   // Elapsed timer — active during analysing stage
   useEffect(() => {
@@ -397,7 +437,7 @@ function SubmitPageInner() {
       const r = await fetch(`${API_URL}/submissions/${submissionId}/followup`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ answer1, answer2, aiDeclaration: declaration, pasteAttempts: pasteCount }),
+        body: JSON.stringify({ answer1, answer2, aiDeclaration: declaration, pasteAttempts: pasteCount, tabSwitches: blurCount }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Scoring failed");
@@ -574,11 +614,14 @@ function SubmitPageInner() {
               </div>
             )}
 
-            <div className="card p-6">
-              <div className="section-label mb-1">The Problem</div>
-              <div className="text-sm leading-relaxed whitespace-pre-wrap select-none"
-                onCopy={handleQuestionCopy} style={{ color: "#6B6B6B" }}>
-                {ticket.description}
+            <div className="card p-6 relative overflow-hidden">
+              <Watermark text={username} />
+              <div className="relative" style={{ zIndex: 1 }}>
+                <div className="section-label mb-1">The Problem</div>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap select-none"
+                  onCopy={handleQuestionCopy} style={{ color: "#6B6B6B" }}>
+                  {ticket.description}
+                </div>
               </div>
             </div>
 
@@ -671,8 +714,9 @@ function SubmitPageInner() {
               </span>
             </div>
 
-            <div className="rounded-xl p-4 mb-2" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <p className="text-sm font-semibold leading-relaxed select-none" onCopy={handleQuestionCopy} style={{ color: "#1A1A1A" }}>{question1}</p>
+            <div className="rounded-xl p-4 mb-2 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <Watermark text={username} />
+              <p className="text-sm font-semibold leading-relaxed select-none relative" style={{ color: "#1A1A1A", zIndex: 1 }} onCopy={handleQuestionCopy}>{question1}</p>
             </div>
             {copyWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
@@ -735,8 +779,9 @@ function SubmitPageInner() {
               </span>
             </div>
 
-            <div className="rounded-xl p-4 mb-5" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <p className="text-sm font-semibold leading-relaxed select-none" onCopy={handleQuestionCopy} style={{ color: "#1A1A1A" }}>{question2}</p>
+            <div className="rounded-xl p-4 mb-5 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <Watermark text={username} />
+              <p className="text-sm font-semibold leading-relaxed select-none relative" style={{ color: "#1A1A1A", zIndex: 1 }} onCopy={handleQuestionCopy}>{question2}</p>
             </div>
             {copyWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
