@@ -339,34 +339,26 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       aiDeclaration!
     );
 
-    // Tiered bonus based on declared AI usage level.
-    // Mismatch penalty differs by declaration: PHRASING gets -10 (smaller gap),
-    // NO_AI_USED gets -20 (claimed full independence).
+    // NO BONUS. The follow-up Q&A is a verification gate, not a points source.
+    // The score is the quality of the actual work (the PR). Strong answers
+    // confirm understanding and leave the score intact; they are never rewarded
+    // with extra points — especially since declared AI use is already allowed.
+    // Weak answers that contradict the declaration still incur a penalty.
     const MISMATCH_PENALTY: Record<string, number> = {
       NO_AI_USED:           20,
       AI_USED_FOR_PHRASING: 10,
     };
-    const BONUS_MULTIPLIER: Record<string, number> = {
-      NO_AI_USED:                1.0,
-      AI_USED_FOR_PHRASING:      1.0,
-      AI_USED_FOR_UNDERSTANDING: 0.5,
-      AI_USED_FOR_ANSWER:        0.0,
-    };
-    const HONESTY_REWARD = aiDeclaration === "AI_USED_FOR_ANSWER" ? 3 : 0;
-    const multiplier     = BONUS_MULTIPLIER[aiDeclaration!] ?? 1.0;
     const mismatchPenalty = scored.declarationMismatch
       ? (MISMATCH_PENALTY[aiDeclaration!] ?? 20)
       : 0;
-    const effectiveBonus  = scored.declarationMismatch
-      ? 0
-      : Math.round(scored.scoreBonus * multiplier) + HONESTY_REWARD;
+    const effectiveBonus = 0;
 
     const updated = await prisma.followUpQuestion.update({
       where: { id: followUp.id },
       data: {
         answer1,
         answer2,
-        scoreBonus: effectiveBonus,
+        scoreBonus: 0,
         claudeFeedback: scored.feedback,
         aiDeclaration: aiDeclaration as any,
         declarationMismatch: scored.declarationMismatch,
@@ -407,11 +399,11 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
 
     const bonusNote =
       scored.declarationMismatch
-        ? `Declaration mismatch detected — bonus forfeited and ${mismatchPenalty} pts deducted.`
+        ? `Declaration mismatch detected — ${mismatchPenalty} pts deducted because your answers did not match your declaration.`
         : aiDeclaration === "AI_USED_FOR_ANSWER"
-        ? `You honestly declared AI wrote your answers. No follow-up bonus, but +${HONESTY_REWARD} pts for transparency.`
+        ? `You honestly declared AI wrote your answers. No penalty — transparency noted for the reviewer.`
         : aiDeclaration === "AI_USED_FOR_UNDERSTANDING"
-        ? `You used AI to understand the concepts. Bonus reduced to 50% (${effectiveBonus} pts) to reflect partial independent work.`
+        ? `You used AI to understand the concepts and answered in your own words. No penalty.`
         : null;
 
     res.json({

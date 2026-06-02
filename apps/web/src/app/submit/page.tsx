@@ -690,7 +690,7 @@ function SubmitPageInner() {
                 "Q1 is specific to your actual code changes — exact variables and functions",
                 "After you answer Q1, Q2 is generated from your answer",
                 "You have 15 minutes total across both questions",
-                "Final score = PR review + follow-up answers combined",
+                "Your answers verify you understand your own fix — they confirm the score, not inflate it",
               ]).map((tip) => (
                 <div key={tip} className="flex items-start gap-2 text-xs" style={{ color: "#6B6B6B" }}>
                   <span className="shrink-0 mt-0.5" style={{ color: "#5B5BD6" }}>→</span>
@@ -898,16 +898,10 @@ function SubmitPageInner() {
                   </div>
                 ) : null;
               })()}
-              {result.scoreBonus > 0 && (
+              {!result.declarationMismatch && (
                 <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
                   style={{ background: "#CCFBF1", color: "#0D9488" }}>
-                  +{result.scoreBonus} pts from follow-up answers
-                </div>
-              )}
-              {result.scoreBonus === 0 && !result.declarationMismatch && (
-                <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
-                  style={{ background: "#F3F4F6", color: "#6B6B6B" }}>
-                  No follow-up bonus
+                  ✓ Understanding verified in follow-up
                 </div>
               )}
             </div>
@@ -949,7 +943,7 @@ function SubmitPageInner() {
                 </div>
                 <div style={{ color: "#1A1A1A" }}>
                   Your answers show signs of AI generation but you declared little or no AI use.
-                  Your follow-up bonus was forfeited and {result.mismatchPenalty} points were deducted.
+                  {result.mismatchPenalty} points were deducted because your answers did not match your declaration.
                   Honest declarations always give better long-term results.
                 </div>
               </div>

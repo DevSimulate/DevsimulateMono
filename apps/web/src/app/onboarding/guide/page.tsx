@@ -172,7 +172,7 @@ const STEPS: {
       "Claude reads your PR diff and your description and scores against the ticket rubric.",
       "After ~60 seconds your score appears with 4 dimensions: Diagnosis (40 pts), Design (30 pts), Communication (20 pts), Execution (10 pts).",
       "Two follow-up questions appear about your specific code changes — answer them honestly.",
-      "Strong answers add up to 20 bonus points.",
+      "Your answers verify you understand your own fix. They confirm your score — they don't add bonus points. Weak or contradictory answers lose points.",
       "Everything is saved to your Dashboard: score history, Claude feedback, and follow-up Q&A.",
     ],
     note: null,
