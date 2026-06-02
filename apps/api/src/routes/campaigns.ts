@@ -170,6 +170,61 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
 });
 
 /**
+ * POST /campaigns/join
+ * Body: { slug }. Alias of apply/:slug POST — registers the authenticated
+ * candidate to the campaign and assigns a ticket. Returns campaignId + ticketId.
+ */
+router.post("/join", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { slug } = req.body as { slug?: string };
+  if (!slug) { res.status(400).json({ error: "slug is required" }); return; }
+
+  try {
+    const campaign = await prisma.campaign.findUnique({ where: { shareableSlug: slug } });
+    if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
+      res.status(404).json({ error: "Campaign not found or closed" });
+      return;
+    }
+
+    // Enforce candidate limit
+    const count = await prisma.campaignCandidate.count({ where: { campaignId: campaign.id } });
+    const already = await prisma.campaignCandidate.findUnique({
+      where: { campaignId_userId: { campaignId: campaign.id, userId } },
+    });
+    if (!already && count >= campaign.candidateLimit) {
+      res.status(403).json({ error: "This campaign has reached its candidate limit" });
+      return;
+    }
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!ticket) { res.status(404).json({ error: "No ticket available for this campaign" }); return; }
+
+    const tslug = ticket.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const branchName = `ds/${ticket.id.slice(0, 8)}-${tslug}`;
+    await prisma.ticketAssignment.upsert({
+      where: { userId_ticketId: { userId, ticketId: ticket.id } },
+      create: { userId, ticketId: ticket.id, branchName },
+      update: {},
+    });
+
+    if (!already) {
+      await prisma.campaignCandidate.create({ data: { campaignId: campaign.id, userId } });
+    }
+
+    res.json({
+      data: { campaignId: campaign.id, ticketId: ticket.id },
+      message: `You have joined the ${campaign.companyName} campaign. Your ticket has been assigned.`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to join campaign";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * GET /campaigns/codebases
  * Lists available codebases for the campaign creation dropdown.
  */

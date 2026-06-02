@@ -1,4 +1,4 @@
-import { PrismaClient, Stack, Difficulty } from "@prisma/client";
+import { PrismaClient, Stack, Difficulty, OrgRole, CampaignStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -2647,8 +2647,55 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
     });
   }
 
+  // ─── LMKR demo employer org + campaign ──────────────────────────────────────
+  // The whole platform uses GitHub OAuth (no passwords), so the "employer" is an
+  // existing GitHub user added as an ADMIN of the LMKR org. Change EMPLOYER_GH to
+  // whichever GitHub account should own the LMKR dashboard.
+  const EMPLOYER_GH = "OSSAMA-prog-droid";
+
+  const lmkrOrg = await prisma.organisation.upsert({
+    where: { id: "lmkr-org-seed-001" },
+    update: {},
+    create: { id: "lmkr-org-seed-001", name: "LMKR", domain: "lmkr.com", plan: "HIRING" },
+  });
+
+  const employerUser = await prisma.user.findUnique({
+    where: { githubUsername: EMPLOYER_GH },
+  });
+  if (employerUser) {
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId: lmkrOrg.id, userId: employerUser.id } },
+      update: { role: OrgRole.ADMIN },
+      create: { orgId: lmkrOrg.id, userId: employerUser.id, role: OrgRole.ADMIN },
+    });
+    console.log(`[seed] LMKR admin set to GitHub user ${EMPLOYER_GH}`);
+  } else {
+    console.log(`[seed] LMKR org created, but GitHub user ${EMPLOYER_GH} not found yet — log in once, then re-run seed to attach as admin.`);
+  }
+
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 30);
+
+  await prisma.campaign.upsert({
+    where: { id: "lmkr-campaign-seed-001" },
+    update: {},
+    create: {
+      id: "lmkr-campaign-seed-001",
+      orgId: lmkrOrg.id,
+      roleName: "Senior .NET Developer",
+      codebaseId: "novatech-crm-seed-id-001",
+      difficulty: Difficulty.SENIOR,
+      candidateLimit: 500,
+      deadline,
+      companyName: "LMKR",
+      bookingLink: "https://lmkr.com/careers/apply",
+      shareableSlug: "lmkr-senior-net-developer-demo",
+      status: CampaignStatus.ACTIVE,
+    },
+  });
+
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore tickets upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore tickets + LMKR demo campaign upserted.`
   );
 }
