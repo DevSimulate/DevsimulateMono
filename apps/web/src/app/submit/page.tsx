@@ -503,11 +503,18 @@ function SubmitPageInner() {
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onPaste={handleAnswerPaste}
               placeholder={"## What was the root cause?\n\n## How did you investigate?\n\n## Why did you choose this solution?\n\n## How do you know it works?"}
               rows={12}
               className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
-              style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
             />
+            {pasteWarn && (
+              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                Pasting is disabled. Write your own explanation — paste attempts are recorded and lower your integrity score.
+              </div>
+            )}
             <div className="flex items-center justify-between mb-5">
               <span className="text-xs font-medium" style={{ color: description.length < 100 ? "#D97706" : "#0D9488" }}>
                 {description.length} chars
@@ -541,11 +548,18 @@ function SubmitPageInner() {
               <textarea
                 value={designDoc}
                 onChange={(e) => setDesignDoc(e.target.value)}
+                onPaste={handleAnswerPaste}
                 placeholder={"## Requirements & Scale\n\n## Architecture Overview\n\n## API Design\n\n## Data Model & Storage\n\n## Key Trade-offs\n\n## Scaling Strategy"}
                 rows={20}
                 className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
-                style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+                style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
               />
+              {pasteWarn && (
+                <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
+                  style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                  Pasting is disabled. Write your own design — paste attempts are recorded and lower your integrity score.
+                </div>
+              )}
               <div className="flex items-center justify-between mb-5">
                 <span className="text-xs font-medium" style={{ color: designDoc.length < 300 ? "#D97706" : "#0D9488" }}>
                   {designDoc.length} chars
