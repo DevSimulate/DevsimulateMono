@@ -130,6 +130,13 @@ export default function LandingPage(): React.ReactElement {
           ))}
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/employer/campaigns" className="text-sm font-medium hidden sm:block transition-colors"
+            style={{ color: "#6B6B6B" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
+            onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
+          >
+            For Employers
+          </Link>
           <Link href="/dashboard" className="text-sm font-medium hidden sm:block transition-colors"
             style={{ color: "#6B6B6B" }}
             onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
@@ -397,6 +404,7 @@ export default function LandingPage(): React.ReactElement {
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
             <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
+            <Link href="/employer/campaigns" className="hover:text-indigo-600 transition-colors">For Employers</Link>
             <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">
               ossama@devsimulate.com
             </a>
