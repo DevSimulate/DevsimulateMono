@@ -53,6 +53,7 @@ interface CandidateDetail {
     } | null;
   };
   campaign: { id: string; roleName: string; companyName: string; bookingLink: string | null };
+  timing: { minutesTaken: number; expectedMinutes: number; suspiciouslyFast: boolean } | null;
 }
 
 function ScoreBar({ label, value, max }: { label: string; value: number | null; max: number }) {
@@ -111,7 +112,7 @@ export default function CandidateDetailPage() {
   if (loading) return <div className="p-10 text-sm" style={{ color: "#555" }}>Loading…</div>;
   if (!data?.candidate?.submission) return <div className="p-10 text-sm" style={{ color: "#555" }}>No data.</div>;
 
-  const { candidate, campaign } = data;
+  const { candidate, campaign, timing } = data;
   const s = candidate.submission!;
   const fu = s.followUp;
   const review = s.claudeReview;
@@ -154,6 +155,26 @@ export default function CandidateDetailPage() {
             <ScoreBar label="Execution" value={s.scoreExecution} max={10} />
           </div>
         </div>
+
+        {/* Time-on-task — tracked signal, not a hard gate */}
+        {timing && (
+          <div className="rounded-xl p-4 flex items-center gap-4" style={{ background: "#111111", border: "1px solid #222222" }}>
+            <div>
+              <div className="text-xs uppercase tracking-widest mb-1" style={{ color: "#555" }}>Time on Task</div>
+              <div className="text-sm">
+                <span className="font-bold text-white">{timing.minutesTaken} min</span>
+                <span style={{ color: "#666" }}> taken · {timing.expectedMinutes} min estimated</span>
+              </div>
+            </div>
+            {timing.suspiciouslyFast && (
+              <span className="ml-auto text-xs font-bold px-3 py-1.5 rounded-lg"
+                style={{ background: "#450a0a", color: "#f87171", border: "1px solid #991b1b" }}
+                title="Completed in under 20% of the estimated time — verify the work is genuine">
+                ⚠ Unusually fast
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Status + AI declaration */}
         <div className="flex gap-4">

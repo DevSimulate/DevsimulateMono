@@ -543,10 +543,34 @@ router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): 
         ticket: { codebaseId: campaignCb.codebaseId },
       },
       orderBy: { scoreTotal: "desc" },
-      include: { ticket: { select: { title: true, difficulty: true } }, followUp: true },
+      include: {
+        ticket: { select: { title: true, difficulty: true, expectedMinutes: true } },
+        followUp: true,
+      },
     });
 
-    res.json({ data: { candidate: { ...rawCandidate, submission }, campaign } });
+    // Time-on-task signal: how long from assignment to submission, vs the
+    // ticket's own estimate. A suspiciously fast finish is an integrity signal.
+    let timing: { minutesTaken: number; expectedMinutes: number; suspiciouslyFast: boolean } | null = null;
+    if (submission) {
+      const assignment = await prisma.ticketAssignment.findFirst({
+        where: { userId: rawCandidate.userId, ticketId: submission.ticketId },
+      });
+      if (assignment) {
+        const minutesTaken = Math.max(
+          0,
+          Math.round((submission.submittedAt.getTime() - assignment.assignedAt.getTime()) / 60000)
+        );
+        const expectedMinutes = submission.ticket.expectedMinutes;
+        timing = {
+          minutesTaken,
+          expectedMinutes,
+          suspiciouslyFast: minutesTaken < expectedMinutes * 0.2,
+        };
+      }
+    }
+
+    res.json({ data: { candidate: { ...rawCandidate, submission }, campaign, timing } });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch candidate" });
   }
