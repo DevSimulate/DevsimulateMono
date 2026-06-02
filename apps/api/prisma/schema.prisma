@@ -44,31 +44,33 @@ enum AIUsageDeclaration {
 }
 
 model User {
-  id               String           @id @default(uuid())
-  githubId         String           @unique
-  githubUsername   String           @unique
-  email            String?
-  primaryStack     Stack            @default(NODE)
-  subscriptionTier SubscriptionTier @default(FREE)
-  skillScore       Int              @default(0)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  submissions      Submission[]
-  assignments      TicketAssignment[]
-  subscription     Subscription?
-  orgMemberships   OrgMember[]
-  applications     Application[]
+  id                  String              @id @default(uuid())
+  githubId            String              @unique
+  githubUsername      String              @unique
+  email               String?
+  primaryStack        Stack               @default(NODE)
+  subscriptionTier    SubscriptionTier    @default(FREE)
+  skillScore          Int                 @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  submissions         Submission[]
+  assignments         TicketAssignment[]
+  subscription        Subscription?
+  orgMemberships      OrgMember[]
+  applications        Application[]
+  campaignCandidates  CampaignCandidate[]
 }
 
 model Codebase {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   name        String
   stack       Stack
   repoUrl     String
   description String
-  companyLore String   @db.Text
-  createdAt   DateTime @default(now())
+  companyLore String     @db.Text
+  createdAt   DateTime   @default(now())
   tickets     Ticket[]
+  campaigns   Campaign[]
 }
 
 model Ticket {
@@ -133,27 +135,28 @@ model Subscription {
 }
 
 model Submission {
-  id                 String           @id @default(uuid())
+  id                 String              @id @default(uuid())
   userId             String
   ticketId           String
   prUrl              String?
-  prDescription      String?          @db.Text
+  prDescription      String?             @db.Text
   branchName         String?
-  designDoc          String?          @db.Text
-  status             SubmissionStatus @default(PENDING)
+  designDoc          String?             @db.Text
+  status             SubmissionStatus    @default(PENDING)
   scoreTotal         Int?
   scoreDiagnosis     Int?
   scoreDesign        Int?
   scoreCommunication Int?
   scoreExecution     Int?
   claudeReview       Json?
-  riskScore          Int              @default(0)
-  submittedAt        DateTime         @default(now())
+  riskScore          Int                 @default(0)
+  submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
-  user               User             @relation(fields: [userId], references: [id])
-  ticket             Ticket           @relation(fields: [ticketId], references: [id])
+  user               User                @relation(fields: [userId], references: [id])
+  ticket             Ticket              @relation(fields: [ticketId], references: [id])
   applications       Application[]
   followUp           FollowUpQuestion?
+  campaignCandidates CampaignCandidate[]
 }
 
 model FollowUpQuestion {
@@ -183,6 +186,7 @@ model Organisation {
   updatedAt DateTime    @updatedAt
   members   OrgMember[]
   jobPosts  JobPost[]
+  campaigns Campaign[]
 }
 
 model OrgMember {
@@ -232,4 +236,51 @@ model WaitlistEntry {
   createdAt DateTime @default(now())
 
   @@unique([email, codebase])
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum CandidateStatus {
+  NEW
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+}
+
+model Campaign {
+  id             String              @id @default(cuid())
+  orgId          String
+  roleName       String
+  codebaseId     String
+  difficulty     Difficulty
+  candidateLimit Int                 @default(100)
+  deadline       DateTime?
+  companyName    String
+  bookingLink    String?
+  shareableSlug  String              @unique
+  status         CampaignStatus      @default(ACTIVE)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  org            Organisation        @relation(fields: [orgId], references: [id])
+  codebase       Codebase            @relation(fields: [codebaseId], references: [id])
+  candidates     CampaignCandidate[]
+}
+
+model CampaignCandidate {
+  id           String          @id @default(cuid())
+  campaignId   String
+  userId       String
+  submissionId String?
+  status       CandidateStatus @default(NEW)
+  invitedAt    DateTime?
+  joinedAt     DateTime        @default(now())
+  campaign     Campaign        @relation(fields: [campaignId], references: [id])
+  user         User            @relation(fields: [userId], references: [id])
+  submission   Submission?     @relation(fields: [submissionId], references: [id])
+
+  @@unique([campaignId, userId])
 }

@@ -14,11 +14,12 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-
+  Megaphone,
 } from "lucide-react";
 
 const NAV = [
   { href: "/employer/dashboard",   label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/employer/campaigns",   label: "Campaigns",    icon: Megaphone },
   { href: "/employer/assessments", label: "Assessments",  icon: ClipboardList },
   { href: "/employer/candidates",  label: "Candidates",   icon: Users },
   { href: "/employer/jobs",        label: "Job Postings", icon: Briefcase },

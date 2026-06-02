@@ -1,0 +1,525 @@
+import { Router, Request, Response } from "express";
+import { requireAuth } from "../middleware/auth.middleware";
+import { AuthenticatedRequest } from "../types/index";
+import prisma from "../lib/prisma";
+import { Difficulty, CampaignStatus, CandidateStatus } from "@prisma/client";
+import crypto from "crypto";
+
+const router = Router();
+router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
+
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+}
+
+async function getOrgForUser(userId: string): Promise<string | null> {
+  const member = await prisma.orgMember.findFirst({
+    where: { userId },
+    orderBy: { joinedAt: "asc" },
+  });
+  return member?.orgId ?? null;
+}
+
+/**
+ * POST /campaigns
+ * Creates a new hiring campaign.
+ */
+router.post("/", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink } =
+    req.body as {
+      roleName?: string;
+      codebaseId?: string;
+      difficulty?: Difficulty;
+      candidateLimit?: number;
+      deadline?: string;
+      companyName?: string;
+      bookingLink?: string;
+    };
+
+  if (!roleName || !codebaseId || !difficulty || !companyName) {
+    res.status(400).json({ error: "roleName, codebaseId, difficulty and companyName are required" });
+    return;
+  }
+
+  try {
+    const orgId = await getOrgForUser(userId);
+    if (!orgId) {
+      res.status(403).json({ error: "You must belong to an organisation to create campaigns" });
+      return;
+    }
+
+    const roleSlug = slugify(roleName);
+    const companySlug = slugify(companyName);
+    const randomId = crypto.randomBytes(4).toString("hex");
+    const shareableSlug = `${companySlug}-${roleSlug}-${randomId}`;
+
+    const campaign = await prisma.campaign.create({
+      data: {
+        orgId,
+        roleName,
+        codebaseId,
+        difficulty,
+        candidateLimit: candidateLimit ?? 100,
+        deadline: deadline ? new Date(deadline) : null,
+        companyName,
+        bookingLink: bookingLink ?? null,
+        shareableSlug,
+        status: CampaignStatus.ACTIVE,
+      },
+      include: { codebase: true },
+    });
+
+    res.status(201).json({ data: campaign });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create campaign";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /campaigns/apply/:slug
+ * Public-facing: returns campaign details for a candidate opening the apply link.
+ * Any authenticated user (the candidate) can view it.
+ */
+router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const campaign = await prisma.campaign.findUnique({
+      where: { shareableSlug: req.params.slug },
+      include: { codebase: { select: { name: true, description: true } } },
+    });
+    if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
+      res.status(404).json({ error: "Campaign not found or closed" });
+      return;
+    }
+    res.json({
+      data: {
+        id: campaign.id,
+        roleName: campaign.roleName,
+        companyName: campaign.companyName,
+        difficulty: campaign.difficulty,
+        codebase: campaign.codebase,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load campaign" });
+  }
+});
+
+/**
+ * POST /campaigns/apply/:slug
+ * Registers the authenticated candidate to the campaign and assigns a ticket
+ * from the campaign's codebase at the chosen difficulty.
+ */
+router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await prisma.campaign.findUnique({
+      where: { shareableSlug: req.params.slug },
+    });
+    if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
+      res.status(404).json({ error: "Campaign not found or closed" });
+      return;
+    }
+
+    // Already joined? return existing assignment
+    const existing = await prisma.campaignCandidate.findUnique({
+      where: { campaignId_userId: { campaignId: campaign.id, userId } },
+    });
+
+    // Pick a ticket from the codebase at the campaign difficulty
+    const ticket = await prisma.ticket.findFirst({
+      where: { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!ticket) {
+      res.status(404).json({ error: "No ticket available for this campaign" });
+      return;
+    }
+
+    // Assign the ticket if not already assigned
+    const slug = ticket.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const branchName = `ds/${ticket.id.slice(0, 8)}-${slug}`;
+    await prisma.ticketAssignment.upsert({
+      where: { userId_ticketId: { userId, ticketId: ticket.id } },
+      create: { userId, ticketId: ticket.id, branchName },
+      update: {},
+    });
+
+    if (!existing) {
+      await prisma.campaignCandidate.create({
+        data: { campaignId: campaign.id, userId },
+      });
+    }
+
+    res.json({
+      data: {
+        campaignId: campaign.id,
+        ticket: {
+          id: ticket.id,
+          title: ticket.title,
+          difficulty: ticket.difficulty,
+          expectedMinutes: ticket.expectedMinutes,
+        },
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to join campaign";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * GET /campaigns/codebases
+ * Lists available codebases for the campaign creation dropdown.
+ */
+router.get("/codebases", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const codebases = await prisma.codebase.findMany({
+      select: { id: true, name: true, stack: true },
+      orderBy: { name: "asc" },
+    });
+    res.json({ data: codebases });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch codebases" });
+  }
+});
+
+/**
+ * GET /campaigns
+ * Lists all campaigns for the current user's organisation.
+ */
+router.get("/", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const orgId = await getOrgForUser(userId);
+    if (!orgId) { res.json({ data: [] }); return; }
+
+    const campaigns = await prisma.campaign.findMany({
+      where: { orgId },
+      include: {
+        codebase: { select: { name: true, stack: true } },
+        _count: { select: { candidates: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json({ data: campaigns });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch campaigns" });
+  }
+});
+
+/**
+ * GET /campaigns/stats
+ * Returns dashboard summary stats for the employer.
+ */
+router.get("/stats", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const orgId = await getOrgForUser(userId);
+    if (!orgId) { res.json({ data: { activeCampaigns: 0, totalAssessed: 0, totalShortlisted: 0 } }); return; }
+
+    const [activeCampaigns, totalAssessed, totalShortlisted] = await Promise.all([
+      prisma.campaign.count({ where: { orgId, status: CampaignStatus.ACTIVE } }),
+      prisma.campaignCandidate.count({
+        where: { campaign: { orgId }, submissionId: { not: null } },
+      }),
+      prisma.campaignCandidate.count({
+        where: { campaign: { orgId }, status: CandidateStatus.SHORTLISTED },
+      }),
+    ]);
+
+    res.json({ data: { activeCampaigns, totalAssessed, totalShortlisted } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+/**
+ * GET /campaigns/:id
+ * Single campaign details.
+ */
+router.get("/:id", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+      include: { codebase: true, _count: { select: { candidates: true } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+    res.json({ data: campaign });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch campaign" });
+  }
+});
+
+/**
+ * PATCH /campaigns/:id
+ * Update campaign status or details.
+ */
+router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { status, bookingLink, deadline } = req.body as {
+    status?: CampaignStatus;
+    bookingLink?: string;
+    deadline?: string;
+  };
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const updated = await prisma.campaign.update({
+      where: { id: req.params.id },
+      data: {
+        ...(status ? { status } : {}),
+        ...(bookingLink !== undefined ? { bookingLink } : {}),
+        ...(deadline ? { deadline: new Date(deadline) } : {}),
+      },
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update campaign" });
+  }
+});
+
+/**
+ * GET /campaigns/:id/results
+ * Returns all candidates with scores, supports filtering and sorting.
+ */
+router.get("/:id/results", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const {
+    minScore, minDiagnosis, minDesign,
+    aiDeclaration, sortBy, page, status: statusFilter,
+  } = req.query as Record<string, string>;
+
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const rawCandidates = await prisma.campaignCandidate.findMany({
+      where: {
+        campaignId: req.params.id,
+        ...(statusFilter ? { status: statusFilter as CandidateStatus } : {}),
+      },
+      include: {
+        user: { select: { id: true, githubUsername: true, email: true, skillScore: true } },
+      },
+    });
+
+    // Resolve each candidate's latest REVIEWED submission for this codebase
+    const candidates = await Promise.all(
+      rawCandidates.map(async (c) => {
+        const submission = await prisma.submission.findFirst({
+          where: {
+            userId: c.userId,
+            status: "REVIEWED",
+            ticket: { codebaseId: campaign.codebaseId },
+          },
+          orderBy: { scoreTotal: "desc" },
+          include: {
+            ticket: { select: { title: true, difficulty: true } },
+            followUp: {
+              select: {
+                aiDeclaration: true, scoreBonus: true,
+                question1: true, question2: true, answer1: true, answer2: true,
+                claudeFeedback: true,
+              },
+            },
+          },
+        });
+        return { ...c, submission };
+      })
+    );
+
+    let results = candidates.filter((c) => c.submission?.status === "REVIEWED");
+
+    // Apply filters
+    if (minScore) results = results.filter((c) => (c.submission?.scoreTotal ?? 0) >= parseInt(minScore));
+    if (minDiagnosis) results = results.filter((c) => (c.submission?.scoreDiagnosis ?? 0) >= parseInt(minDiagnosis));
+    if (minDesign) results = results.filter((c) => (c.submission?.scoreDesign ?? 0) >= parseInt(minDesign));
+    if (aiDeclaration) {
+      const declarations = aiDeclaration.split(",");
+      results = results.filter((c) =>
+        declarations.includes(c.submission?.followUp?.aiDeclaration ?? "")
+      );
+    }
+
+    // Sort
+    if (sortBy === "diagnosis") results.sort((a, b) => (b.submission?.scoreDiagnosis ?? 0) - (a.submission?.scoreDiagnosis ?? 0));
+    else if (sortBy === "design") results.sort((a, b) => (b.submission?.scoreDesign ?? 0) - (a.submission?.scoreDesign ?? 0));
+    else if (sortBy === "date") results.sort((a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime());
+    else results.sort((a, b) => (b.submission?.scoreTotal ?? 0) - (a.submission?.scoreTotal ?? 0));
+
+    // Paginate
+    const pageNum = parseInt(page ?? "1");
+    const pageSize = 50;
+    const total = results.length;
+    const paginated = results.slice((pageNum - 1) * pageSize, pageNum * pageSize);
+
+    // Mark top 20% as recommended
+    const top20Threshold = results.length > 0
+      ? results[Math.floor(results.length * 0.2)]?.submission?.scoreTotal ?? 0
+      : 80;
+
+    const withRank = paginated.map((c, i) => ({
+      ...c,
+      rank: (pageNum - 1) * pageSize + i + 1,
+      recommended: (c.submission?.scoreTotal ?? 0) >= Math.max(top20Threshold, 70),
+    }));
+
+    res.json({ data: withRank, total, page: pageNum, pageSize });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch results" });
+  }
+});
+
+/**
+ * GET /campaigns/:id/candidates/:candidateId
+ * Full detail for a single candidate including Claude feedback and Q&A.
+ */
+router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaignCb = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+      select: { id: true, roleName: true, companyName: true, bookingLink: true, codebaseId: true },
+    });
+    if (!campaignCb) { res.status(404).json({ error: "Campaign not found" }); return; }
+    const campaign = {
+      id: campaignCb.id, roleName: campaignCb.roleName,
+      companyName: campaignCb.companyName, bookingLink: campaignCb.bookingLink,
+    };
+
+    const rawCandidate = await prisma.campaignCandidate.findUnique({
+      where: { id: req.params.candidateId },
+      include: {
+        user: { select: { id: true, githubUsername: true, email: true, skillScore: true } },
+      },
+    });
+    if (!rawCandidate) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+    const submission = await prisma.submission.findFirst({
+      where: {
+        userId: rawCandidate.userId,
+        status: "REVIEWED",
+        ticket: { codebaseId: campaignCb.codebaseId },
+      },
+      orderBy: { scoreTotal: "desc" },
+      include: { ticket: { select: { title: true, difficulty: true } }, followUp: true },
+    });
+
+    res.json({ data: { candidate: { ...rawCandidate, submission }, campaign } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch candidate" });
+  }
+});
+
+/**
+ * PATCH /campaigns/:id/candidates/:candidateId
+ * Update a single candidate's status.
+ */
+router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { status } = req.body as { status: CandidateStatus };
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const updated = await prisma.campaignCandidate.update({
+      where: { id: req.params.candidateId },
+      data: { status },
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update candidate" });
+  }
+});
+
+/**
+ * POST /campaigns/:id/invite
+ * Send interview invites to selected candidates.
+ */
+router.post("/:id/invite", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { candidateIds } = req.body as { candidateIds: string[] };
+
+  if (!candidateIds?.length) {
+    res.status(400).json({ error: "No candidates selected" });
+    return;
+  }
+
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    await prisma.campaignCandidate.updateMany({
+      where: { id: { in: candidateIds }, campaignId: req.params.id },
+      data: { status: CandidateStatus.SHORTLISTED, invitedAt: new Date() },
+    });
+
+    res.json({ data: { invited: candidateIds.length } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to send invites" });
+  }
+});
+
+/**
+ * GET /campaigns/:id/export
+ * Export campaign results as CSV.
+ */
+router.get("/:id/export", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const candidates = await prisma.campaignCandidate.findMany({
+      where: { campaignId: req.params.id },
+      include: {
+        user: { select: { githubUsername: true, email: true } },
+        submission: {
+          include: { followUp: { select: { aiDeclaration: true, scoreBonus: true } } },
+        },
+      },
+      orderBy: { submission: { scoreTotal: "desc" } },
+    });
+
+    const rows = [
+      ["Rank", "GitHub", "Email", "Total", "Diagnosis", "Design", "Communication", "Execution", "AI Declaration", "Status", "Submitted At"],
+      ...candidates.map((c, i) => [
+        i + 1,
+        c.user.githubUsername,
+        c.user.email ?? "",
+        c.submission?.scoreTotal ?? "",
+        c.submission?.scoreDiagnosis ?? "",
+        c.submission?.scoreDesign ?? "",
+        c.submission?.scoreCommunication ?? "",
+        c.submission?.scoreExecution ?? "",
+        c.submission?.followUp?.aiDeclaration ?? "",
+        c.status,
+        c.submission?.submittedAt ? new Date(c.submission.submittedAt).toISOString() : "",
+      ]),
+    ];
+
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="campaign-${req.params.id}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to export" });
+  }
+});
+
+export default router;
