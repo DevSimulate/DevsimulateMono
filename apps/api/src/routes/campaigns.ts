@@ -114,6 +114,51 @@ router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> =>
   }
 });
 
+/**
+ * GET /campaigns/leaderboard/:slug  (PUBLIC)
+ * Live ranked board of THIS campaign's participants — no login required, so it
+ * can be shared with devs / put on a screen during a contest.
+ */
+router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const campaign = await prisma.campaign.findUnique({
+      where: { shareableSlug: req.params.slug },
+      include: { codebase: { select: { name: true } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const rows = await prisma.campaignCandidate.findMany({
+      where: { campaignId: campaign.id },
+      include: { user: { select: { githubUsername: true } } },
+    });
+
+    const scored: Array<{ githubUsername: string; score: number }> = [];
+    for (const c of rows) {
+      const sub = await prisma.submission.findFirst({
+        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+        orderBy: { scoreTotal: "desc" },
+        select: { scoreTotal: true },
+      });
+      if (sub) scored.push({ githubUsername: c.user.githubUsername, score: sub.scoreTotal ?? 0 });
+    }
+    scored.sort((a, b) => b.score - a.score);
+
+    res.json({
+      data: {
+        campaignName: campaign.roleName,
+        companyName: campaign.companyName,
+        codebase: campaign.codebase.name,
+        type: campaign.type,
+        status: campaign.status,
+        participants: scored.map((s, i) => ({ rank: i + 1, ...s })),
+        totalJoined: rows.length,
+      },
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to load leaderboard" });
+  }
+});
+
 // ─── Everything below requires authentication ───────────────────────────────────
 router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
 

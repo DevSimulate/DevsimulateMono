@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
-import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check, Pause, Play, Trash2 } from "lucide-react";
+import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check, Pause, Play, Trash2, Trophy } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
@@ -31,6 +31,7 @@ export default function CampaignsListPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedBoard, setCopiedBoard] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -49,6 +50,13 @@ export default function CampaignsListPage() {
     navigator.clipboard.writeText(`${APP_URL}/apply/${slug}`).then(() => {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
+    });
+  }
+
+  function copyBoardLink(slug: string, id: string) {
+    navigator.clipboard.writeText(`${APP_URL}/leaderboard/${slug}`).then(() => {
+      setCopiedBoard(id);
+      setTimeout(() => setCopiedBoard(null), 2000);
     });
   }
 
@@ -157,10 +165,19 @@ export default function CampaignsListPage() {
                     <button onClick={() => copyLink(c.shareableSlug, c.id)}
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}
-                      title="Copy application link">
+                      title="Copy application (join) link">
                       {copiedId === c.id
                         ? <Check size={14} style={{ color: "#4ade80" }} />
                         : <Copy size={14} style={{ color: "#888888" }} />}
+                    </button>
+                    {/* Copy public leaderboard link */}
+                    <button onClick={() => copyBoardLink(c.shareableSlug, c.id)}
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}
+                      title="Copy live leaderboard link (shareable, no login)">
+                      {copiedBoard === c.id
+                        ? <Check size={14} style={{ color: "#4ade80" }} />
+                        : <Trophy size={14} style={{ color: "#fbbf24" }} />}
                     </button>
                     {/* Pause / Resume */}
                     <button onClick={() => toggleStatus(c)} disabled={busyId === c.id}
