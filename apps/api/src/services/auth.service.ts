@@ -44,21 +44,27 @@ export async function exchangeGitHubCode(code: string): Promise<{
 
 /**
  * Upserts a User record from a GitHub profile. Creates on first login,
- * updates githubUsername/email on subsequent logins.
+ * updates githubUsername/email on subsequent logins. When an access token is
+ * provided (OAuth granted the `repo` scope) it is stored so the platform can
+ * fork/clone/push on the user's behalf — removing the need for VS Code's own
+ * GitHub sign-in inside the extension.
  */
 export async function upsertUserFromGitHub(
-  githubUser: GitHubUser
+  githubUser: GitHubUser,
+  accessToken?: string
 ): Promise<User> {
   return prisma.user.upsert({
     where: { githubId: String(githubUser.id) },
     update: {
       githubUsername: githubUser.login,
       email: githubUser.email ?? undefined,
+      ...(accessToken ? { githubAccessToken: accessToken } : {}),
     },
     create: {
       githubId: String(githubUser.id),
       githubUsername: githubUser.login,
       email: githubUser.email ?? undefined,
+      ...(accessToken ? { githubAccessToken: accessToken } : {}),
     },
   });
 }

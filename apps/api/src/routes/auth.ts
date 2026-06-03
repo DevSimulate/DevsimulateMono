@@ -26,8 +26,8 @@ router.post("/github", async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const { githubUser } = await exchangeGitHubCode(code);
-    const user = await upsertUserFromGitHub(githubUser);
+    const { githubUser, accessToken } = await exchangeGitHubCode(code);
+    const user = await upsertUserFromGitHub(githubUser, accessToken);
     const token = signJwt(user);
 
     res.json({
@@ -113,5 +113,36 @@ router.post("/vscode-exchange", async (req: Request, res: Response): Promise<voi
     res.status(401).json({ error: "Invalid or expired token. Please click Connect again." });
   }
 });
+
+/**
+ * GET /auth/github-token
+ * Authorization: Bearer <jwt>
+ *
+ * Returns the user's stored GitHub access token so the VS Code extension can
+ * fork/clone/push without invoking VS Code's own GitHub sign-in. Returns
+ * { token: null } if the user authenticated before the `repo` scope was added
+ * (they need to sign in again to grant it).
+ */
+router.get(
+  "/github-token",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { githubAccessToken: true, githubUsername: true },
+      });
+      res.json({
+        data: {
+          token: user?.githubAccessToken ?? null,
+          githubUsername: user?.githubUsername ?? null,
+        },
+      });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch GitHub token" });
+    }
+  }
+);
 
 export default router;

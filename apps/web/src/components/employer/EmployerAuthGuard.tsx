@@ -8,7 +8,7 @@ import { BoltIcon } from "@/components/Logo";
 const GITHUB_AUTH_URL =
   `https://github.com/login/oauth/authorize` +
   `?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}` +
-  `&scope=read:user,user:email` +
+  `&scope=read:user,user:email,repo` +
   `&redirect_uri=${encodeURIComponent(
     (process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com") + "/auth/callback"
   )}`;

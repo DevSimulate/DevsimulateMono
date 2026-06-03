@@ -97,24 +97,18 @@ function makeGit(baseDir?: string): SimpleGit {
 }
 
 // A user-facing error whose message is safe to show directly in a prompt.
-class FriendlyError extends Error {}
+export class FriendlyError extends Error {}
 
 const GH_API = "https://api.github.com";
 
-/**
- * Gets the user's GitHub session from VS Code's built-in auth provider with the
- * `repo` scope needed to fork and open PRs. Throws a clear error if the user
- * declines the permission prompt.
- */
-async function getGitHubSession(): Promise<vscode.AuthenticationSession> {
-  try {
-    return await vscode.authentication.getSession("github", ["repo", "read:user"], { createIfNone: true });
-  } catch {
-    throw new FriendlyError(
-      "DevSimulate needs permission to use your GitHub account. When GitHub asks, click “Allow” — then try again."
-    );
-  }
+/** GitHub credentials provided by DevSimulate (captured at web sign-in). */
+export interface GitHubCreds {
+  token: string;
+  username: string;
 }
+
+const NO_TOKEN_MESSAGE =
+  "DevSimulate needs GitHub access to set up your code. Open devsimulate.com, sign out and sign in again to grant it, then reconnect VS Code.";
 
 /** Builds a token-authenticated push URL so git never prompts for credentials. */
 function authUrl(token: string, owner: string, repo: string): string {
@@ -179,10 +173,11 @@ export async function createPullRequest(
   repoDir: string,
   branchName: string,
   ticketTitle: string,
-  originalRepoUrl: string
+  originalRepoUrl: string,
+  creds: GitHubCreds | null
 ): Promise<string> {
-  const session = await getGitHubSession();
-  const token = session.accessToken;
+  if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
+  const token = creds.token;
   const headers = { Authorization: `token ${token}`, Accept: "application/vnd.github+json" };
 
   const remotes = await makeGit(repoDir).getRemotes(true);
@@ -228,13 +223,13 @@ export async function createPullRequest(
 export async function cloneAndOpenCodebase(
   ticket: TicketWithCodebase,
   branchName: string,
-  _githubUsername: string
+  creds: GitHubCreds | null
 ): Promise<void> {
+  if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
   const { owner: srcOwner, repo: repoName } = parseOwnerRepo(ticket.codebase.repoUrl);
 
-  const session = await getGitHubSession();
-  const token = session.accessToken;
-  const username = session.account.label;
+  const token = creds.token;
+  const username = creds.username;
   const isOwner = srcOwner.toLowerCase() === username.toLowerCase();
 
   const targetDir = path.join(os.homedir(), "DevSimulate", repoName);

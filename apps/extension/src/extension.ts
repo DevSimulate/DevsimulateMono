@@ -4,7 +4,7 @@ import { SidebarProvider } from "./views/sidebar";
 import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
-import { getCurrentUser, storeToken, getApiUrl, getToken } from "./services/auth.service";
+import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
 import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest } from "./services/git.service";
@@ -172,10 +172,8 @@ async function handleCloneFromDeepLink(
       vscode.window.showErrorMessage("DevSimulate: Assignment not found. Make sure you are logged in with the correct account.");
       return;
     }
-    const user = await getCurrentUser(context);
-    if (!user) return;
-
-    await cloneAndOpenCodebase(assignment.ticket, assignment.branchName, user.githubUsername);
+    const creds = await getGitHubToken(context);
+    await cloneAndOpenCodebase(assignment.ticket, assignment.branchName, creds);
 
     // Watch for push — when branch appears on origin, prompt to submit
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -184,11 +182,13 @@ async function handleCloneFromDeepLink(
       const disposable = watchForPush(repoDir, assignment.branchName, async () => {
         vscode.window.showInformationMessage("DevSimulate: Push detected — creating PR automatically…");
         try {
+          const creds = await getGitHubToken(context);
           const prUrl = await createPullRequest(
             repoDir,
             assignment.branchName,
             assignment.ticket.title,
-            assignment.ticket.codebase.repoUrl
+            assignment.ticket.codebase.repoUrl,
+            creds
           );
           const submitUrl =
             `https://www.devsimulate.com/submit` +

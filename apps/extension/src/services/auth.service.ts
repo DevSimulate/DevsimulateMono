@@ -113,6 +113,31 @@ export async function getCurrentUser(
 }
 
 /**
+ * Fetches the user's GitHub access token (and username) that DevSimulate stored
+ * when they signed in on the web. This lets the extension fork/clone/push without
+ * triggering VS Code's own GitHub sign-in. Returns null if the user signed in
+ * before the `repo` scope was granted.
+ */
+export async function getGitHubToken(
+  context: vscode.ExtensionContext
+): Promise<{ token: string; username: string } | null> {
+  const jwt = await getToken(context);
+  if (!jwt) return null;
+
+  try {
+    const res = await axios.get<{ data: { token: string | null; githubUsername: string | null } }>(
+      `${getApiUrl()}/auth/github-token`,
+      { headers: { Authorization: `Bearer ${jwt}` } }
+    );
+    const { token, githubUsername } = res.data.data;
+    if (!token || !githubUsername) return null;
+    return { token, username: githubUsername };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Returns the configured API URL from VS Code settings.
  */
 export function getApiUrl(): string {

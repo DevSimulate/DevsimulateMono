@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { getAssignedTickets } from "../services/ticket.service";
 import { cloneAndOpenCodebase } from "../services/git.service";
-import { getCurrentUser } from "../services/auth.service";
+import { getGitHubToken } from "../services/auth.service";
 import { Ticket, Codebase, TicketAssignment } from "../types";
 
 type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
@@ -41,13 +41,8 @@ export async function cloneCommand(
       picked = choice.assignment;
     }
 
-    const user = await getCurrentUser(context);
-    if (!user) {
-      vscode.window.showErrorMessage("DevSimulate: Session expired. Please reconnect.");
-      return;
-    }
-
-    await cloneAndOpenCodebase(picked.ticket, picked.branchName, user.githubUsername);
+    const creds = await getGitHubToken(context);
+    await cloneAndOpenCodebase(picked.ticket, picked.branchName, creds);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to clone codebase";
     if (message === "Not authenticated") {

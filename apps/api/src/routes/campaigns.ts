@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
 import { Difficulty, CampaignStatus, CandidateStatus } from "@prisma/client";
 import crypto from "crypto";
+import { preForkForUser } from "../lib/github-fork";
 
 const router = Router();
 
@@ -200,6 +201,10 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
       });
     }
 
+    // Pre-fork so the codebase is ready when they open VS Code
+    const applyCb = await prisma.codebase.findUnique({ where: { id: ticket.codebaseId }, select: { repoUrl: true } });
+    if (applyCb) void preForkForUser(userId, applyCb.repoUrl);
+
     res.json({
       data: {
         campaignId: campaign.id,
@@ -261,6 +266,10 @@ router.post("/join", async (req: Request, res: Response): Promise<void> => {
     if (!already) {
       await prisma.campaignCandidate.create({ data: { campaignId: campaign.id, userId } });
     }
+
+    // Pre-fork so the codebase is ready when they open VS Code
+    const joinCb = await prisma.codebase.findUnique({ where: { id: ticket.codebaseId }, select: { repoUrl: true } });
+    if (joinCb) void preForkForUser(userId, joinCb.repoUrl);
 
     res.json({
       data: { campaignId: campaign.id, ticketId: ticket.id },

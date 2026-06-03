@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma";
 import { Ticket, TicketAssignment, Codebase } from "@prisma/client";
 import slugify from "../lib/slugify";
+import { preForkForUser } from "../lib/github-fork";
 
 type TicketWithCodebase = Ticket & { codebase: Codebase };
 type AssignmentWithTicket = TicketAssignment & { ticket: TicketWithCodebase };
@@ -66,10 +67,16 @@ export async function assignTicket(
   const slug = slugify(ticket.title).slice(0, 40);
   const branchName = `ds/${ticketId.slice(0, 8)}-${slug}`;
 
-  return prisma.ticketAssignment.create({
+  const assignment = await prisma.ticketAssignment.create({
     data: { userId, ticketId, branchName },
     include: { ticket: { include: { codebase: true } } },
   });
+
+  // Pre-fork the codebase to the user's GitHub account so it's ready by the
+  // time they open VS Code. Best-effort — never blocks the assignment.
+  void preForkForUser(userId, ticket.codebase.repoUrl);
+
+  return assignment;
 }
 
 /**

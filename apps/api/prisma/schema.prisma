@@ -51,6 +51,7 @@ model User {
   primaryStack        Stack               @default(NODE)
   subscriptionTier    SubscriptionTier    @default(FREE)
   skillScore          Int                 @default(0)
+  githubAccessToken   String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   submissions         Submission[]
