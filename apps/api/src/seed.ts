@@ -241,7 +241,7 @@ Evaluation criteria match FAANG interview expectations:
 5. At least one trade-off in your design — be explicit about what you chose and why
 
 Write your complete system design below. Be specific: name the technologies, describe the data flow, and justify your choices.`,
-      difficulty: Difficulty.JUNIOR,
+      difficulty: Difficulty.MID,
       filesInvolved: ["api-design", "data-model", "hashing-strategy", "caching-layer"],
       rubric: {
         diagnosis: "Did they correctly identify the key constraint — 100:1 read/write ratio — and understand its implications for caching? Did they note uniqueness requirements for short codes and the need for collision handling?",
@@ -517,6 +517,246 @@ Write your complete design below. This is an infrastructure-level design — be 
         design: "Did they design consistent hashing with virtual nodes for data partitioning? Did they design replication (primary + N replicas per shard, with read replicas)? Did they describe approximate LRU (sampling or segmented LRU) for eviction? Did they address hot keys (local micro-caching, key sharding by request)?",
         communication: "Did they explain why consistent hashing minimises redistribution compared to simple modulo partitioning? Did they discuss the CAP theorem implications of their replication design (CP vs AP under network partition)? Did they explain hot key mitigation concretely?",
         execution: "Did they cover all 5 required components? Is the consistent hashing ring described with virtual nodes? Is the replica failure path (promotion, rebalance) described? Is the hot key strategy concrete beyond 'replicate the key'?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-11-seed-id-011",
+      title: "SD-11: Design a Ticket Booking System (Ticketmaster)",
+      description: `Design the seat-booking system for a high-demand event ticketing platform.
+
+**Scale requirements:**
+- A popular concert: 60,000 seats, 2 million people trying to buy in the first 60 seconds
+- A seat must NEVER be sold to two different people
+- A user who selects a seat should get a short hold (e.g. 10 minutes) to complete payment
+- If they don't pay in time, the seat is released back to the pool automatically
+- Reads (seat-map availability) vastly outnumber writes
+
+**Your answer must cover:**
+1. How you guarantee a seat is never double-sold under 2M concurrent buyers — the locking/reservation mechanism
+2. The seat-hold lifecycle: select → hold (TTL) → pay → confirm, or hold expiry → release
+3. How you serve the live seat map to 2M users without hammering the source of truth
+4. What happens when the payment succeeds but the confirmation write fails (don't lose the seat or the money)
+5. How you prevent a stampede from collapsing the system in the first 60 seconds (queueing, waiting room)
+
+This is a correctness-under-concurrency problem — be explicit about every race condition.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["seat-locking", "hold-lifecycle", "availability-cache", "stampede-control"],
+      rubric: {
+        diagnosis: "Did they identify that the core problem is correctness under extreme concurrency, not raw throughput — a seat is a unique, limited resource and the check-then-reserve is a race? Did they recognize the hold-expiry and the payment-vs-confirmation failure as the subtle hard cases?",
+        design: "Did they design an atomic reserve (conditional update / row lock / Redis atomic op) so a seat can be held by exactly one user? Did they implement the hold with a TTL and an automatic release (expiry sweep or TTL key)? Did they front the live seat-map with a cache and handle the stampede with a waiting room/queue?",
+        communication: "Did they reason about strong consistency on the seat write vs eventual consistency on the seat-map view, and justify it? Did they explain the reconciliation for the payment-success/confirmation-failure case?",
+        execution: "Did they cover all 5 points? Is the atomic reservation concrete (what store, what operation)? Is the hold-expiry mechanism specified? Is the stampede control more than 'add more servers'?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-12-seed-id-012",
+      title: "SD-12: Design a Ride-Matching / Dispatch System (Uber)",
+      description: `Design the system that matches riders to nearby drivers in real time.
+
+**Scale requirements:**
+- 5 million active drivers globally, each sending a location update every 4 seconds (~1.25M updates/sec)
+- 1 million ride requests per minute at peak
+- A rider must be matched to a nearby driver within 5 seconds
+- Matching should prefer the closest available driver but avoid assigning the same driver to two riders
+
+**Your answer must cover:**
+1. How you store and index 5M continuously-moving driver locations to answer "drivers near (lat,lng)" fast — the spatial index
+2. How a ride request finds candidate drivers and selects one without double-assigning a driver to two riders
+3. How you ingest 1.25M location updates/sec without overwhelming the datastore
+4. How you handle the matching race: two riders request at the same time and both get matched to the same nearby driver
+5. How you keep the matching latency under 5 seconds at peak
+
+Be specific about the spatial data structure and the concurrency control on driver assignment.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["spatial-index", "matching-engine", "location-ingestion", "assignment-concurrency"],
+      rubric: {
+        diagnosis: "Did they identify the two distinct hard problems — (a) efficient geospatial proximity queries over constantly-moving points, and (b) preventing double-assignment of a driver under concurrent matches? Did they note that 1.25M writes/sec rules out naive per-update DB writes?",
+        design: "Did they choose an appropriate spatial index (geohash buckets, quadtree, S2, or Redis GEO) and justify it for moving points? Did they make driver assignment atomic (lock/conditional update/state machine) so a driver can't be matched twice? Did they handle the high-write location stream (in-memory grid, sharded by region)?",
+        communication: "Did they explain the geohash/quadtree trade-off and why simple lat/lng indexing fails? Did they reason about regional sharding and the consistency of driver state?",
+        execution: "Did they cover all 5 points? Is the spatial index concrete? Is the anti-double-assignment mechanism specified? Is the location-ingestion path scalable (not one DB write per update)?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-13-seed-id-013",
+      title: "SD-13: Design an Ad-Click Aggregation Pipeline",
+      description: `Design a system that ingests ad-click events and produces accurate, near-real-time click counts per ad (used for billing advertisers).
+
+**Scale requirements:**
+- 1 million click events per second at peak
+- Counts are used for BILLING — they must be accurate (no over/under counting), and duplicate events must be counted once
+- Advertisers see updated counts within 1 minute (near-real-time dashboard)
+- Also support accurate historical queries: "clicks for ad X between any two timestamps"
+- Clients may retry and send the same click event more than once
+
+**Your answer must cover:**
+1. How you achieve exactly-once counting despite duplicate/retried events — the deduplication strategy
+2. The ingestion + aggregation pipeline — how raw events become per-ad, per-minute counts
+3. How you reconcile the tension between fast (near-real-time) and accurate (billing-grade) counts — lambda/kappa or similar
+4. How you store aggregates to answer arbitrary time-range queries efficiently
+5. What happens when an aggregation worker crashes mid-batch — no double counting, no lost counts
+
+Counting at scale for billing is deceptively hard — focus on correctness.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["deduplication", "stream-aggregation", "lambda-architecture", "exactly-once"],
+      rubric: {
+        diagnosis: "Did they identify that exactly-once counting under retries is the crux, and that 'fast' and 'billing-accurate' pull in opposite directions (the classic reason for a speed layer + batch layer)? Did they recognize at-least-once delivery + idempotent processing as the practical path to exactly-once?",
+        design: "Did they design dedup via event ids (idempotency keys + a dedup store, or windowed dedup in the stream)? Did they design a streaming aggregation (Kafka → Flink/Spark Streaming → time-bucketed counts) plus a batch reconciliation layer for accuracy? Did they store aggregates in a time-series/OLAP-friendly store for range queries?",
+        communication: "Did they explain why exactly-once is achieved via at-least-once + idempotency rather than 'true' exactly-once? Did they articulate the lambda/kappa trade-off (latency vs accuracy)?",
+        execution: "Did they cover all 5 points? Is the dedup mechanism concrete (key + store + window)? Is the crash-recovery (checkpointing/offsets) described so no double or lost counts? Is the storage chosen for range queries?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-14-seed-id-014",
+      title: "SD-14: Design a Distributed Lock Service",
+      description: `Design a distributed lock service that application servers use to coordinate access to shared resources (similar to what you'd build on top of etcd/Zookeeper/Redis).
+
+**Requirements:**
+- Mutual exclusion: at most one client holds a given lock at a time
+- 100,000 lock/unlock operations per second
+- A client that acquires a lock then crashes must not hold it forever — locks must be reclaimable
+- The service itself must be highly available — it cannot be a single point of failure
+- Clients are spread across many machines and may experience network delays and GC pauses
+
+**Your answer must cover:**
+1. How you guarantee mutual exclusion even when a lock holder pauses (GC) or its network is slow — and why a naive TTL lock is unsafe here
+2. How a crashed lock holder's lock is safely reclaimed (lease/TTL) without two clients believing they hold it
+3. How you make the lock service itself highly available (replication, consensus, leader)
+4. The fencing problem: a paused client wakes up after its lock expired and tries to write — how do you prevent corruption?
+5. The consistency vs availability trade-off your design makes under a network partition
+
+This is a coordination/correctness problem — the fencing token discussion is the senior signal.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["mutual-exclusion", "lease-expiry", "high-availability", "fencing-tokens"],
+      rubric: {
+        diagnosis: "Did they identify the deep problem — a TTL lock alone is unsafe because a paused (GC/network) holder can act after expiry while another client holds the lock — and that fencing tokens (monotonic numbers checked at the resource) are required for true safety? Did they recognize the lock service needs consensus to avoid being a SPOF?",
+        design: "Did they design leases with TTL for crash reclamation AND fencing tokens to make stale holders' writes rejected at the resource? Did they make the service HA via a consensus-backed store (Raft/Paxos, etcd/Zookeeper) rather than a single node? Did they reason about lock granularity and contention?",
+        communication: "Did they explicitly explain why TTL alone is insufficient (the Martin Kleppmann fencing argument), and the CP-under-partition choice? Did they discuss consensus vs a single Redis node trade-offs (Redlock caveats)?",
+        execution: "Did they cover all 5 points? Are fencing tokens concretely described (monotonic counter, checked by the resource)? Is the HA mechanism named (Raft/etcd)? Is the partition behavior (CP) stated?",
+      },
+      expectedMinutes: 60,
+    },
+    {
+      id: "ticket-sd-15-seed-id-015",
+      title: "SD-15: Design a Webhook Delivery System",
+      description: `Design a service that reliably delivers webhook events to third-party customer endpoints (like Stripe or GitHub delivering events to your server).
+
+**Requirements:**
+- 50,000 events per second to deliver across millions of customer endpoints
+- At-least-once delivery — an event must not be silently dropped
+- Per-endpoint ordering should be preserved where possible
+- Customer endpoints are unreliable: they time out, return 500s, or are down for hours
+- A slow/broken customer endpoint must NOT delay delivery to healthy endpoints
+- Customers can see delivery status and replay failed events
+
+**Your answer must cover:**
+1. The delivery pipeline — how an event goes from produced to delivered, with at-least-once guarantee
+2. Retry strategy for failing endpoints — backoff, max attempts, and what happens after
+3. How you isolate a slow/broken endpoint so it doesn't block delivery to everyone else (noisy-neighbor)
+4. How you preserve per-endpoint ordering while still parallelising across endpoints
+5. How you expose delivery status and support manual replay
+
+Reliability and isolation are the hard parts — be specific about queue design and retries.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["delivery-pipeline", "retry-backoff", "endpoint-isolation", "ordering"],
+      rubric: {
+        diagnosis: "Did they identify the two core challenges — reliable at-least-once delivery to unreliable endpoints, and isolating slow endpoints so one bad customer doesn't starve everyone (head-of-line blocking)? Did they note that per-endpoint ordering + parallelism across endpoints requires partitioning by endpoint?",
+        design: "Did they design a durable queue + workers with retries (exponential backoff + jitter, max attempts → dead-letter queue)? Did they isolate endpoints (per-endpoint queues/partitions, circuit breaker on a failing endpoint) to prevent noisy-neighbor blocking? Did they preserve order via per-endpoint partitioning?",
+        communication: "Did they explain at-least-once via persistent queue + ack, the backoff strategy and why jitter matters, and the ordering-vs-parallelism trade-off? Did they discuss the circuit breaker for dead endpoints?",
+        execution: "Did they cover all 5 points? Is the retry policy concrete (backoff, cap, DLQ)? Is endpoint isolation specified (per-endpoint partition/breaker)? Is replay/status described?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-16-seed-id-016",
+      title: "SD-16: Design a Collaborative Document Editor (Google Docs)",
+      description: `Design the real-time collaboration engine for a multi-user document editor.
+
+**Requirements:**
+- Multiple users edit the same document simultaneously and see each other's changes within ~200ms
+- Concurrent edits must converge: everyone ends up with the same final document, with no lost characters
+- Documents can be large (100k+ characters) and have up to 50 simultaneous editors
+- Must work despite users having different network latencies; offline edits should reconcile on reconnect
+- Edit history / undo must be supported
+
+**Your answer must cover:**
+1. The core conflict-resolution model — Operational Transformation (OT) or CRDTs — and the trade-offs of your choice
+2. How two concurrent edits at the same position are resolved so the document converges identically for all users
+3. The client-server data flow for real-time propagation (and whether the server is authoritative)
+4. How offline edits are reconciled when a user reconnects after making changes
+5. How you store the document and its edit history efficiently
+
+Concurrent-edit convergence is the entire problem — your OT/CRDT reasoning is what's scored.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["ot-vs-crdt", "convergence", "realtime-sync", "offline-reconciliation"],
+      rubric: {
+        diagnosis: "Did they identify that the fundamental challenge is concurrent-edit convergence (eventual consistency where all replicas reach the same state regardless of operation order), and that naive last-write-wins loses characters? Did they correctly frame OT vs CRDT as the two real approaches with concrete trade-offs?",
+        design: "Did they pick OT or CRDT and justify it (OT: server-authoritative transform, simpler storage, harder correctness; CRDT: peer-friendly, offline-friendly, larger metadata)? Did they describe how a concurrent insert/delete at the same index is transformed/merged to converge? Did they handle offline reconciliation (the chosen model's merge on reconnect)?",
+        communication: "Did they clearly explain the convergence guarantee and the OT-vs-CRDT trade-off (correctness complexity vs metadata overhead, central vs decentralized)? Did they address why intention preservation matters?",
+        execution: "Did they cover all 5 points? Is the conflict-resolution mechanism described concretely (transform function or CRDT structure)? Is the offline-merge path specified? Is history/storage addressed?",
+      },
+      expectedMinutes: 75,
+    },
+    {
+      id: "ticket-sd-17-seed-id-017",
+      title: "SD-17: Design an A/B Testing / Experimentation Platform",
+      description: `Design a platform that lets product teams run controlled experiments (A/B tests) across a large user base.
+
+**Requirements:**
+- 100 million users; a user must be consistently assigned to the same variant for a given experiment across sessions and devices
+- Support hundreds of concurrent experiments without users leaking between conflicting ones
+- Assignment must be fast (<5ms) and happen inline on the request path
+- Collect and aggregate metrics per variant in near-real-time to judge significance
+- Experiment config changes (start, stop, ramp traffic) must take effect quickly across all servers
+
+**Your answer must cover:**
+1. How you deterministically and consistently assign a user to a variant (same user → same bucket) without storing every assignment
+2. How you prevent interaction/leakage between overlapping experiments (mutual exclusion of conflicting tests)
+3. How assignment runs inline at <5ms across all servers — where config lives and how it's distributed
+4. How you collect per-variant metrics and compute statistical significance in near-real-time
+5. How config changes (ramping a test from 1% → 50%) propagate quickly and safely
+
+The deterministic-bucketing and leakage-prevention parts are the non-obvious challenges.`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["deterministic-bucketing", "experiment-isolation", "config-distribution", "metrics-pipeline"],
+      rubric: {
+        diagnosis: "Did they identify that consistent assignment without storing 100M×N assignments requires DETERMINISTIC hashing (hash(userId+experimentId) % buckets), and that overlapping experiments can interact/leak unless isolated (layers / mutually-exclusive groups)? Did they note assignment must be local (no network call) to hit <5ms?",
+        design: "Did they design deterministic bucketing via hashing (stable across sessions/devices, no stored assignment)? Did they prevent leakage with experiment layers / exclusion groups? Did they distribute config to every server (push/poll, in-memory) for inline <5ms assignment? Did they design a metrics pipeline with significance testing?",
+        communication: "Did they explain why hashing beats storing assignments (scale, consistency), and how layering prevents cross-experiment interference? Did they discuss the config-propagation trade-off (staleness vs load)?",
+        execution: "Did they cover all 5 points? Is the bucketing function concrete and stable? Is leakage prevention specified (layers/exclusion)? Is config distribution + the metrics/significance path described?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-sd-18-seed-id-018",
+      title: "SD-18: Design a Vector / Semantic Search System",
+      description: `Design a semantic search system that, given a text query, returns the most similar documents by meaning (the retrieval layer behind a RAG or recommendation product).
+
+**Scale requirements:**
+- 500 million documents, each represented as a 768-dimension embedding vector
+- 10,000 search queries per second
+- A query must return the top-20 most similar vectors within 50ms at p99
+- New documents are added continuously and must become searchable within minutes
+- Recall matters: missing relevant results is costly, but exact nearest-neighbor over 500M vectors is too slow
+
+**Your answer must cover:**
+1. Why exact nearest-neighbor search is infeasible at this scale and what you use instead (approximate NN) — name the index (HNSW, IVF, etc.) and the recall-vs-latency trade-off
+2. How you partition/shard 500M vectors across nodes and aggregate top-k results from shards
+3. How you keep the index fresh as new documents arrive (incremental indexing vs rebuilds)
+4. How you serve top-20 in <50ms at 10k QPS — where the index lives, memory footprint
+5. How you balance recall (finding the truly nearest) against latency and cost
+
+The ANN index choice and the recall/latency trade-off are the core of the answer.`,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["ann-index", "sharding-topk", "incremental-indexing", "recall-latency-tradeoff"],
+      rubric: {
+        diagnosis: "Did they identify that exact k-NN over 500M×768-dim vectors is computationally infeasible at 50ms/10k QPS, so Approximate Nearest Neighbor (ANN) is required, trading a controllable amount of recall for huge latency gains? Did they recognize freshness (incremental indexing) as a real tension with ANN structures?",
+        design: "Did they choose an ANN index (HNSW for recall/latency, or IVF-PQ for memory) and justify it? Did they shard vectors across nodes and do scatter-gather top-k with re-ranking? Did they handle incremental inserts (HNSW supports it) vs periodic rebuilds? Did they reason about the in-memory footprint (500M×768×4 bytes ≈ 1.5TB → must shard/quantize)?",
+        communication: "Did they explain the recall-vs-latency knob (efSearch/nprobe) and the index trade-offs (HNSW memory vs IVF-PQ compression)? Did they quantify the memory and justify sharding/quantization?",
+        execution: "Did they cover all 5 points? Is the ANN index named and justified? Is the scatter-gather top-k across shards described? Is incremental freshness addressed? Did they do the back-of-envelope memory math?",
       },
       expectedMinutes: 60,
     },
