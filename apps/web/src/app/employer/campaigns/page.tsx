@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
-import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check } from "lucide-react";
+import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check, Pause, Play, Trash2 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
@@ -31,21 +31,51 @@ export default function CampaignsListPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     const token = getToken();
     fetch(`${API}/employer/campaigns`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => setCampaigns(j.data ?? []))
       .catch(() => null)
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { load(); }, []);
 
   function copyLink(slug: string, id: string) {
     navigator.clipboard.writeText(`${APP_URL}/apply/${slug}`).then(() => {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     });
+  }
+
+  // Pause = set CLOSED · Resume = set ACTIVE
+  async function toggleStatus(c: Campaign) {
+    setBusyId(c.id);
+    const token = getToken();
+    const next = c.status === "ACTIVE" ? "CLOSED" : "ACTIVE";
+    await fetch(`${API}/employer/campaigns/${c.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    });
+    setBusyId(null);
+    load();
+  }
+
+  async function deleteCampaign(id: string) {
+    setBusyId(id);
+    const token = getToken();
+    await fetch(`${API}/employer/campaigns/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    setConfirmDelete(null);
+    setBusyId(null);
+    load();
   }
 
   return (
@@ -132,7 +162,44 @@ export default function CampaignsListPage() {
                         ? <Check size={14} style={{ color: "#4ade80" }} />
                         : <Copy size={14} style={{ color: "#888888" }} />}
                     </button>
+                    {/* Pause / Resume */}
+                    <button onClick={() => toggleStatus(c)} disabled={busyId === c.id}
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50"
+                      style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}
+                      title={c.status === "ACTIVE" ? "Pause campaign" : "Resume campaign"}>
+                      {c.status === "ACTIVE"
+                        ? <Pause size={14} style={{ color: "#fbbf24" }} />
+                        : <Play size={14} style={{ color: "#4ade80" }} />}
+                    </button>
+                    {/* Delete */}
+                    <button onClick={() => setConfirmDelete(c.id)} disabled={busyId === c.id}
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50"
+                      style={{ background: "#1a0a0a", border: "1px solid #3f1010" }}
+                      title="Delete campaign">
+                      <Trash2 size={14} style={{ color: "#f87171" }} />
+                    </button>
                   </div>
+
+                  {/* Delete confirmation */}
+                  {confirmDelete === c.id && (
+                    <div className="mt-3 rounded-lg p-3" style={{ background: "#1a0a0a", border: "1px solid #3f1010" }}>
+                      <div className="text-xs mb-2" style={{ color: "#f87171" }}>
+                        Delete &ldquo;{c.roleName}&rdquo; and all its candidate data? This can&apos;t be undone.
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => deleteCampaign(c.id)} disabled={busyId === c.id}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                          style={{ background: "#dc2626" }}>
+                          {busyId === c.id ? "Deleting…" : "Delete"}
+                        </button>
+                        <button onClick={() => setConfirmDelete(null)}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
+                          style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#aaa" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -495,6 +495,36 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * DELETE /campaigns/:id
+ * Permanently deletes a campaign and its candidate records.
+ */
+router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    // Remove children first to satisfy foreign keys: decisions → candidates → campaign.
+    const candidates = await prisma.campaignCandidate.findMany({
+      where: { campaignId: req.params.id },
+      select: { id: true },
+    });
+    const candidateIds = candidates.map((c) => c.id);
+    if (candidateIds.length) {
+      await prisma.candidateDecision.deleteMany({ where: { candidateId: { in: candidateIds } } });
+      await prisma.campaignCandidate.deleteMany({ where: { campaignId: req.params.id } });
+    }
+    await prisma.campaign.delete({ where: { id: req.params.id } });
+
+    res.json({ data: { deleted: true } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete campaign" });
+  }
+});
+
+/**
  * GET /campaigns/:id/results
  * Returns all candidates with scores, supports filtering and sorting.
  */
