@@ -39,7 +39,29 @@ export async function exchangeGitHubCode(code: string): Promise<{
     },
   });
 
-  return { accessToken, githubUser: userRes.data };
+  const githubUser = userRes.data;
+
+  // The /user endpoint only returns a PUBLIC email — null for most developers.
+  // Fetch /user/emails (we have the user:email scope) to get the primary
+  // verified address so we can actually reach the candidate.
+  if (!githubUser.email) {
+    try {
+      const emailsRes = await axios.get<Array<{ email: string; primary: boolean; verified: boolean }>>(
+        "https://api.github.com/user/emails",
+        { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github+json" } }
+      );
+      const emails = emailsRes.data ?? [];
+      const best =
+        emails.find((e) => e.primary && e.verified) ??
+        emails.find((e) => e.verified) ??
+        emails[0];
+      if (best?.email) githubUser.email = best.email;
+    } catch {
+      // Non-fatal — user just won't have an email on file
+    }
+  }
+
+  return { accessToken, githubUser };
 }
 
 /**

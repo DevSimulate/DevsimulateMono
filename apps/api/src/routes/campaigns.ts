@@ -5,6 +5,7 @@ import prisma from "../lib/prisma";
 import { Difficulty, CampaignStatus, CandidateStatus } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
+import { sendEmail, interviewInviteEmail } from "../lib/email";
 
 const router = Router();
 
@@ -749,7 +750,33 @@ router.post("/:id/invite", async (req: Request, res: Response): Promise<void> =>
       data: { status: CandidateStatus.SHORTLISTED, invitedAt: new Date() },
     });
 
-    res.json({ data: { invited: candidateIds.length } });
+    // Send the interview invite email to each candidate (best-effort)
+    const candidates = await prisma.campaignCandidate.findMany({
+      where: { id: { in: candidateIds }, campaignId: req.params.id },
+      include: { user: { select: { email: true, githubUsername: true } } },
+    });
+
+    let emailed = 0;
+    let missingEmail = 0;
+    for (const c of candidates) {
+      if (!c.user.email) { missingEmail++; continue; }
+      const sub = await prisma.submission.findFirst({
+        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+        orderBy: { scoreTotal: "desc" },
+        select: { scoreTotal: true },
+      });
+      const { subject, html } = interviewInviteEmail({
+        candidateName: c.user.githubUsername,
+        companyName: campaign.companyName,
+        roleName: campaign.roleName,
+        score: sub?.scoreTotal ?? 0,
+        bookingLink: campaign.bookingLink,
+      });
+      const ok = await sendEmail({ to: c.user.email, subject, html });
+      if (ok) emailed++;
+    }
+
+    res.json({ data: { shortlisted: candidateIds.length, emailed, missingEmail } });
   } catch (err) {
     res.status(500).json({ error: "Failed to send invites" });
   }

@@ -77,6 +77,7 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
 
   // Filters
   const [minScore, setMinScore] = useState(0);
@@ -158,14 +159,21 @@ export default function ResultsPage() {
 
   async function confirmInvite() {
     const token = getToken();
-    await fetch(`${API}/employer/campaigns/${campaignId}/invite`, {
+    const r = await fetch(`${API}/employer/campaigns/${campaignId}/invite`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ candidateIds: [...selected] }),
     });
+    const j = await r.json().catch(() => ({}));
+    const d = j.data ?? {};
+    const parts = [`${d.shortlisted ?? selected.size} shortlisted`];
+    if (d.emailed) parts.push(`${d.emailed} emailed`);
+    if (d.missingEmail) parts.push(`${d.missingEmail} had no email on file`);
+    setInviteResult(parts.join(" · "));
     setShowInvite(false);
     setSelected(new Set());
     load();
+    setTimeout(() => setInviteResult(null), 6000);
   }
 
   function exportCsv() {
@@ -205,6 +213,13 @@ export default function ResultsPage() {
           <Download size={14} /> Export CSV
         </button>
       </header>
+
+      {inviteResult && (
+        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
+          style={{ background: "#052e16", color: "#4ade80", borderBottom: "1px solid #166534" }}>
+          <Check size={15} /> Invites sent — {inviteResult}
+        </div>
+      )}
 
       <div className="flex flex-1">
         {/* ── Filter panel ── */}
