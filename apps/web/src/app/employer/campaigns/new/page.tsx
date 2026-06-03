@@ -145,9 +145,19 @@ export default function NewCampaignPage() {
                 What candidates see
               </div>
               <div className="text-sm" style={{ color: "#aaaaaa" }}>
-                <span className="font-bold text-white">{form.companyName}</span> is hiring for{" "}
-                <span className="font-bold text-white">{form.roleName}</span>. Complete a real{" "}
-                {form.difficulty.toLowerCase()}-level coding ticket to be considered.
+                {form.type === "CONTEST" ? (
+                  <>
+                    <span className="font-bold text-white">{form.companyName}</span> is running{" "}
+                    <span className="font-bold text-white">{form.roleName}</span>. Solve a real{" "}
+                    {form.difficulty.toLowerCase()}-level coding challenge, get AI-scored, and climb the live leaderboard.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold text-white">{form.companyName}</span> is hiring for{" "}
+                    <span className="font-bold text-white">{form.roleName}</span>. Complete a real{" "}
+                    {form.difficulty.toLowerCase()}-level coding ticket to be considered.
+                  </>
+                )}
               </div>
             </div>
 
