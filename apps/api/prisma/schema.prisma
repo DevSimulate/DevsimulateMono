@@ -16,6 +16,8 @@ enum Stack {
   SYSTEM_DESIGN
   PYTHON
   DEVOPS
+  CPP
+  JAVA
 }
 
 enum Difficulty {

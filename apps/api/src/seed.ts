@@ -9,6 +9,8 @@ export async function runSeed(): Promise<void> {
   // ALTER TYPE ADD VALUE cannot run inside a transaction, so we use
   // $executeRawUnsafe in autocommit mode before any upserts.
   await prisma.$executeRawUnsafe(`ALTER TYPE "Stack" ADD VALUE IF NOT EXISTS 'DEVOPS'`);
+  await prisma.$executeRawUnsafe(`ALTER TYPE "Stack" ADD VALUE IF NOT EXISTS 'CPP'`);
+  await prisma.$executeRawUnsafe(`ALTER TYPE "Stack" ADD VALUE IF NOT EXISTS 'JAVA'`);
 
   const codebase = await prisma.codebase.upsert({
     where: { id: "novatech-crm-seed-id-001" },
@@ -2647,6 +2649,271 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
     });
   }
 
+  // ─── MatchCore — C++17 order matching engine ────────────────────────────────
+  const matchcoreCodebase = await prisma.codebase.upsert({
+    where: { id: "matchcore-seed-id-001" },
+    update: { repoUrl: "https://github.com/DevSimulate/matchcore" },
+    create: {
+      id: "matchcore-seed-id-001",
+      name: "MatchCore",
+      stack: Stack.CPP,
+      repoUrl: "https://github.com/DevSimulate/matchcore",
+      description: "A C++17 limit-order-matching engine — the core of a low-latency trading system. Price-time priority order book, pre-trade risk checks, and an object pool on the hot path.",
+      companyLore: `Vellum Markets runs a high-throughput electronic exchange. MatchCore is the matching layer — every order in the building flows through it. Latency is measured in microseconds and correctness is measured in dollars: a single mismatched fill or a torn read under concurrency can mean a real loss. The team is small, the code is dense, and the bugs are the kind that only show up under load.`,
+    },
+  });
+
+  const matchcoreTickets = [
+    {
+      id: "ticket-mc-01-seed-id-001",
+      title: "MC-01: Large orders silently bypass the risk limit",
+      description: `Risk reported that a 200,000-share order at a price of 50,000 ticks went through on a symbol with a 1,000,000,000 notional limit — even though 50,000 × 200,000 = 10,000,000,000, which is 10× the limit. Smaller orders are checked correctly. The bigger the order, the more likely it slips through, and sometimes a huge order is *more* likely to pass than a medium one.
+
+**Files:** \`include/risk_manager.h\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["include/risk_manager.h"],
+      rubric: {
+        diagnosis: "Did they identify that notional (price * quantity, both int64_t) is computed into a 32-bit int, overflowing and wrapping — sometimes to a negative value that passes the <= check? Did they note the limit itself is also an int?",
+        design: "Did they change the notional computation and the stored limit to int64_t so values up to ~9.2e18 are representable? Did they consider where else notional is computed?",
+        communication: "Did they explain integer overflow / implicit narrowing as the root cause, and why bigger orders are MORE likely to pass (wrap to negative)?",
+        execution: "Is the type widened correctly so the documented example (10e9 > 1e9) is now rejected?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-mc-02-seed-id-002",
+      title: "MC-02: Some resting orders are skipped during a sweep",
+      description: `When an aggressive order sweeps a price level that has several resting orders, occasionally one of the resting orders is left untouched even though there was incoming quantity to fill it. It happens specifically when a resting order is fully filled and removed in the middle of the level.
+
+**Files:** \`src/order_book.cpp\` (the matching loop)`,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/order_book.cpp"],
+      rubric: {
+        diagnosis: "Did they see that the matching loop iterates by index i and calls level.orders.erase(begin()+i) when a resting order fills, then ++i — so the next order shifts into slot i and is skipped?",
+        design: "Did they fix the iteration so no order is skipped after an erase (e.g. don't increment i when erasing, or iterate differently)? Did they keep price-time priority intact?",
+        communication: "Did they explain the container-mutation-during-iteration bug and how the index/iterator gets out of sync with the deque?",
+        execution: "Does every resting order at the level get a chance to fill when incoming quantity remains?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-mc-03-seed-id-003",
+      title: "MC-03: Engine statistics start at garbage values",
+      description: `On a fresh engine, before any orders are submitted, \`stats()\` returns nonsense — total_volume in the billions, orders_submitted nonzero, notional_traded negative. After the first few orders the numbers look plausible again but are always off by the initial garbage.
+
+**Files:** \`include/matching_engine.h\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["include/matching_engine.h"],
+      rubric: {
+        diagnosis: "Did they identify that EngineStats has no initializers and the stats_ member is default-initialized, leaving its fields with indeterminate values?",
+        design: "Did they zero-initialize the stats (member initializers in the struct, or value-initialize stats_)? Did they pick a fix that can't be forgotten again (in-struct defaults)?",
+        communication: "Did they explain that built-in types in a struct are not zeroed unless explicitly initialized?",
+        execution: "Do all stats read as 0 on a fresh engine?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-mc-04-seed-id-004",
+      title: "MC-04: Filled and cancelled orders are never reclaimed — memory grows forever",
+      description: `Under a long replay the process RSS climbs without bound and never comes back down, even though the book stays roughly the same size. The OrderPool's live_count() keeps rising. We add and remove millions of orders a day; memory should be roughly flat.
+
+**Files:** \`src/order_book.cpp\`, \`src/matching_engine.cpp\`, \`include/object_pool.h\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/order_book.cpp", "src/matching_engine.cpp", "include/object_pool.h"],
+      rubric: {
+        diagnosis: "Did they identify that when an order is filled or cancelled it is removed from the book/index but never returned to the pool via release(), so storage_ grows unboundedly?",
+        design: "Did they call pool_.release() at the right points (on full fill and on cancel) WITHOUT introducing use-after-free? Did they consider that the pool's release semantics interact with who still holds the pointer?",
+        communication: "Did they explain the leak as 'acquired but never released' and connect it to live_count rising?",
+        execution: "Does live_count stay bounded across a long add/remove cycle?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-mc-05-seed-id-005",
+      title: "MC-05: The order book corrupts after enough orders rest",
+      description: `Everything works for the first few thousand orders, then fills start referencing wrong prices and quantities, and occasionally the process crashes. It correlates with the number of *distinct* orders ever acquired from the pool, not the current book size. A debug build with sanitizers screams about heap-use-after-free pointing into the pool's storage.
+
+**Files:** \`include/object_pool.h\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["include/object_pool.h"],
+      rubric: {
+        diagnosis: "Did they identify that OrderPool stores Order objects in a std::vector and returns &storage_.back()? When the vector grows past its reserved capacity it REALLOCATES, invalidating every Order* already handed out (held by the book, the index, and the free list) — classic pointer invalidation / use-after-free.",
+        design: "Did they choose a storage strategy whose element addresses are stable (e.g. std::deque, a list of fixed-size blocks/chunks, or pre-allocating and never reallocating)? Did they explain why reserve() alone is not a real fix for an unbounded pool?",
+        communication: "Did they articulate iterator/pointer invalidation on vector growth and why it correlates with total orders acquired, not live count?",
+        execution: "Does the fix keep all previously-returned Order* valid for the lifetime of the order?",
+      },
+      expectedMinutes: 55,
+    },
+    {
+      id: "ticket-mc-06-seed-id-006",
+      title: "MC-06: Two threads on different symbols still corrupt shared state",
+      description: `We shard symbols across threads, each symbol guarded by its own mutex, so two threads working different symbols should never interfere. But under load we see duplicate order ids, lost stat updates, and rare crashes inside the order pool — even when the two threads touch completely different symbols.
+
+**Files:** \`src/matching_engine.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/matching_engine.cpp"],
+      rubric: {
+        diagnosis: "Did they see that next_id_++, pool_.acquire(), and the stats_ updates touch ENGINE-WIDE shared state but happen outside (or only partially inside) the per-symbol lock — so two threads on different symbols race on next_id_, the shared OrderPool, and stats_?",
+        design: "Did they protect the engine-wide shared state correctly — e.g. an atomic id counter, a thread-safe or per-shard pool, and synchronized stats — without serializing the whole engine or reintroducing the per-symbol locking they already have? Did they reason about lock granularity?",
+        communication: "Did they distinguish per-symbol state (already locked) from engine-global state (unprotected) and explain the data race precisely?",
+        execution: "Are id generation, pool access, and stats updates race-free under concurrent multi-symbol load?",
+      },
+      expectedMinutes: 55,
+    },
+    {
+      id: "ticket-mc-07-seed-id-007",
+      title: "MC-07: best_bid / best_ask occasionally return a stale or wrong price",
+      description: `A market-data consumer prints the top of book. Most of the time it's right, but right after a price level empties, best_bid() or best_ask() sometimes returns a price that no longer has any orders, or 0 when the book is clearly not empty.
+
+**Files:** \`src/order_book.cpp\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/order_book.cpp"],
+      rubric: {
+        diagnosis: "Did they trace that when a price level is fully consumed during matching, the orders are erased from the level but the empty PriceLevel is NOT removed from bids_/asks_, so best_bid/best_ask return the price of an empty level? (And the reverse: cancel() does erase empty levels, creating inconsistent behavior.)",
+        design: "Did they ensure empty levels are removed from the maps after matching (or best_bid/best_ask skip empty levels)? Did they make the two code paths consistent?",
+        communication: "Did they explain the invariant 'a price present in the map must have resting orders' and where it's violated?",
+        execution: "Does top-of-book always reflect a level that actually has orders?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-mc-08-seed-id-008",
+      title: "MC-08: Market orders rest on the book instead of being discarded",
+      description: `A market order that can't be fully filled (not enough liquidity) should fill what it can and drop the remainder — it must never rest. We're seeing leftover market-order quantity sitting in the book at price 0, polluting top-of-book.
+
+**Files:** \`src/order_book.cpp\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/order_book.cpp"],
+      rubric: {
+        diagnosis: "Did they find that submit() only checks order->quantity > 0 before resting, but a partially-filled MARKET order also has quantity > 0 and price 0, so it gets rested via the type==Limit guard? Did they verify the exact condition under which a market remainder rests?",
+        design: "Did they ensure market orders never rest (the remainder is dropped/cancelled) while limit remainders still rest correctly?",
+        communication: "Did they explain market vs limit resting semantics?",
+        execution: "Does an unfilled market remainder get discarded, leaving no price-0 junk in the book?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-mc-09-seed-id-009",
+      title: "MC-09: Copying an OrderBook leads to crashes and double frees",
+      description: `A reporting tool makes a copy of an OrderBook to run analytics off the hot path. With the pool-based design, copying a book and then letting both books continue causes crashes, double-frees, and orders mutating in two places at once. We need a clear, safe policy for copying.
+
+**Files:** \`include/order_book.h\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["include/order_book.h"],
+      rubric: {
+        diagnosis: "Did they recognize that OrderBook holds raw Order* (owned by the pool) and the implicitly-generated copy constructor does a shallow copy — so two books share the same Order* and the same pool slots, leading to double-release / aliasing (rule of three/five violation)?",
+        design: "Did they pick a coherent ownership policy — delete the copy constructor/assignment (non-copyable) and/or provide a deep snapshot that copies Order VALUES, not pointers? Did they justify the choice given the pool owns the memory?",
+        communication: "Did they explain rule of three/five and why shallow-copying pointer-owning aggregates is unsafe?",
+        execution: "Is copying either safely disabled or implemented as a correct deep snapshot?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-mc-10-seed-id-010",
+      title: "MC-10: Cancelling an order from another symbol's book silently no-ops or worse",
+      description: `cancel(symbol, id) sometimes returns true for an id that belongs to a *different* symbol, decrementing the wrong level's total_qty and corrupting that book's depth accounting. The id index is global in spirit but the books are per-symbol.
+
+**Files:** \`src/order_book.cpp\`, \`include/order_book.h\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/order_book.cpp", "include/order_book.h"],
+      rubric: {
+        diagnosis: "Did they identify that each OrderBook has its own index_ but cancel() looks up bids_[price]/asks_[price] via operator[] — which DEFAULT-CONSTRUCTS an empty level if the price isn't present — and then the empty-level cleanup and total_qty math operate on a bogus level? Did they note operator[] inserting is the trap?",
+        design: "Did they use find() instead of operator[] so a missing price doesn't create a phantom level, and return false cleanly when the order isn't in this book?",
+        communication: "Did they explain std::map::operator[]'s insert-on-miss behavior as the root cause?",
+        execution: "Does cancel only affect the correct level and never create phantom levels?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-mc-11-seed-id-011",
+      title: "MC-11: Throughput collapses as orders get larger",
+      description: `Latency profiling shows the matching path spends most of its time copying. Fills are returned by value and the vector grows; for large sweeps that generate thousands of fills, we copy the whole fill vector repeatedly. Throughput drops sharply as average order size rises.
+
+**Files:** \`src/order_book.cpp\`, \`include/order_book.h\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/order_book.cpp", "include/order_book.h"],
+      rubric: {
+        diagnosis: "Did they identify unnecessary copies on the hot path — e.g. fills vectors being copied rather than moved between match() and submit(), and/or no reserve() so the fills vector reallocates repeatedly during a large sweep?",
+        design: "Did they apply move semantics (return/std::move the vector), reserve() an estimate up front, and avoid per-fill reallocation? Did they avoid micro-optimizing the wrong thing?",
+        communication: "Did they explain copy vs move and reallocation cost, ideally with the O(n) copy growth?",
+        execution: "Are the redundant copies eliminated so cost scales with fills produced, not copied?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-mc-12-seed-id-012",
+      title: "MC-12: Self-trade — an order matches against the same account's resting order",
+      description: `Compliance flagged trades where the buy and sell order belong to the same client. The engine currently matches purely on price-time priority with no self-trade prevention. We need to skip resting orders from the same account and continue matching against the next one.
+
+**Files:** \`include/order.h\`, \`src/order_book.cpp\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["include/order.h", "src/order_book.cpp"],
+      rubric: {
+        diagnosis: "Did they recognize there is no account/owner concept on Order and no self-trade check in the matching loop, so an aggressor can cross its own resting liquidity?",
+        design: "Did they add an account identifier to Order and skip (not fill) resting orders with the same account, continuing to the next order while preserving price-time priority? Did they consider the chosen STP policy (skip vs cancel)?",
+        communication: "Did they explain self-trade prevention and the policy trade-offs?",
+        execution: "Does an incoming order skip same-account resting orders and still match eligible ones correctly?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-mc-13-seed-id-013",
+      title: "MC-13: A deadlock appears when we add cross-symbol pair matching",
+      description: `We're prototyping a feature that moves liquidity between two correlated symbols, locking both symbols' mutexes. Under load the engine occasionally freezes completely — two threads each holding one symbol's lock and waiting for the other. We need a locking discipline that can't deadlock.
+
+**Files:** \`src/matching_engine.cpp\`, \`include/matching_engine.h\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/matching_engine.cpp", "include/matching_engine.h"],
+      rubric: {
+        diagnosis: "Did they identify the classic lock-ordering deadlock — thread A locks symbol1 then symbol2, thread B locks symbol2 then symbol1 — when two code paths acquire two per-symbol mutexes in opposite orders?",
+        design: "Did they impose a total lock ordering (e.g. always lock the lexicographically-smaller symbol first) or use std::lock / std::scoped_lock to acquire both atomically? Did they explain why this prevents the cycle?",
+        communication: "Did they explain the four Coffman conditions or at least circular-wait, and how a global ordering breaks it?",
+        execution: "Is the two-symbol locking deadlock-free under concurrent opposite-direction access?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-mc-14-seed-id-014",
+      title: "MC-14: Partial-fill status is wrong for orders that fully fill in one trade",
+      description: `Downstream systems rely on OrderStatus. An order that is completely filled by a single resting order is sometimes reported as PartiallyFilled instead of Filled, and an order that rests untouched is occasionally marked PartiallyFilled. The status logic at the end of match() doesn't line up with the actual fill outcome.
+
+**Files:** \`src/order_book.cpp\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/order_book.cpp"],
+      rubric: {
+        diagnosis: "Did they examine the status-assignment block at the end of match() and find the boundary conditions are wrong (the partial vs filled vs untouched cases don't cover quantity == original and quantity == 0 correctly)?",
+        design: "Did they make status reflect: filled when quantity==0, partially filled when 0<quantity<original, and unchanged (New) when nothing traded?",
+        communication: "Did they enumerate the three outcomes clearly and map each to a status?",
+        execution: "Is OrderStatus correct for full-fill, partial-fill, and no-fill cases?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-mc-15-seed-id-015",
+      title: "MC-15: A const OrderBook reference still lets callers mutate the book",
+      description: `We pass \`const OrderBook&\` to the market-data publisher so it can read top-of-book without modifying it. A code review caught the publisher accidentally calling something that mutates the book through that const reference, and it compiled. We want the const contract to actually prevent mutation.
+
+**Files:** \`include/order_book.h\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["include/order_book.h"],
+      rubric: {
+        diagnosis: "Did they identify missing const-correctness — read-only accessors (best_bid, best_ask, depth) not marked const, and/or mutating members reachable through a const reference — so the compiler can't enforce the read-only contract?",
+        design: "Did they mark genuinely read-only methods const, and ensure mutating operations are not const, so a const OrderBook& can only read? Did they avoid const_cast hacks?",
+        communication: "Did they explain const-correctness and why it's a compile-time safety guarantee, not just style?",
+        execution: "Does a const OrderBook& expose only read operations and reject mutation at compile time?",
+      },
+      expectedMinutes: 20,
+    },
+  ];
+
+  for (const t of matchcoreTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.CPP, codebaseId: matchcoreCodebase.id },
+    });
+  }
+
   // ─── LMKR demo employer org + campaign ──────────────────────────────────────
   // The whole platform uses GitHub OAuth (no passwords), so the "employer" is an
   // existing GitHub user added as an ADMIN of the LMKR org. Change EMPLOYER_GH to
@@ -2696,6 +2963,6 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
 
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore tickets + LMKR demo campaign upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore + ${matchcoreTickets.length} MatchCore tickets + LMKR demo campaign upserted.`
   );
 }
