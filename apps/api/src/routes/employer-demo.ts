@@ -88,11 +88,11 @@ router.get(
 
         return {
           id: sub.userId,
-          name: toDisplayName(sub.user.githubUsername),
+          name: toDisplayName(sub.user.githubUsername ?? "unknown"),
           email:
             sub.user.email ??
             `${sub.user.githubUsername}@demo.devsimulate.io`,
-          initials: toInitials(sub.user.githubUsername),
+          initials: toInitials(sub.user.githubUsername ?? "U"),
           githubUsername: sub.user.githubUsername,
           ticket: {
             code: toTicketCode(sub.ticket.title),
@@ -319,12 +319,12 @@ router.get(
       res.json({
         data: {
           id: user.id,
-          name: toDisplayName(user.githubUsername),
+          name: toDisplayName(user.githubUsername ?? "unknown"),
           email:
             user.email ??
             `${user.githubUsername}@demo.devsimulate.io`,
           githubUsername: user.githubUsername,
-          initials: toInitials(user.githubUsername),
+          initials: toInitials(user.githubUsername ?? "U"),
           ticket: {
             code: toTicketCode(sub.ticket.title),
             title: toTicketTitle(sub.ticket.title),
@@ -418,8 +418,8 @@ router.post(
 
         return {
           id: sub.userId,
-          name: toDisplayName(sub.user.githubUsername),
-          initials: toInitials(sub.user.githubUsername),
+          name: toDisplayName(sub.user.githubUsername ?? "unknown"),
+          initials: toInitials(sub.user.githubUsername ?? "U"),
           total: sub.scoreTotal ?? 0,
           diagnosis: sub.scoreDiagnosis ?? 0,
           design: sub.scoreDesign ?? 0,

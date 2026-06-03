@@ -29,7 +29,7 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
     // Group by (githubUsername + stack)
     const groups = new Map<string, { username: string; stack: string; scores: number[] }>();
     for (const s of submissions) {
-      const username = s.user.githubUsername;
+      const username = s.user.githubUsername ?? "unknown";
       const stack = s.ticket.stack;
       const key = `${username}::${stack}`;
       if (!groups.has(key)) groups.set(key, { username, stack, scores: [] });

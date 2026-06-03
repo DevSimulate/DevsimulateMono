@@ -47,8 +47,8 @@ enum AIUsageDeclaration {
 
 model User {
   id                  String              @id @default(uuid())
-  githubId            String              @unique
-  githubUsername      String              @unique
+  githubId            String?             @unique
+  githubUsername      String?             @unique
   email               String?
   primaryStack        Stack               @default(NODE)
   subscriptionTier    SubscriptionTier    @default(FREE)

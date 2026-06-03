@@ -139,7 +139,7 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
         orderBy: { scoreTotal: "desc" },
         select: { scoreTotal: true },
       });
-      if (sub) scored.push({ githubUsername: c.user.githubUsername, score: sub.scoreTotal ?? 0 });
+      if (sub) scored.push({ githubUsername: c.user.githubUsername ?? "unknown", score: sub.scoreTotal ?? 0 });
     }
     scored.sort((a, b) => b.score - a.score);
 
@@ -844,7 +844,7 @@ router.post("/:id/invite", async (req: Request, res: Response): Promise<void> =>
         select: { scoreTotal: true },
       });
       const { subject, html } = interviewInviteEmail({
-        candidateName: c.user.githubUsername,
+        candidateName: c.user.githubUsername ?? "Candidate",
         companyName: campaign.companyName,
         roleName: campaign.roleName,
         score: sub?.scoreTotal ?? 0,

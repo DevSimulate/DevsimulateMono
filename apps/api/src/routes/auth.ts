@@ -8,6 +8,14 @@ import {
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
+import { sendEmail } from "../lib/email";
+
+// Find or create an employer user keyed by email (no GitHub identity).
+async function findOrCreateEmployerUser(email: string) {
+  const existing = await prisma.user.findFirst({ where: { email } });
+  if (existing) return existing;
+  return prisma.user.create({ data: { email } });
+}
 
 const router = Router();
 
@@ -144,5 +152,91 @@ router.get(
     }
   }
 );
+
+// ─── Employer auth (email magic link — no GitHub) ───────────────────────────────
+
+const APP = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+
+/**
+ * POST /auth/employer/magic-link
+ * Body: { email }
+ * Emails a one-time, short-lived sign-in link to the employer's inbox.
+ */
+router.post("/employer/magic-link", async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as { email?: string };
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+  try {
+    const secret = process.env.JWT_SECRET!;
+    const token = jwt.sign({ email, type: "employer-magic" }, secret, { expiresIn: "15m" });
+    const link = `${APP}/auth/employer/verify?token=${encodeURIComponent(token)}`;
+
+    await sendEmail({
+      to: email,
+      subject: "Your DevSimulate sign-in link",
+      html: `
+        <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+          <div style="font-weight:800;font-size:18px;margin-bottom:20px;">⚡ DevSimulate</div>
+          <h1 style="font-size:20px;">Sign in to DevSimulate</h1>
+          <p style="font-size:14px;color:#444;line-height:1.6;">Click the button below to sign in. This link expires in 15 minutes and can be used once.</p>
+          <div style="margin:24px 0;">
+            <a href="${link}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">Sign in →</a>
+          </div>
+          <p style="font-size:12px;color:#999;">If you didn't request this, you can ignore it.</p>
+        </div>`,
+    });
+
+    res.json({ data: { sent: true } });
+  } catch {
+    res.status(500).json({ error: "Failed to send sign-in link" });
+  }
+});
+
+/**
+ * POST /auth/employer/verify
+ * Body: { token }
+ * Verifies the magic-link token and returns a session JWT.
+ */
+router.post("/employer/verify", async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.body as { token?: string };
+  if (!token) { res.status(400).json({ error: "Missing token" }); return; }
+  try {
+    const secret = process.env.JWT_SECRET!;
+    const payload = jwt.verify(token, secret) as { email: string; type: string };
+    if (payload.type !== "employer-magic") { res.status(401).json({ error: "Invalid token" }); return; }
+
+    const user = await findOrCreateEmployerUser(payload.email);
+    const session = signJwt(user);
+    const hasOrg = await prisma.orgMember.findFirst({ where: { userId: user.id } });
+    res.json({ data: { token: session, user, hasOrg: !!hasOrg } });
+  } catch {
+    res.status(401).json({ error: "This sign-in link is invalid or expired. Request a new one." });
+  }
+});
+
+/**
+ * POST /auth/employer/test-login   (TEMPORARY — remove after testing)
+ * Body: { email, code }
+ * Bypasses the magic link for a known test account so you can log in directly
+ * during development. Gated by EMPLOYER_TEST_CODE. Delete this route when done.
+ */
+router.post("/employer/test-login", async (req: Request, res: Response): Promise<void> => {
+  const { email, code } = req.body as { email?: string; code?: string };
+  const expected = process.env.EMPLOYER_TEST_CODE ?? "LMKR-TEST-2026";
+  if (!email || code !== expected) {
+    res.status(401).json({ error: "Invalid test login" });
+    return;
+  }
+  try {
+    const user = await findOrCreateEmployerUser(email);
+    const session = signJwt(user);
+    const hasOrg = await prisma.orgMember.findFirst({ where: { userId: user.id } });
+    res.json({ data: { token: session, user, hasOrg: !!hasOrg } });
+  } catch {
+    res.status(500).json({ error: "Test login failed" });
+  }
+});
 
 export default router;

@@ -86,7 +86,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
         const f = flagged(auth, sub.followUp?.declarationMismatch ?? false, sub.pasteAttempts ?? 0);
         recent.push({
           id: c.id,
-          githubUsername: c.user.githubUsername,
+          githubUsername: c.user.githubUsername ?? "unknown",
           roleName: c.campaign.roleName,
           score: sub.scoreTotal ?? 0,
           verdict: verdict(sub.scoreTotal ?? 0, auth, f),
