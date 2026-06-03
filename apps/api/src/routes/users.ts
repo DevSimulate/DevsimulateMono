@@ -8,50 +8,49 @@ const router = Router();
  * Public endpoint — no auth required.
  * Returns top 50 users ranked by average score across reviewed submissions.
  */
-router.get("/leaderboard", async (_req: Request, res: Response): Promise<void> => {
+router.get("/leaderboard", async (req: Request, res: Response): Promise<void> => {
+  const stackFilter = (req.query.stack as string | undefined)?.toUpperCase();
   try {
-    const users = await prisma.user.findMany({
+    // Pull reviewed submissions WITH the stack of the ticket they solved, so a
+    // developer is ranked within the stack they actually worked in — not a
+    // single global pool that mixes C++ with Angular.
+    const submissions = await prisma.submission.findMany({
       where: {
-        submissions: {
-          some: { status: "REVIEWED" },
-        },
+        status: "REVIEWED",
+        ...(stackFilter ? { ticket: { stack: stackFilter as never } } : {}),
       },
       select: {
-        githubUsername: true,
-        primaryStack: true,
-        createdAt: true,
-        submissions: {
-          where: { status: "REVIEWED" },
-          select: {
-            scoreTotal: true,
-            scoreDiagnosis: true,
-            scoreDesign: true,
-            scoreCommunication: true,
-            scoreExecution: true,
-            submittedAt: true,
-          },
-        },
+        scoreTotal: true,
+        user: { select: { githubUsername: true } },
+        ticket: { select: { stack: true } },
       },
     });
 
-    const ranked = users
-      .map((u) => {
-        const scores = u.submissions.map((s) => s.scoreTotal ?? 0);
-        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-        const best = Math.max(...scores);
-        return {
-          githubUsername: u.githubUsername,
-          primaryStack: u.primaryStack ?? "Unknown",
-          ticketsCompleted: scores.length,
-          averageScore: avg,
-          bestScore: best,
-          joinedAt: u.createdAt,
-        };
-      })
-      .sort((a, b) => b.averageScore - a.averageScore || b.ticketsCompleted - a.ticketsCompleted)
-      .slice(0, 50);
+    // Group by (githubUsername + stack)
+    const groups = new Map<string, { username: string; stack: string; scores: number[] }>();
+    for (const s of submissions) {
+      const username = s.user.githubUsername;
+      const stack = s.ticket.stack;
+      const key = `${username}::${stack}`;
+      if (!groups.has(key)) groups.set(key, { username, stack, scores: [] });
+      groups.get(key)!.scores.push(s.scoreTotal ?? 0);
+    }
 
-    res.json({ data: ranked });
+    const ranked = [...groups.values()]
+      .map((g) => ({
+        githubUsername: g.username,
+        stack: g.stack,
+        ticketsCompleted: g.scores.length,
+        averageScore: Math.round(g.scores.reduce((a, b) => a + b, 0) / g.scores.length),
+        bestScore: Math.max(...g.scores),
+      }))
+      .sort((a, b) => b.averageScore - a.averageScore || b.ticketsCompleted - a.ticketsCompleted)
+      .slice(0, 100);
+
+    // Which stacks have any entries (for the page's stack tabs)
+    const stacks = [...new Set([...groups.values()].map((g) => g.stack))].sort();
+
+    res.json({ data: ranked, stacks });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch leaderboard";
     res.status(500).json({ error: message });

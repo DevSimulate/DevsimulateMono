@@ -8,14 +8,20 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 interface LeaderboardEntry {
   githubUsername: string;
-  primaryStack: string;
+  stack: string;
   ticketsCompleted: number;
   averageScore: number;
   bestScore: number;
-  joinedAt: string;
 }
 
 const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" };
+
+const STACK_LABEL: Record<string, string> = {
+  DOTNET: ".NET", ANGULAR: "Angular", JAVA: "Java", CPP: "C++",
+  NODE: "Node.js", REACT: "React", PYTHON: "Python", DEVOPS: "DevOps",
+  SYSTEM_DESIGN: "System Design",
+};
+const stackLabel = (s: string) => STACK_LABEL[s] ?? s;
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
@@ -29,15 +35,24 @@ function ScoreBadge({ score }: { score: number }) {
 
 export default function LeaderboardPage(): React.ReactElement {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [stacks, setStacks] = useState<string[]>([]);
+  const [activeStack, setActiveStack] = useState<string>("ALL");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/users/leaderboard`)
+    const url = activeStack === "ALL"
+      ? `${API_URL}/users/leaderboard`
+      : `${API_URL}/users/leaderboard?stack=${activeStack}`;
+    setLoading(true);
+    fetch(url)
       .then((r) => r.json())
-      .then((d: { data: LeaderboardEntry[] }) => setEntries(d.data ?? []))
+      .then((d: { data: LeaderboardEntry[]; stacks?: string[] }) => {
+        setEntries(d.data ?? []);
+        if (d.stacks && activeStack === "ALL") setStacks(d.stacks);
+      })
       .catch(() => null)
       .finally(() => setLoading(false));
-  }, []);
+  }, [activeStack]);
 
   return (
     <div className="min-h-screen" style={{ background: "#F7F6F3" }}>
@@ -64,8 +79,26 @@ export default function LeaderboardPage(): React.ReactElement {
             Leaderboard
           </h1>
           <p className="text-base" style={{ color: "#6B6B6B" }}>
-            Top engineers ranked by average score across all tickets.
+            Top engineers ranked by average score — <strong>within each stack</strong>.
           </p>
+        </div>
+
+        {/* Stack tabs */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
+          {["ALL", ...stacks].map((s) => (
+            <button
+              key={s}
+              onClick={() => setActiveStack(s)}
+              className="text-xs font-bold px-3.5 py-1.5 rounded-full transition-colors"
+              style={{
+                background: activeStack === s ? "#5B5BD6" : "white",
+                color: activeStack === s ? "white" : "#6B6B6B",
+                border: `1px solid ${activeStack === s ? "#5B5BD6" : "#E4E2DD"}`,
+              }}
+            >
+              {s === "ALL" ? "All Stacks" : stackLabel(s)}
+            </button>
+          ))}
         </div>
 
         {loading && (
@@ -85,7 +118,7 @@ export default function LeaderboardPage(): React.ReactElement {
           <div className="space-y-3 fade-in-up">
             {entries.map((entry, i) => (
               <Link
-                key={entry.githubUsername}
+                key={`${entry.githubUsername}-${entry.stack}`}
                 href={`/profile/${entry.githubUsername}`}
                 className="card rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow"
                 style={{ display: "flex" }}
@@ -113,7 +146,7 @@ export default function LeaderboardPage(): React.ReactElement {
                     {entry.githubUsername}
                   </div>
                   <div className="text-xs" style={{ color: "#9CA3AF" }}>
-                    {entry.primaryStack} · {entry.ticketsCompleted} ticket{entry.ticketsCompleted !== 1 ? "s" : ""}
+                    {stackLabel(entry.stack)} · {entry.ticketsCompleted} ticket{entry.ticketsCompleted !== 1 ? "s" : ""}
                   </div>
                 </div>
 
