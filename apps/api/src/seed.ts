@@ -2914,6 +2914,241 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
     });
   }
 
+  // ─── FinServe — Java 17 + Spring Boot payments service ──────────────────────
+  const finserveCodebase = await prisma.codebase.upsert({
+    where: { id: "finserve-seed-id-001" },
+    update: { repoUrl: "https://github.com/DevSimulate/finserve" },
+    create: {
+      id: "finserve-seed-id-001",
+      name: "FinServe",
+      stack: Stack.JAVA,
+      repoUrl: "https://github.com/DevSimulate/finserve",
+      description: "A Spring Boot 3 + JPA payments and ledger service. Accounts, atomic transfers, interest, and nightly statement exports — the source of truth for customer balances.",
+      companyLore: `Northwind Bank runs FinServe as the ledger of record. Every customer balance, every transfer, every cent flows through it. The team treats money bugs as P0 incidents: a lost update under concurrency or a non-atomic transfer is real money missing from a real customer's account.`,
+    },
+  });
+
+  const finserveTickets = [
+    {
+      id: "ticket-fs-01-seed-id-001",
+      title: "FS-01: Looking up a missing account 500s instead of returning empty",
+      description: "GET /api/accounts/{number} for an account number that doesn't exist throws a NullPointerException and returns a 500. It should cleanly report 'not found'. The crash happens inside the service, not the controller.\n\n**Files:** `service/AccountService.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["service/AccountService.java"],
+      rubric: {
+        diagnosis: "Did they find that getByNumber() calls findByAccountNumber(...).orElse(null) and then immediately dereferences account.getOwnerName() — NPE when the account is absent?",
+        design: "Did they guard the null before dereferencing without breaking the blank-name normalisation?",
+        communication: "Did they explain that orElse(null) followed by an unconditional method call is the classic NPE trap?",
+        execution: "Does a missing account no longer throw, returning a clean not-found result?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-fs-02-seed-id-002",
+      title: "FS-02: Accounts vanish from caches/sets after their balance changes",
+      description: "We keep Accounts in HashSets and as HashMap keys. After a transfer changes an account's balance, code that looks the account up in those collections suddenly can't find it — even though it's the same account.\n\n**Files:** `model/Account.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["model/Account.java"],
+      rubric: {
+        diagnosis: "Did they identify that equals() uses only id but hashCode() uses mutable fields (including balance), violating the equals/hashCode contract and making the object's hashCode change after it's placed in a hash structure?",
+        design: "Did they make hashCode consistent with equals (stable identity) and exclude mutable fields?",
+        communication: "Did they explain the equals/hashCode contract and why mutable fields must not feed hashCode for hashed entities?",
+        execution: "Do equal accounts share a hashCode, and does an account stay findable after its balance changes?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-fs-03-seed-id-003",
+      title: "FS-03: The 'accounts opened' metric undercounts under load",
+      description: "The /api/accounts/metrics/opened counter undercounts when accounts are opened concurrently — open 1,000 across 10 threads and it reads less than 1,000.\n\n**Files:** `service/AccountService.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["service/AccountService.java"],
+      rubric: {
+        diagnosis: "Did they identify accountsOpened as a mutable static int incremented with non-atomic ++ (read-modify-write), losing concurrent increments?",
+        design: "Did they make it thread-safe (AtomicInteger/LongAdder or synchronization)?",
+        communication: "Did they explain that ++ is not atomic and how increments interleave to lose updates?",
+        execution: "Does the metric equal the number opened under concurrency?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-fs-04-seed-id-004",
+      title: "FS-04: A failed transfer can debit the sender without crediting the receiver",
+      description: "If the credit step fails, the sender has already been debited and that debit stays. Money disappears. Transfers must be all-or-nothing.\n\n**Files:** `service/TransferService.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/TransferService.java"],
+      rubric: {
+        diagnosis: "Did they identify that transfer() is NOT @Transactional, so each save() commits separately — if the second fails, the first (debit) is already committed and can't roll back?",
+        design: "Did they wrap the whole transfer in @Transactional so a failure rolls back the debit too (including the transaction record)?",
+        communication: "Did they explain transaction boundaries and why per-save auto-commit breaks atomicity?",
+        execution: "Does a failure anywhere leave both balances unchanged?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-fs-05-seed-id-005",
+      title: "FS-05: Missing account returns 200 with an empty body, not 404",
+      description: "The accounts endpoint returns HTTP 200 with a null body for an account that doesn't exist. Clients can't tell 'no such account' from a real one.\n\n**Files:** `controller/AccountController.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["controller/AccountController.java"],
+      rubric: {
+        diagnosis: "Did they see that the controller always wraps the result in ResponseEntity.ok(...), even when the service returns null?",
+        design: "Did they map not-found to 404 while keeping the success path at 200?",
+        communication: "Did they explain correct REST semantics for absent resources?",
+        execution: "Does a missing account return 404 and a present one 200 with the body?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-fs-06-seed-id-006",
+      title: "FS-06: Nightly statement export leaks file handles until the batch dies",
+      description: "The nightly batch exports thousands of statements and eventually fails with 'Too many open files'. Exported files are sometimes truncated or empty.\n\n**Files:** `service/StatementService.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/StatementService.java"],
+      rubric: {
+        diagnosis: "Did they find that exportStatement() opens a FileWriter and only flush()es, never close()ing it — leaking handles and risking truncated output?",
+        design: "Did they use try-with-resources (or finally) so the writer is always closed?",
+        communication: "Did they explain resource leaks and why try-with-resources fits AutoCloseable?",
+        execution: "Are files fully written and handles released across many exports?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-fs-07-seed-id-007",
+      title: "FS-07: Building a statement fires hundreds of queries (N+1)",
+      description: "Generating a statement is slow. Query logs show one query for the transactions, then one extra query per transaction — 501 queries for 500 transactions.\n\n**Files:** `service/StatementService.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/StatementService.java"],
+      rubric: {
+        diagnosis: "Did they identify the N+1 — buildStatement loads all transactions then calls accounts.findById(...) per transaction?",
+        design: "Did they batch the lookups (collect ids, findAllById once and map) or use a fetch join?",
+        communication: "Did they explain N+1 and the improvement to a constant number of queries?",
+        execution: "Does building a statement use a bounded number of queries instead of one per transaction?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-fs-08-seed-id-008",
+      title: "FS-08: Interest application corrupts balances with rounding drift",
+      description: "After the daily interest job runs a while, balances are off by fractions of a cent and the errors accumulate. Reconciliation flags accounts a penny or two off.\n\n**Files:** `service/AccountService.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/AccountService.java"],
+      rubric: {
+        diagnosis: "Did they identify that applyInterest converts BigDecimal to double, does floating-point math, and converts back — losing precision and drifting?",
+        design: "Did they do the math entirely in BigDecimal with an explicit scale and RoundingMode, never touching double?",
+        communication: "Did they explain why double must never represent money and how drift accumulates?",
+        execution: "Is interest computed in BigDecimal with explicit rounding, eliminating drift?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-fs-09-seed-id-009",
+      title: "FS-09: Transfer failures are reported to the client as success",
+      description: "A transfer that throws (insufficient funds, missing account) returns HTTP 200 with {\"status\":\"PENDING\"} and the client shows success. The user thinks money moved when it didn't.\n\n**Files:** `controller/TransferController.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["controller/TransferController.java"],
+      rubric: {
+        diagnosis: "Did they find the catch-all that swallows every exception and returns ok('PENDING'), hiding real failures behind a fake success?",
+        design: "Did they let real errors surface with appropriate status codes (400/404/500) instead of blanket-swallowing, without leaking internals?",
+        communication: "Did they explain why swallowing exceptions into a success response is dangerous, especially for money?",
+        execution: "Do failed transfers return an error status and successful ones the transaction?",
+      },
+      expectedMinutes: 25,
+    },
+    {
+      id: "ticket-fs-10-seed-id-010",
+      title: "FS-10: Concurrent transfers from the same account lose money (lost update)",
+      description: "Two transfers debiting the same account at once sometimes both succeed when only one should fit the balance, and the final balance reflects only one debit. Classic 'both read 100, both write 90'.\n\n**Files:** `service/TransferService.java`, `model/Account.java`",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["service/TransferService.java", "model/Account.java"],
+      rubric: {
+        diagnosis: "Did they identify the read-modify-write race with no locking or @Version — both transactions read the same balance, both pass the check, the second write overwrites the first, losing a debit?",
+        design: "Did they choose and justify a correct concurrency control — optimistic (@Version + retry), pessimistic (SELECT FOR UPDATE), or an atomic update query — and handle the retry/failure path?",
+        communication: "Did they explain lost update and the optimistic-vs-pessimistic trade-offs?",
+        execution: "Under concurrent same-account transfers, is every debit accounted for and the funds check never bypassed?",
+      },
+      expectedMinutes: 55,
+    },
+    {
+      id: "ticket-fs-11-seed-id-011",
+      title: "FS-11: The rebalancing job occasionally deadlocks the service",
+      description: "rebalance(A,B,...) runs on multiple threads. Under load it sometimes hangs forever — two threads each holding one account, waiting for the other. Thread dumps show a deadlock.\n\n**Files:** `service/TransferService.java`",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["service/TransferService.java"],
+      rubric: {
+        diagnosis: "Did they identify the lock-ordering deadlock — rebalance synchronizes on A then B, so rebalance(A,B) and rebalance(B,A) acquire locks in opposite order? Bonus: did they note synchronizing on JPA entities won't coordinate across transactions/nodes?",
+        design: "Did they impose a consistent global lock ordering (e.g. lower id first) or replace in-JVM locking with DB-level locking that works across instances?",
+        communication: "Did they explain circular-wait and why a total ordering breaks it, plus why entity-monitor locking doesn't scale?",
+        execution: "Is the two-account rebalance deadlock-free under opposite-direction concurrent calls?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-fs-12-seed-id-012",
+      title: "FS-12: Negative or zero transfer amounts are accepted",
+      description: "You can POST a transfer with amount 0 or negative. A negative transfer effectively moves money the wrong way. There's no validation.\n\n**Files:** `service/TransferService.java`, `controller/TransferController.java`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["service/TransferService.java", "controller/TransferController.java"],
+      rubric: {
+        diagnosis: "Did they identify that amount is never validated to be strictly positive, so 0 and negatives invert or no-op the transfer?",
+        design: "Did they reject non-positive amounts (BigDecimal compareTo ZERO) at a sensible layer with a 400?",
+        communication: "Did they explain the correctness/security impact of unvalidated monetary input?",
+        execution: "Are zero and negative amounts rejected with a clear error while positives still work?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-fs-13-seed-id-013",
+      title: "FS-13: Cross-currency transfers move raw amounts with no conversion",
+      description: "A transfer from a USD account to a EUR account adds the raw number across — 100 USD 'adds 100 EUR' with no conversion and no rejection. Currency is stored but never checked.\n\n**Files:** `service/TransferService.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/TransferService.java"],
+      rubric: {
+        diagnosis: "Did they identify that transfer() never compares the two accounts' currencies, so cross-currency transfers move raw amounts unguarded?",
+        design: "Did they at minimum reject mismatched currencies (or define a clear conversion contract), choosing the safe default of rejecting?",
+        communication: "Did they explain why silently treating 100 USD as 100 EUR is a financial bug?",
+        execution: "Are cross-currency transfers rejected or correctly converted instead of moving raw amounts?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-fs-14-seed-id-014",
+      title: "FS-14: Under load, requests fail with 'connection is not available'",
+      description: "During the statement batch plus live traffic, requests fail with HikariCP 'Connection is not available, request timed out'. The pool is size 5. It correlates with long operations holding connections.\n\n**Files:** `service/StatementService.java`, `service/TransferService.java`",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["service/StatementService.java", "service/TransferService.java"],
+      rubric: {
+        diagnosis: "Did they reason about pool exhaustion — the N+1 holding a connection for hundreds of queries, and/or file IO inside a transaction holding a connection — starving the 5-connection pool?",
+        design: "Did they reduce connection hold time (fix N+1, move IO outside the transaction, keep transactions short) rather than just enlarging the pool, identifying the worst offender?",
+        communication: "Did they explain how holding connections during slow work exhausts a small pool?",
+        execution: "Does the service stop timing out under batch + live load without merely masking it by sizing up the pool?",
+      },
+      expectedMinutes: 55,
+    },
+    {
+      id: "ticket-fs-15-seed-id-015",
+      title: "FS-15: Incomplete, non-atomic audit trail for transfers",
+      description: "Compliance needs an immutable record of each transfer: who, to whom, how much, when, resulting balances. Today the Transaction omits balances and is written outside a guaranteed-atomic boundary, so it can diverge from what actually happened.\n\n**Files:** `service/TransferService.java`, `model/Transaction.java`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["service/TransferService.java", "model/Transaction.java"],
+      rubric: {
+        diagnosis: "Did they recognize the audit record is incomplete and written outside a guaranteed-atomic boundary, so it can diverge from the real balance changes?",
+        design: "Did they enrich the Transaction and ensure it's written in the SAME transaction as the balance changes (atomic), considering immutability?",
+        communication: "Did they explain why the audit record must be part of the same atomic unit as the money movement?",
+        execution: "Is a complete audit record written atomically with every successful transfer and never for a failed one?",
+      },
+      expectedMinutes: 35,
+    },
+  ];
+
+  for (const t of finserveTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.JAVA, codebaseId: finserveCodebase.id },
+    });
+  }
+
   // ─── LMKR demo employer org + campaign ──────────────────────────────────────
   // The whole platform uses GitHub OAuth (no passwords), so the "employer" is an
   // existing GitHub user added as an ADMIN of the LMKR org. Change EMPLOYER_GH to
@@ -2963,6 +3198,6 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
 
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore + ${matchcoreTickets.length} MatchCore tickets + LMKR demo campaign upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore + ${matchcoreTickets.length} MatchCore + ${finserveTickets.length} FinServe tickets + LMKR demo campaign upserted.`
   );
 }
