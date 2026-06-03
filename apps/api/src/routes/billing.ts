@@ -28,6 +28,48 @@ function getStripe(): StripeClient {
 }
 
 /**
+ * POST /billing/employer-checkout
+ * Body: { plan: "starter" | "growth" }
+ * Creates a Stripe subscription checkout for an employer hiring plan.
+ */
+router.post(
+  "/employer-checkout",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const { plan } = req.body as { plan?: "starter" | "growth" };
+
+    const PRICE_ENV: Record<string, string | undefined> = {
+      starter: process.env.STRIPE_EMPLOYER_STARTER_PRICE_ID,
+      growth: process.env.STRIPE_EMPLOYER_GROWTH_PRICE_ID,
+    };
+    const priceId = plan ? PRICE_ENV[plan] : undefined;
+    if (!priceId) {
+      res.status(400).json({ error: "This plan isn't configured yet. Contact ossama@devsimulate.com to get started." });
+      return;
+    }
+
+    try {
+      const stripe = getStripe();
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: user?.email ?? undefined,
+        metadata: { userId, employerPlan: plan ?? "" },
+        success_url: `${process.env.FRONTEND_URL}/employer/dashboard?upgraded=true`,
+        cancel_url: `${process.env.FRONTEND_URL}/employer/pricing`,
+      });
+      res.json({ url: session.url });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start checkout";
+      res.status(500).json({ error: message });
+    }
+  }
+);
+
+/**
  * POST /billing/create-checkout-session
  * Creates a Stripe checkout session for the Pro plan.
  */

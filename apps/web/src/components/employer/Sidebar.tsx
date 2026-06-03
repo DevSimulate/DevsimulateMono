@@ -13,14 +13,16 @@ import {
   LogOut,
   ChevronRight,
   Megaphone,
+  CreditCard,
 } from "lucide-react";
 
 const NAV = [
-  { href: "/employer/dashboard",   label: "Dashboard",  icon: LayoutDashboard },
-  { href: "/employer/campaigns",   label: "Campaigns",  icon: Megaphone },
-  { href: "/employer/candidates",  label: "Candidates", icon: Users },
-  { href: "/employer/team",        label: "Team",       icon: Building2 },
-  { href: "/employer/settings",    label: "Settings",   icon: Settings },
+  { href: "/employer/dashboard",   label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/employer/campaigns",   label: "Campaigns",       icon: Megaphone },
+  { href: "/employer/candidates",  label: "Candidates",      icon: Users },
+  { href: "/employer/team",        label: "Team",            icon: Building2 },
+  { href: "/employer/pricing",     label: "Plans & Billing", icon: CreditCard },
+  { href: "/employer/settings",    label: "Settings",        icon: Settings },
 ];
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
