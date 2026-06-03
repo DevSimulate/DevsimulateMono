@@ -12,6 +12,7 @@ import billingRouter from "./routes/billing";
 import employerRouter from "./routes/employer";
 import employerDemoRouter from "./routes/employer-demo";
 import campaignsRouter from "./routes/campaigns";
+import employerPortalRouter from "./routes/employer-portal";
 import githubRouter from "./routes/github";
 import waitlistRouter from "./routes/waitlist";
 import feedbackRouter from "./routes/feedback";
@@ -80,6 +81,7 @@ app.use("/github", githubRouter);
 app.use("/waitlist", waitlistRouter);
 app.use("/feedback", feedbackRouter);
 app.use("/employer/campaigns", campaignsRouter);
+app.use("/employer", employerPortalRouter);
 app.use("/", employerDemoRouter);
 app.use("/", employerRouter);
 

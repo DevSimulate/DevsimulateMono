@@ -1,220 +1,126 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import axios from "axios";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import { getToken } from "@/lib/auth";
+import { UserPlus, Trash2, Shield } from "lucide-react";
 
-interface TeamMember {
-  userId: string;
-  githubUsername: string;
-  primaryStack: string;
-  skillScore: number;
-  role: string;
-  ticketsThisMonth: number;
-  ticketsTotal: number;
-  weakestDimension: string;
-  trend: "up" | "down" | "stable";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+interface Member {
+  id: string; role: string; githubUsername: string; email: string | null; isMe: boolean;
 }
 
-interface Ticket { id: string; title: string; difficulty: string; }
+const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
+  ADMIN:   { bg: "#1e1b4b", color: "#818cf8" },
+  MANAGER: { bg: "#052e16", color: "#4ade80" },
+  MEMBER:  { bg: "#1a1a1a", color: "#888" },
+};
 
-const TREND_ICON: Record<string, string> = { up: "↑", down: "↓", stable: "→" };
-const TREND_COLOR: Record<string, string> = { up: "text-emerald-400", down: "text-red-400", stable: "text-slate-500" };
-
-export default function TeamPage(): React.ReactElement {
-  const router = useRouter();
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+export default function TeamPage() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [myRole, setMyRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filterStack, setFilterStack] = useState("");
-  const [sortBy, setSortBy] = useState<"skillScore" | "scoreDiagnosis" | "scoreCommunication">("skillScore");
-  const [modal, setModal] = useState<{ userId: string; username: string } | null>(null);
-  const [selectedTicket, setSelectedTicket] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const [assignMsg, setAssignMsg] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [role, setRole] = useState("MEMBER");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const token = getToken();
-    const orgId = typeof window !== "undefined" ? localStorage.getItem("ds_org_id") : null;
-    if (!token || !orgId) { router.push("/employer/signup"); return; }
-
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-    const headers = { Authorization: `Bearer ${token}` };
-
-    Promise.all([
-      axios.get<{ data: TeamMember[] }>(`${apiUrl}/organisations/${orgId}/team/progress`, { headers }),
-      axios.get<{ data: Ticket[] }>(`${apiUrl}/tickets`, { headers }),
-    ])
-      .then(([teamRes, ticketsRes]) => {
-        setMembers(teamRes.data.data);
-        setTickets(ticketsRes.data.data);
-      })
+    fetch(`${API}/employer/team`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => { setMembers(j.data?.members ?? []); setMyRole(j.data?.myRole ?? null); })
       .catch(() => null)
       .finally(() => setLoading(false));
-  }, [router]);
+  }, []);
 
-  async function handleAssign(): Promise<void> {
-    if (!modal || !selectedTicket) return;
+  useEffect(() => { load(); }, [load]);
+
+  async function invite() {
+    if (!username.trim()) return;
+    setBusy(true); setError(null);
     const token = getToken();
-    if (!token) return;
-
-    setAssigning(true);
-    setAssignMsg(null);
-
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     try {
-      await axios.post(
-        `${apiUrl}/tickets/${selectedTicket}/assign`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setAssignMsg(`Ticket assigned to @${modal.username}`);
-      setModal(null);
-    } catch {
-      setAssignMsg("Failed to assign ticket.");
-    } finally {
-      setAssigning(false);
-    }
+      const r = await fetch(`${API}/employer/team/invite`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ githubUsername: username.trim(), role }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Failed");
+      setUsername("");
+      load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Failed to add member"); }
+    finally { setBusy(false); }
   }
 
-  const stacks = [...new Set(members.map((m) => m.primaryStack))];
-
-  const filtered = members
-    .filter((m) => !filterStack || m.primaryStack === filterStack)
-    .sort((a, b) => b.skillScore - a.skillScore);
-
-  if (loading) {
-    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">Loading…</div>;
+  async function changeRole(id: string, newRole: string) {
+    const token = getToken();
+    await fetch(`${API}/employer/team/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ role: newRole }) });
+    load();
   }
+
+  async function remove(id: string) {
+    const token = getToken();
+    await fetch(`${API}/employer/team/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    load();
+  }
+
+  const isAdmin = myRole === "ADMIN";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center gap-4">
-        <Link href="/employer/dashboard" className="text-slate-400 hover:text-white text-sm">← Dashboard</Link>
-        <span className="font-bold text-white">Team Training</span>
+    <div className="flex flex-col min-h-screen" style={{ color: "#e5e7eb" }}>
+      <header className="px-8 py-4" style={{ background: "#0a0a0a", borderBottom: "1px solid #1a1a1a" }}>
+        <h1 className="text-lg font-black text-white">Team</h1>
+        <p className="text-xs" style={{ color: "#555" }}>People who can review candidates and manage campaigns</p>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-10">
-
-        {/* Filters */}
-        <div className="flex items-center gap-3 mb-6">
-          <select
-            value={filterStack}
-            onChange={(e) => setFilterStack(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
-          >
-            <option value="">All stacks</option>
-            {stacks.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
-          >
-            <option value="skillScore">Sort: Overall Score</option>
-            <option value="scoreDiagnosis">Sort: Diagnosis</option>
-            <option value="scoreCommunication">Sort: Communication</option>
-          </select>
-
-          <span className="text-sm text-slate-500 ml-auto">{filtered.length} members</span>
-        </div>
-
-        {/* Team table */}
-        <div className="space-y-3">
-          {filtered.map((m) => (
-            <div key={m.userId} className="flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900 px-5 py-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`https://github.com/${m.githubUsername}.png?size=40`}
-                alt={m.githubUsername}
-                width={36}
-                height={36}
-                className="rounded-full shrink-0"
-              />
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white text-sm">@{m.githubUsername}</span>
-                  <span className={`text-xs font-bold ${TREND_COLOR[m.trend]}`}>
-                    {TREND_ICON[m.trend]}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500">{m.primaryStack} · {m.role}</div>
-              </div>
-
-              <div className="text-center shrink-0">
-                <div className="text-xl font-black text-white">{m.skillScore}</div>
-                <div className="text-xs text-slate-500">Skill</div>
-              </div>
-
-              <div className="text-center shrink-0">
-                <div className="text-sm font-bold text-slate-300">{m.ticketsThisMonth}</div>
-                <div className="text-xs text-slate-500">This month</div>
-              </div>
-
-              <div className="text-center shrink-0">
-                <div className="text-xs rounded-full px-2 py-0.5 bg-red-500/10 border border-red-500/20 text-red-400 font-medium">
-                  ↓ {m.weakestDimension}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <Link href={`/profile/${m.githubUsername}`} target="_blank" className="text-xs text-cyan-400 hover:text-cyan-300">
-                  Profile ↗
-                </Link>
-                <button
-                  onClick={() => { setModal({ userId: m.userId, username: m.githubUsername }); setAssignMsg(null); }}
-                  className="text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-slate-300 transition-colors"
-                >
-                  Assign Ticket
-                </button>
-              </div>
+      <main className="flex-1 px-8 py-6 max-w-3xl">
+        {isAdmin && (
+          <div className="rounded-xl p-5 mb-6" style={{ background: "#111", border: "1px solid #222" }}>
+            <div className="text-sm font-bold text-white mb-3 flex items-center gap-2"><UserPlus size={15} /> Add a team member</div>
+            <div className="flex gap-2">
+              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their GitHub username"
+                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb" }} />
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                <option value="MEMBER">Member</option>
+                <option value="MANAGER">Manager</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+              <button onClick={invite} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#6366f1" }}>Add</button>
             </div>
-          ))}
+            {error && <div className="text-xs mt-2" style={{ color: "#f87171" }}>{error}</div>}
+            <div className="text-xs mt-2" style={{ color: "#555" }}>They must have signed in to DevSimulate at least once.</div>
+          </div>
+        )}
+
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #222" }}>
+          {loading ? <div className="px-5 py-8 text-center text-sm" style={{ color: "#555" }}>Loading…</div> :
+            members.map((m, i) => (
+              <div key={m.id} className="flex items-center gap-3 px-5 py-3.5" style={{ background: "#0d0d0d", borderBottom: i < members.length - 1 ? "1px solid #161616" : "none" }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#1e1b4b", color: "#818cf8" }}>{m.githubUsername.charAt(0).toUpperCase()}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-white">{m.githubUsername} {m.isMe && <span className="text-xs" style={{ color: "#555" }}>(you)</span>}</div>
+                  <div className="text-xs" style={{ color: "#555" }}>{m.email ?? "—"}</div>
+                </div>
+                {isAdmin && !m.isMe ? (
+                  <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                    <option value="MEMBER">Member</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                ) : (
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: ROLE_STYLE[m.role]?.bg, color: ROLE_STYLE[m.role]?.color }}>
+                    {m.role === "ADMIN" && <Shield size={10} />}{m.role[0] + m.role.slice(1).toLowerCase()}
+                  </span>
+                )}
+                {isAdmin && !m.isMe && (
+                  <button onClick={() => remove(m.id)} className="p-1.5 rounded-lg" style={{ color: "#666" }} title="Remove"><Trash2 size={14} /></button>
+                )}
+              </div>
+            ))}
         </div>
       </main>
-
-      {/* Assign modal */}
-      {modal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
-          <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 w-full max-w-sm">
-            <h3 className="font-bold text-white mb-1">Assign Ticket</h3>
-            <p className="text-sm text-slate-400 mb-4">to @{modal.username}</p>
-
-            <select
-              value={selectedTicket}
-              onChange={(e) => setSelectedTicket(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white mb-4 focus:border-cyan-500 focus:outline-none"
-            >
-              <option value="">Select a ticket…</option>
-              {tickets.map((t) => (
-                <option key={t.id} value={t.id}>{t.title} ({t.difficulty})</option>
-              ))}
-            </select>
-
-            {assignMsg && <p className="text-xs text-slate-400 mb-3">{assignMsg}</p>}
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setModal(null)}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 text-sm transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAssign}
-                disabled={assigning || !selectedTicket}
-                className="flex-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-bold py-2.5 text-sm transition-colors"
-              >
-                {assigning ? "Assigning…" : "Assign"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
