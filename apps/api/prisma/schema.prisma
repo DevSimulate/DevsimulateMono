@@ -248,6 +248,11 @@ enum CampaignStatus {
   CLOSED
 }
 
+enum CampaignType {
+  HIRING
+  CONTEST
+}
+
 enum CandidateStatus {
   NEW
   REVIEWED
@@ -267,6 +272,7 @@ model Campaign {
   bookingLink    String?
   shareableSlug  String              @unique
   ticketIds      String[]            @default([])
+  type           CampaignType        @default(HIRING)
   status         CampaignStatus      @default(ACTIVE)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt

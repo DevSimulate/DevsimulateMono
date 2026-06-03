@@ -28,6 +28,7 @@ export default function NewCampaignPage() {
     deadline: "",
     companyName: "",
     bookingLink: "",
+    type: "HIRING",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -188,9 +189,30 @@ export default function NewCampaignPage() {
             </div>
           )}
 
-          <Field label="Role Name">
+          {/* Campaign type — Hiring vs DevFest/Contest */}
+          <Field label="Campaign Type">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { v: "HIRING", title: "Hiring", desc: "Assess external candidates, shortlist & invite to interview" },
+                { v: "CONTEST", title: "DevFest / Contest", desc: "Internal contest — compete on a live leaderboard, crown winners" },
+              ].map((opt) => (
+                <button key={opt.v} type="button" onClick={() => setForm({ ...form, type: opt.v })}
+                  className="text-left rounded-lg p-3 transition-colors"
+                  style={{
+                    background: form.type === opt.v ? "#1e1b4b" : "#0d0d0d",
+                    border: `1px solid ${form.type === opt.v ? "#6366f1" : "#2a2a2a"}`,
+                  }}>
+                  <div className="text-sm font-bold text-white">{opt.title}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "#888" }}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={form.type === "CONTEST" ? "Contest Name" : "Role Name"}>
             <input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })}
-              placeholder="Senior Backend Engineer" className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
+              placeholder={form.type === "CONTEST" ? "DevFest — Angular" : "Senior Backend Engineer"}
+              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
           </Field>
 
           <Field label="Company Name">
@@ -229,11 +251,13 @@ export default function NewCampaignPage() {
             </Field>
           </div>
 
-          <Field label="Interview Booking Link (Calendly, etc.)">
-            <input value={form.bookingLink} onChange={(e) => setForm({ ...form, bookingLink: e.target.value })}
-              placeholder="https://calendly.com/your-team/interview"
-              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
-          </Field>
+          {form.type === "HIRING" && (
+            <Field label="Interview Booking Link (Calendly, etc.)">
+              <input value={form.bookingLink} onChange={(e) => setForm({ ...form, bookingLink: e.target.value })}
+                placeholder="https://calendly.com/your-team/interview"
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
+            </Field>
+          )}
 
           {/* Optional ticket curation */}
           <div className="rounded-lg p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>

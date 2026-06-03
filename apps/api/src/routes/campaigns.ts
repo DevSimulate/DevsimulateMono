@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
-import { Difficulty, CampaignStatus, CandidateStatus } from "@prisma/client";
+import { Difficulty, CampaignStatus, CandidateStatus, CampaignType } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail } from "../lib/email";
@@ -105,6 +105,7 @@ router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> =>
         roleName: campaign.roleName,
         companyName: campaign.companyName,
         difficulty: campaign.difficulty,
+        type: campaign.type,
         codebase: campaign.codebase,
       },
     });
@@ -130,7 +131,7 @@ async function getOrgForUser(userId: string): Promise<string | null> {
  */
 router.post("/", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink, ticketIds } =
+  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink, ticketIds, type } =
     req.body as {
       roleName?: string;
       codebaseId?: string;
@@ -140,6 +141,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       companyName?: string;
       bookingLink?: string;
       ticketIds?: string[];
+      type?: CampaignType;
     };
 
   if (!roleName || !codebaseId || !difficulty || !companyName) {
@@ -171,6 +173,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         bookingLink: bookingLink ?? null,
         shareableSlug,
         ticketIds: Array.isArray(ticketIds) ? ticketIds : [],
+        type: type === "CONTEST" ? CampaignType.CONTEST : CampaignType.HIRING,
         status: CampaignStatus.ACTIVE,
       },
       include: { codebase: true },

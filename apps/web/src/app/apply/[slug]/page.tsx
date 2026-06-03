@@ -21,6 +21,7 @@ interface CampaignInfo {
   roleName: string;
   companyName: string;
   difficulty: string;
+  type?: "HIRING" | "CONTEST";
   codebase: { name: string; description: string };
 }
 
@@ -129,19 +130,22 @@ export default function ApplyPage() {
             <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
               style={{ background: "#052e16", color: "#4ade80", border: "1px solid #166534" }}>
               <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#4ade80" }} />
-              Now Accepting Candidates
+              {campaign?.type === "CONTEST" ? "Contest is Live" : "Now Accepting Candidates"}
             </span>
           </div>
 
           <div className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-3"
             style={{ background: "#1e1b4b", color: "#818cf8" }}>
-            {campaign?.companyName} is hiring
+            {campaign?.type === "CONTEST" ? `${campaign?.companyName} DevFest` : `${campaign?.companyName} is hiring`}
           </div>
 
           <h1 className="text-2xl font-black text-white mb-2">{campaign?.roleName}</h1>
           <p className="text-sm leading-relaxed mb-5" style={{ color: "#aaaaaa" }}>
-            Complete a real coding ticket. Claude AI scores your work and{" "}
-            {campaign?.companyName} reviews top performers for interviews.
+            {campaign?.type === "CONTEST" ? (
+              <>Solve a real coding challenge, get AI-scored, and climb the live leaderboard. Top of your stack wins.</>
+            ) : (
+              <>Complete a real coding ticket. Claude AI scores your work and {campaign?.companyName} reviews top performers for interviews.</>
+            )}
           </p>
 
           {/* Ticket preview */}

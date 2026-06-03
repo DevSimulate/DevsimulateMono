@@ -1,0 +1,4 @@
+DO $$ BEGIN
+  CREATE TYPE "CampaignType" AS ENUM ('HIRING', 'CONTEST');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+ALTER TABLE "Campaign" ADD COLUMN IF NOT EXISTS "type" "CampaignType" NOT NULL DEFAULT 'HIRING';
