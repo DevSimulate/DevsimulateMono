@@ -57,6 +57,31 @@ function verdict(total: number, authScore: number, flagged: boolean): "STRONG_YE
   return "NO";
 }
 
+/**
+ * Picks a ticket for a candidate joining a campaign.
+ *  - If the employer curated a specific ticket set, pick a RANDOM one from it.
+ *  - Otherwise pick a RANDOM ticket from the codebase's difficulty pool.
+ * Random across candidates (anti-collusion) but each candidate locks to their
+ * ticket on assignment, so it's stable for them.
+ */
+async function pickTicketForCampaign(campaign: {
+  codebaseId: string;
+  difficulty: Difficulty;
+  ticketIds: string[];
+}): Promise<{ id: string; title: string; difficulty: Difficulty; expectedMinutes: number } | null> {
+  const pool = campaign.ticketIds.length
+    ? await prisma.ticket.findMany({
+        where: { id: { in: campaign.ticketIds } },
+        select: { id: true, title: true, difficulty: true, expectedMinutes: true },
+      })
+    : await prisma.ticket.findMany({
+        where: { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
+        select: { id: true, title: true, difficulty: true, expectedMinutes: true },
+      });
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // ─── PUBLIC routes (no auth) — must be defined before the auth gate ──────────────
 
 /**
@@ -104,7 +129,7 @@ async function getOrgForUser(userId: string): Promise<string | null> {
  */
 router.post("/", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink } =
+  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink, ticketIds } =
     req.body as {
       roleName?: string;
       codebaseId?: string;
@@ -113,6 +138,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       deadline?: string;
       companyName?: string;
       bookingLink?: string;
+      ticketIds?: string[];
     };
 
   if (!roleName || !codebaseId || !difficulty || !companyName) {
@@ -143,6 +169,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         companyName,
         bookingLink: bookingLink ?? null,
         shareableSlug,
+        ticketIds: Array.isArray(ticketIds) ? ticketIds : [],
         status: CampaignStatus.ACTIVE,
       },
       include: { codebase: true },
@@ -176,11 +203,19 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
       where: { campaignId_userId: { campaignId: campaign.id, userId } },
     });
 
-    // Pick a ticket from the codebase at the campaign difficulty
-    const ticket = await prisma.ticket.findFirst({
-      where: { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
-      orderBy: { createdAt: "asc" },
+    // Reuse the candidate's existing ticket if they already have one for this
+    // campaign's codebase; otherwise pick a random one from the pool.
+    let ticket = await prisma.ticket.findFirst({
+      where: {
+        codebaseId: campaign.codebaseId,
+        assignments: { some: { userId } },
+        ...(campaign.ticketIds.length ? { id: { in: campaign.ticketIds } } : { difficulty: campaign.difficulty }),
+      },
+      select: { id: true, title: true, difficulty: true, expectedMinutes: true },
     });
+    if (!ticket) {
+      ticket = await pickTicketForCampaign(campaign);
+    }
     if (!ticket) {
       res.status(404).json({ error: "No ticket available for this campaign" });
       return;
@@ -202,7 +237,7 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
     }
 
     // Pre-fork so the codebase is ready when they open VS Code
-    const applyCb = await prisma.codebase.findUnique({ where: { id: ticket.codebaseId }, select: { repoUrl: true } });
+    const applyCb = await prisma.codebase.findUnique({ where: { id: campaign.codebaseId }, select: { repoUrl: true } });
     if (applyCb) void preForkForUser(userId, applyCb.repoUrl);
 
     res.json({
@@ -249,10 +284,17 @@ router.post("/join", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const ticket = await prisma.ticket.findFirst({
-      where: { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
-      orderBy: { createdAt: "asc" },
+    let ticket = await prisma.ticket.findFirst({
+      where: {
+        codebaseId: campaign.codebaseId,
+        assignments: { some: { userId } },
+        ...(campaign.ticketIds.length ? { id: { in: campaign.ticketIds } } : { difficulty: campaign.difficulty }),
+      },
+      select: { id: true, title: true, difficulty: true, expectedMinutes: true },
     });
+    if (!ticket) {
+      ticket = await pickTicketForCampaign(campaign);
+    }
     if (!ticket) { res.status(404).json({ error: "No ticket available for this campaign" }); return; }
 
     const tslug = ticket.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
@@ -268,7 +310,7 @@ router.post("/join", async (req: Request, res: Response): Promise<void> => {
     }
 
     // Pre-fork so the codebase is ready when they open VS Code
-    const joinCb = await prisma.codebase.findUnique({ where: { id: ticket.codebaseId }, select: { repoUrl: true } });
+    const joinCb = await prisma.codebase.findUnique({ where: { id: campaign.codebaseId }, select: { repoUrl: true } });
     if (joinCb) void preForkForUser(userId, joinCb.repoUrl);
 
     res.json({
@@ -323,6 +365,28 @@ router.get("/codebases", async (_req: Request, res: Response): Promise<void> => 
     res.json({ data: codebases });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch codebases" });
+  }
+});
+
+/**
+ * GET /campaigns/ticket-library?codebaseId=&difficulty=
+ * Lists tickets the employer can optionally hand-pick for a campaign.
+ */
+router.get("/ticket-library", async (req: Request, res: Response): Promise<void> => {
+  const { codebaseId, difficulty } = req.query as Record<string, string>;
+  if (!codebaseId || !difficulty) {
+    res.status(400).json({ error: "codebaseId and difficulty are required" });
+    return;
+  }
+  try {
+    const tickets = await prisma.ticket.findMany({
+      where: { codebaseId, difficulty: difficulty as Difficulty },
+      select: { id: true, title: true, description: true, expectedMinutes: true, filesInvolved: true },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ data: tickets });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch ticket library" });
   }
 });
 

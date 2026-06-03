@@ -34,6 +34,11 @@ export default function NewCampaignPage() {
   const [createdSlug, setCreatedSlug] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Optional ticket curation
+  const [library, setLibrary] = useState<Array<{ id: string; title: string; expectedMinutes: number }>>([]);
+  const [pickMode, setPickMode] = useState(false);
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const token = getToken();
     fetch(`${API}/employer/campaigns/codebases`, { headers: { Authorization: `Bearer ${token}` } })
@@ -44,6 +49,26 @@ export default function NewCampaignPage() {
       })
       .catch(() => null);
   }, []);
+
+  // Load the ticket library whenever codebase/difficulty changes
+  useEffect(() => {
+    if (!form.codebaseId || !form.difficulty) return;
+    const token = getToken();
+    fetch(`${API}/employer/campaigns/ticket-library?codebaseId=${form.codebaseId}&difficulty=${form.difficulty}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((j) => { setLibrary(j.data ?? []); setSelectedTickets(new Set()); })
+      .catch(() => setLibrary([]));
+  }, [form.codebaseId, form.difficulty]);
+
+  function toggleTicket(id: string) {
+    setSelectedTickets((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   async function handleSubmit() {
     setError(null);
@@ -57,7 +82,10 @@ export default function NewCampaignPage() {
       const res = await fetch(`${API}/employer/campaigns`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          ticketIds: pickMode ? [...selectedTickets] : [],
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to create campaign");
@@ -206,6 +234,44 @@ export default function NewCampaignPage() {
               placeholder="https://calendly.com/your-team/interview"
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
           </Field>
+
+          {/* Optional ticket curation */}
+          <div className="rounded-lg p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm font-semibold text-white">Which tickets?</div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#888" }}>
+                <input type="checkbox" checked={pickMode} onChange={(e) => setPickMode(e.target.checked)} style={{ accentColor: "#6366f1" }} />
+                Choose specific tickets
+              </label>
+            </div>
+            {!pickMode ? (
+              <div className="text-xs" style={{ color: "#555" }}>
+                Each candidate gets a <span style={{ color: "#aaa" }}>random {form.difficulty.toLowerCase()} ticket</span> from this codebase — different candidates get different problems, so they can&apos;t share answers.
+              </div>
+            ) : (
+              <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
+                {library.length === 0 ? (
+                  <div className="text-xs" style={{ color: "#555" }}>No tickets found for this codebase + difficulty.</div>
+                ) : library.map((t) => (
+                  <label key={t.id} className="flex items-start gap-2.5 rounded-lg px-3 py-2 cursor-pointer transition-colors"
+                    style={{ background: selectedTickets.has(t.id) ? "#1e1b4b" : "#111", border: `1px solid ${selectedTickets.has(t.id) ? "#312e81" : "#1e1e1e"}` }}>
+                    <input type="checkbox" checked={selectedTickets.has(t.id)} onChange={() => toggleTicket(t.id)} className="mt-0.5" style={{ accentColor: "#6366f1" }} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-white truncate">{t.title}</div>
+                      <div className="text-xs" style={{ color: "#555" }}>~{t.expectedMinutes} min</div>
+                    </div>
+                  </label>
+                ))}
+                {library.length > 0 && (
+                  <div className="text-xs pt-1" style={{ color: "#555" }}>
+                    {selectedTickets.size === 0
+                      ? "Pick at least one. Candidates get a random ticket from your selection."
+                      : `${selectedTickets.size} selected — candidates get a random one of these.`}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           <button onClick={handleSubmit} disabled={submitting}
             className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
