@@ -320,7 +320,7 @@ export function InteractiveDemo({ onClose }: InteractiveDemoProps) {
                   Claude AI scores every dimension of your thinking.
                 </p>
                 <a
-                  href={`https://github.com/login/oauth/authorize?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}&scope=read:user,user:email,repo`}
+                  href={`https://github.com/login/oauth/authorize?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}&scope=read:user,user:email,public_repo`}
                   className="inline-block rounded-lg bg-brand-500 text-white px-8 py-3 font-semibold hover:bg-brand-600 transition-colors"
                 >
                   Start for Free
