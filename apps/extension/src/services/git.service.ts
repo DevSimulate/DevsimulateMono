@@ -116,9 +116,9 @@ async function getGitHubSession(): Promise<vscode.AuthenticationSession> {
   }
 }
 
-/** Builds a token-authenticated clone/push URL so git never prompts for credentials. */
+/** Builds a token-authenticated push URL so git never prompts for credentials. */
 function authUrl(token: string, owner: string, repo: string): string {
-  return `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+  return `https://${token}@github.com/${owner}/${repo}.git`;
 }
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
@@ -260,18 +260,46 @@ export async function cloneAndOpenCodebase(
         return ensureFork(token, srcOwner, repoName, username);
       })();
 
+      // Clone the PUBLIC url (no token) — forks of public repos are public, so
+      // this needs no auth and avoids credential prompts. Retry a few times in
+      // case the fork is still provisioning on GitHub's side.
       progress.report({ message: "Downloading the code…" });
-      try {
-        await makeGit().clone(authUrl(token, cloneOwner, repoName), targetDir, ["--depth", "1"]);
-      } catch {
-        throw new FriendlyError("Couldn’t download the code. Check your internet connection and try again.");
+      const publicUrl = `https://github.com/${cloneOwner}/${repoName}.git`;
+      let lastErr = "";
+      let cloned = false;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await makeGit().clone(publicUrl, targetDir, ["--depth", "1"]);
+          cloned = true;
+          break;
+        } catch (e) {
+          lastErr = e instanceof Error ? e.message : String(e);
+          if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true, force: true });
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+      if (!cloned) {
+        throw new FriendlyError(
+          `Couldn't download the code from ${publicUrl}. ` +
+          (lastErr.toLowerCase().includes("not found") || lastErr.includes("404")
+            ? "Your fork may still be finishing on GitHub — wait a few seconds and click Open in VS Code again."
+            : `Details: ${lastErr.slice(0, 200)}`)
+        );
       }
 
+      // Set origin to an authenticated URL so push works without prompts.
       progress.report({ message: "Creating your branch…" });
+      const repoGit = makeGit(targetDir);
       try {
-        await ensureBranch(makeGit(targetDir), branchName);
-      } catch {
-        throw new FriendlyError("Cloned the code, but couldn’t create/push your branch. Open the folder and run: git push -u origin " + branchName);
+        await repoGit.remote(["set-url", "origin", authUrl(token, cloneOwner, repoName)]);
+        await ensureBranch(repoGit, branchName);
+        // Restore the clean URL afterward so the token isn't left in git config
+        await repoGit.remote(["set-url", "origin", publicUrl]);
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        throw new FriendlyError(
+          `Downloaded the code, but couldn't push your branch. Open the folder and run:  git push -u origin ${branchName}\nDetails: ${detail.slice(0, 160)}`
+        );
       }
 
       progress.report({ message: "Opening in VS Code…" });
