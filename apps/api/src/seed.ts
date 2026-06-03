@@ -3149,6 +3149,241 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
     });
   }
 
+  // ─── PulseDash — Angular 17 admin dashboard ─────────────────────────────────
+  const pulsedashCodebase = await prisma.codebase.upsert({
+    where: { id: "pulsedash-seed-id-001" },
+    update: { repoUrl: "https://github.com/DevSimulate/pulsedash" },
+    create: {
+      id: "pulsedash-seed-id-001",
+      name: "PulseDash",
+      stack: Stack.ANGULAR,
+      repoUrl: "https://github.com/DevSimulate/pulsedash",
+      description: "An Angular 17 admin dashboard — live metrics, a searchable user table, an OnPush alerts panel, and a reactive invite form. Real-time UI where RxJS hygiene and change detection matter.",
+      companyLore: `Helios Analytics runs PulseDash as the ops team's always-open window into production. It refreshes live, so the bugs that bite are the quiet ones: a leaked subscription that piles up over a shift, a mutation the OnPush view never repaints, a search box that shows stale results because responses arrive out of order.`,
+    },
+  });
+
+  const pulsedashTickets = [
+    {
+      id: "ticket-pd-01-seed-id-001",
+      title: "PD-01: The user table flickers and scrolls jump on every search keystroke",
+      description: "Typing in the search box rebuilds the entire user table from scratch each keystroke — rows flash, focus and scroll position jump, and it's janky with more rows.\n\n**Files:** `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that *ngFor has no trackBy, so when the users array is replaced Angular destroys and recreates every row DOM node instead of reusing them?",
+        design: "Did they add a trackBy returning a stable identity (u.id)? Did they confirm the same array-replacement pattern benefits from it?",
+        communication: "Did they explain how trackBy lets Angular diff by identity and reuse DOM nodes?",
+        execution: "Do rows persist across searches instead of being fully rebuilt?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-pd-02-seed-id-002",
+      title: "PD-02: The invite form submits with no role selected",
+      description: "The spec says role is required, but you can submit the invite form with the role left on 'Select role…'. The Invite button is enabled and submit goes through with an empty role.\n\n**Files:** `src/app/components/user-form.component.ts`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/app/components/user-form.component.ts"],
+      rubric: {
+        diagnosis: "Did they spot that the role FormControl has no Validators.required, so the form is valid with an empty role and the disabled binding never triggers?",
+        design: "Did they add Validators.required to role (and verify the empty-string default counts as invalid)? Did they consider showing a hint like the email field?",
+        communication: "Did they explain reactive-form validation and how form.invalid drives the disabled state?",
+        execution: "Is the form invalid (Invite disabled) until a real role is chosen?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-pd-03-seed-id-003",
+      title: "PD-03: Acknowledging an alert doesn't update the panel",
+      description: "Clicking 'Acknowledge' on an alert does nothing visible — the button stays, the '✓ acknowledged' text never appears — until you interact with something else on the page, then it suddenly updates.\n\n**Files:** `src/app/components/alerts.component.ts`, `src/app/services/dashboard.service.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/alerts.component.ts", "src/app/services/dashboard.service.ts"],
+      rubric: {
+        diagnosis: "Did they connect the dots: the component uses ChangeDetectionStrategy.OnPush, but acknowledge() MUTATES the alert object in place (a.acknowledged = true) without changing the array reference or any @Input — so OnPush doesn't re-render until an unrelated event triggers CD?",
+        design: "Did they make the change detectable under OnPush — produce a new array/object (immutable update), or use signals, or markForCheck()? Did they pick an idiomatic OnPush-friendly approach rather than switching back to default CD?",
+        communication: "Did they explain how OnPush change detection keys off reference changes / events and why in-place mutation is invisible to it?",
+        execution: "Does the alert visibly flip to acknowledged immediately on click, under OnPush?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-pd-04-seed-id-004",
+      title: "PD-04: The dashboard gets slower the longer it's left open",
+      description: "After the dashboard tab is open for a while, CPU creeps up and the app gets sluggish. The 'Refreshed N times' counter keeps climbing even after navigating away and back, and memory grows. It correlates with how long the page has been open.\n\n**Files:** `src/app/components/dashboard.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/dashboard.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify the interval(5000).subscribe(...) that is never unsubscribed, so the timer (and its load() calls) keeps running after the component is destroyed, leaking subscriptions and stacking up over time?",
+        design: "Did they tear down the subscription on destroy — takeUntil(destroy$), takeUntilDestroyed, async pipe, or unsubscribe in ngOnDestroy? Did they apply the same hygiene consistently?",
+        communication: "Did they explain Observable subscription leaks and the standard teardown patterns?",
+        execution: "Does the interval stop when the component is destroyed, with no accumulating timers?",
+      },
+      expectedMinutes: 35,
+    },
+    {
+      id: "ticket-pd-05-seed-id-005",
+      title: "PD-05: Fast typing in search shows the wrong results",
+      description: "When you type quickly in the user search, the table sometimes ends up showing results for an earlier query, not the latest one. Slow typing is fine; fast typing produces stale results that don't match what's in the box.\n\n**Files:** `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify the nested-subscribe anti-pattern — valueChanges.subscribe(q => searchUsers(q).subscribe(...)) — which fires overlapping requests with different latencies, so an earlier (slower) response can resolve AFTER a later one and overwrite the correct results (race condition / out-of-order)?",
+        design: "Did they flatten with switchMap so a new query cancels the in-flight previous request, guaranteeing only the latest result lands? Did they also add debounceTime/distinctUntilChanged as appropriate, and avoid the nested subscribe?",
+        communication: "Did they explain why switchMap (cancel-previous) is correct here versus mergeMap, and how out-of-order responses cause stale UI?",
+        execution: "Does the table always reflect the latest query even under fast typing?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-pd-06-seed-id-006",
+      title: "PD-06: The role column re-computes constantly and drags performance",
+      description: "Profiling shows roleLabel() being called an enormous number of times — far more than there are rows — on every interaction anywhere on the page, contributing to the jank.\n\n**Files:** `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that calling a method ({{ roleLabel(u) }}) in the template runs it on every change-detection cycle for every row, not just when data changes?",
+        design: "Did they remove the per-CD work — precompute the label on the model, use a pure pipe, or OnPush — so it's computed only when inputs change? Did they pick an idiomatic fix?",
+        communication: "Did they explain why function calls in templates are a change-detection performance trap?",
+        execution: "Is the role label no longer recomputed every CD cycle?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-pd-07-seed-id-007",
+      title: "PD-07: When the alerts request fails, the panel silently shows nothing",
+      description: "If the alerts endpoint errors, the panel just shows an empty list with no indication anything went wrong — operators think there are zero alerts when really the request failed.\n\n**Files:** `src/app/components/alerts.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/alerts.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that catchError(() => []) swallows the error and emits an empty list with no signal to the user, so a failure is indistinguishable from 'no alerts'? Did they note returning a bare [] is also a smell (should be of([]) / an Observable)?",
+        design: "Did they surface the error state to the user (an error flag/message) while still degrading gracefully, and return a proper Observable from catchError? Did they distinguish empty-success from error?",
+        communication: "Did they explain why silently swallowing HTTP errors is dangerous for an ops dashboard?",
+        execution: "Does a failed request show an error state rather than a misleading empty panel?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-pd-08-seed-id-008",
+      title: "PD-08: Selecting a user in one panel doesn't always reflect everywhere",
+      description: "The user table writes the loaded list into a shared service field that other components read directly. After a search filters the list, other parts of the app that read the shared users still behave as if the full list is present, and selection state gets confusing.\n\n**Files:** `src/app/services/dashboard.service.ts`, `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/services/dashboard.service.ts", "src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify the shared-mutable-state smell — components both write and read dashboard.users directly, and the user list overwrites it with filtered search results, so the 'source of truth' silently changes meaning between 'all users' and 'current search results'?",
+        design: "Did they separate the canonical list from the filtered view (don't overwrite the shared list with search results), and/or expose state as an Observable/signal with a clear single source of truth instead of a public mutable array?",
+        communication: "Did they explain why shared mutable arrays across components cause hard-to-trace state bugs?",
+        execution: "Is the canonical user list no longer clobbered by transient search results, with a clear state model?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-pd-09-seed-id-009",
+      title: "PD-09: Inactive users should be visually muted but aren't",
+      description: "The design calls for inactive users to render greyed out. Right now active and inactive rows look identical except for the text label, because the row styling never reacts to the active flag.\n\n**Files:** `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that there's no class/style binding tied to u.active on the row, so inactive users get no visual treatment?",
+        design: "Did they add a clean conditional class binding ([class.inactive]=\"!u.active\") driven by the model rather than ad-hoc logic?",
+        communication: "Did they explain Angular class/style binding for state-driven styling?",
+        execution: "Do inactive rows render visually distinct from active ones?",
+      },
+      expectedMinutes: 15,
+    },
+    {
+      id: "ticket-pd-10-seed-id-010",
+      title: "PD-10: The metric tiles sometimes don't update on refresh",
+      description: "The dashboard auto-refreshes metrics every few seconds, but occasionally the tiles don't visibly change even though new data arrived. It's intermittent and more noticeable under load.\n\n**Files:** `src/app/components/dashboard.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/dashboard.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that load() mutates the existing metrics array in place (length = 0; push) rather than assigning a new array reference, which can fail to trigger updates (especially if the component or a child uses OnPush, or with trackBy keyed incorrectly)?",
+        design: "Did they assign a new array (this.metrics = m) for clean, reference-based change detection, or otherwise ensure the view reliably updates? Did they reason about CD and references?",
+        communication: "Did they explain reference vs in-place mutation and how Angular detects array changes?",
+        execution: "Do the tiles reliably reflect each refresh's data?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-pd-11-seed-id-011",
+      title: "PD-11: AppComponent leaks a subscription to the selected user",
+      description: "The root component subscribes to selectedUser$ in its constructor and never cleans it up. It's long-lived so it doesn't crash, but it's the same anti-pattern that's biting elsewhere and sets a bad example for the codebase.\n\n**Files:** `src/app/app.component.ts`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/app/app.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify the unmanaged subscription in the constructor with no teardown, and note that subscribing in the constructor (vs ngOnInit) and never unsubscribing is poor hygiene?",
+        design: "Did they switch to the async pipe in the template (preferred) or add proper teardown (takeUntilDestroyed/ngOnDestroy)? Did they justify async pipe as the cleanest option here?",
+        communication: "Did they explain the leak pattern and why async pipe avoids manual teardown?",
+        execution: "Is the selected-user binding handled without a manually-leaked subscription?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-pd-12-seed-id-012",
+      title: "PD-12: Search fires a request on every keystroke, hammering the backend",
+      description: "Every single keystroke in the user search triggers a backend call. Typing a 10-letter name fires 10 requests. We need to debounce and skip duplicate queries.\n\n**Files:** `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify that valueChanges triggers a query per keystroke with no debounceTime or distinctUntilChanged, producing redundant load?",
+        design: "Did they add debounceTime and distinctUntilChanged in the RxJS pipeline (ideally alongside switchMap from PD-05) so only settled, changed queries hit the backend?",
+        communication: "Did they explain debounce/distinct and the request-reduction benefit?",
+        execution: "Does typing a word produce a single settled request rather than one per keystroke?",
+      },
+      expectedMinutes: 30,
+    },
+    {
+      id: "ticket-pd-13-seed-id-013",
+      title: "PD-13: The whole page reloads metrics and users together, causing visible stalls",
+      description: "Components each kick off their own loads in ngOnInit with overlapping delays, and the auto-refresh re-triggers full reloads. Under slow network the UI stalls in bursts. We want resilient loading that doesn't block the rest of the dashboard.\n\n**Files:** `src/app/components/dashboard.component.ts`, `src/app/components/user-list.component.ts`",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/app/components/dashboard.component.ts", "src/app/components/user-list.component.ts"],
+      rubric: {
+        diagnosis: "Did they reason about the loading strategy — multiple imperative subscribe()s, full reloads on every interval tick, no loading/error states, and no use of the async pipe — making the UI stall in bursts and re-fetch more than needed?",
+        design: "Did they move to a declarative data flow (async pipe, shareReplay for shared streams, error/loading handling, refresh via a trigger Subject rather than re-subscribing) so slow calls degrade gracefully without blocking the page? Did they avoid over-engineering?",
+        communication: "Did they explain declarative vs imperative data loading and how it isolates failures and reduces redundant fetches?",
+        execution: "Does the dashboard load resiliently, with slow/failed calls not freezing unrelated parts?",
+      },
+      expectedMinutes: 55,
+    },
+    {
+      id: "ticket-pd-14-seed-id-014",
+      title: "PD-14: Email validation accepts obviously invalid addresses",
+      description: "The invite form's email field accepts values like 'a@b' and rejects nothing beyond truly empty. QA wants it to reject malformed addresses while staying friendly for valid ones.\n\n**Files:** `src/app/components/user-form.component.ts`",
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/app/components/user-form.component.ts"],
+      rubric: {
+        diagnosis: "Did they evaluate the current email validation (Validators.email is lenient) and identify where it lets through addresses the product considers invalid, plus that the hint shows even before the user types (touched/dirty not considered)?",
+        design: "Did they strengthen validation appropriately (a stricter pattern or combined validators) AND only show the error after the field is touched/dirty, avoiding false negatives on valid emails?",
+        communication: "Did they explain validator trade-offs and touched/dirty-gated error display?",
+        execution: "Are clearly-invalid emails rejected, valid ones accepted, and the hint shown only after interaction?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-pd-15-seed-id-015",
+      title: "PD-15: No empty/loading state — the dashboard looks broken before data arrives",
+      description: "On first load (and during the simulated delay) every panel is blank with no spinner or skeleton, so the app looks broken until data pops in. We want clear loading and empty states across the dashboard.\n\n**Files:** `src/app/components/user-list.component.ts`, `src/app/components/dashboard.component.ts`, `src/app/components/alerts.component.ts`",
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/app/components/user-list.component.ts", "src/app/components/dashboard.component.ts", "src/app/components/alerts.component.ts"],
+      rubric: {
+        diagnosis: "Did they identify there is no loading or empty-state handling — components render nothing until the delayed Observable emits, so the UI looks broken meanwhile?",
+        design: "Did they add loading and empty states (a loading flag or the async pipe with *ngIf; else loading template) consistently across panels, distinguishing 'loading' from 'loaded but empty'? Did they keep it DRY?",
+        communication: "Did they explain the three UI states (loading / empty / loaded) and why each needs distinct handling?",
+        execution: "Do panels show a loading indicator, then either data or a clear empty state?",
+      },
+      expectedMinutes: 35,
+    },
+  ];
+
+  for (const t of pulsedashTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.ANGULAR, codebaseId: pulsedashCodebase.id },
+    });
+  }
+
   // ─── LMKR demo employer org + campaign ──────────────────────────────────────
   // The whole platform uses GitHub OAuth (no passwords), so the "employer" is an
   // existing GitHub user added as an ADMIN of the LMKR org. Change EMPLOYER_GH to
@@ -3198,6 +3433,6 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
 
   await prisma.$disconnect();
   console.log(
-    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore + ${matchcoreTickets.length} MatchCore + ${finserveTickets.length} FinServe tickets + LMKR demo campaign upserted.`
+    `[seed] Done — ${tickets.length} NovaTech + ${sdTickets.length} SD + ${ragTickets.length} RAGCore + ${techCorpTickets.length} TechCorp + ${shopfrontTickets.length} ShopFront + ${dataforgeTickets.length} DataForge + ${infracoreTickets.length} InfraCore + ${matchcoreTickets.length} MatchCore + ${finserveTickets.length} FinServe + ${pulsedashTickets.length} PulseDash tickets + LMKR demo campaign upserted.`
   );
 }
