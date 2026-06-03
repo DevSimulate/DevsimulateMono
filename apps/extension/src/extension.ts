@@ -197,13 +197,14 @@ async function handleCloneFromDeepLink(
             `&branchName=${encodeURIComponent(assignment.branchName)}`;
           await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
           vscode.window.showInformationMessage("DevSimulate: PR created! Submit form opened — describe your fix.");
-        } catch {
-          // Fallback to manual submit if auto-PR fails
-          const choice = await vscode.window.showInformationMessage(
-            `DevSimulate: Branch pushed! Open submit form?`,
-            "Submit PR →"
+        } catch (prErr) {
+          // Auto-PR failed — tell them why, then offer the manual path
+          const reason = prErr instanceof Error ? prErr.message : "Couldn't create the PR automatically.";
+          const choice = await vscode.window.showWarningMessage(
+            `DevSimulate: ${reason}`,
+            "Open Submit Form"
           );
-          if (choice === "Submit PR →") {
+          if (choice === "Open Submit Form") {
             vscode.commands.executeCommand("devsimulate.submitPR");
           }
         }

@@ -96,59 +96,84 @@ function makeGit(baseDir?: string): SimpleGit {
   return simpleGit();
 }
 
+// A user-facing error whose message is safe to show directly in a prompt.
+class FriendlyError extends Error {}
+
+const GH_API = "https://api.github.com";
+
 /**
- * Gets the user's GitHub session from VS Code's built-in auth provider.
- * Requests repo scope so we can fork and create PRs automatically.
+ * Gets the user's GitHub session from VS Code's built-in auth provider with the
+ * `repo` scope needed to fork and open PRs. Throws a clear error if the user
+ * declines the permission prompt.
  */
 async function getGitHubSession(): Promise<vscode.AuthenticationSession> {
-  return vscode.authentication.getSession("github", ["repo", "read:user"], { createIfNone: true });
-}
-
-/**
- * Forks the repo to the user's GitHub account via API.
- * Returns the clone URL of the fork.
- */
-async function autoFork(githubToken: string, repoOwner: string, repoName: string): Promise<string> {
-  // Check if fork already exists
   try {
-    const check = await axios.get(
-      `https://api.github.com/repos/${repoOwner}/${repoName}`,
-      { headers: { Authorization: `token ${githubToken}`, Accept: "application/vnd.github+json" } }
+    return await vscode.authentication.getSession("github", ["repo", "read:user"], { createIfNone: true });
+  } catch {
+    throw new FriendlyError(
+      "DevSimulate needs permission to use your GitHub account. When GitHub asks, click “Allow” — then try again."
     );
-    if (check.data.fork || check.data.name === repoName) {
-      return check.data.clone_url as string;
-    }
-  } catch { /* fork doesn't exist yet */ }
-
-  // Create fork
-  const res = await axios.post(
-    `https://api.github.com/repos/${repoOwner}/${repoName}/forks`,
-    {},
-    { headers: { Authorization: `token ${githubToken}`, Accept: "application/vnd.github+json" } }
-  );
-
-  // GitHub forks are async — wait for it to be ready
-  const forkCloneUrl = res.data.clone_url as string;
-  const forkOwner = res.data.owner.login as string;
-  await waitForFork(githubToken, forkOwner, repoName);
-  return forkCloneUrl;
-}
-
-async function waitForFork(githubToken: string, owner: string, repo: string): Promise<void> {
-  for (let i = 0; i < 10; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
-    try {
-      await axios.get(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: { Authorization: `token ${githubToken}` },
-      });
-      return;
-    } catch { /* not ready yet */ }
   }
 }
 
+/** Builds a token-authenticated clone/push URL so git never prompts for credentials. */
+function authUrl(token: string, owner: string, repo: string): string {
+  return `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+}
+
+function parseOwnerRepo(url: string): { owner: string; repo: string } {
+  const m = /github\.com[:/]([^/]+)\/([^/.]+)(?:\.git)?\/?$/.exec(url);
+  if (!m) throw new FriendlyError("This codebase has an invalid repository URL. Contact support.");
+  return { owner: m[1], repo: m[2] };
+}
+
 /**
- * Creates a PR from the user's fork branch to the original repo's main branch.
- * Returns the PR URL.
+ * Ensures a fork of {owner}/{repo} exists under the user's account, creating it
+ * if needed and waiting until GitHub finishes provisioning it.
+ * Returns the fork's owner login.
+ */
+async function ensureFork(token: string, owner: string, repo: string, username: string): Promise<string> {
+  const headers = { Authorization: `token ${token}`, Accept: "application/vnd.github+json" };
+
+  // 1. Already forked? (check the user's namespace, not the source)
+  try {
+    const existing = await axios.get(`${GH_API}/repos/${username}/${repo}`, { headers });
+    if (existing.data?.fork || existing.data?.name) return username;
+  } catch { /* no fork yet — create one */ }
+
+  // 2. Create the fork
+  let forkOwner = username;
+  try {
+    const res = await axios.post(`${GH_API}/repos/${owner}/${repo}/forks`, {}, { headers });
+    forkOwner = (res.data?.owner?.login as string) ?? username;
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      throw new FriendlyError(
+        `The codebase “${repo}” could not be found on GitHub. It may have moved — contact support.`
+      );
+    }
+    if (axios.isAxiosError(err) && (err.response?.status === 403 || err.response?.status === 401)) {
+      throw new FriendlyError(
+        "GitHub denied the fork. Re-run “Connect with web session” and approve repo access when prompted."
+      );
+    }
+    throw new FriendlyError("Couldn’t fork the codebase to your account. Please try again in a moment.");
+  }
+
+  // 3. Forks are async — wait until it's ready (up to ~30s)
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      await axios.get(`${GH_API}/repos/${forkOwner}/${repo}`, { headers });
+      return forkOwner;
+    } catch { /* still provisioning */ }
+  }
+  throw new FriendlyError("Your fork is taking longer than usual to be created on GitHub. Wait a moment and try again.");
+}
+
+/**
+ * Creates a PR from the user's fork branch into the source repo's main branch.
+ * Returns the PR URL. If a PR already exists, returns its URL.
  */
 export async function createPullRequest(
   repoDir: string,
@@ -157,59 +182,64 @@ export async function createPullRequest(
   originalRepoUrl: string
 ): Promise<string> {
   const session = await getGitHubSession();
-  const githubToken = session.accessToken;
-  const username = session.account.label;
+  const token = session.accessToken;
+  const headers = { Authorization: `token ${token}`, Accept: "application/vnd.github+json" };
 
-  const git = makeGit(repoDir);
-  const remotes = await git.getRemotes(true);
+  const remotes = await makeGit(repoDir).getRemotes(true);
   const origin = remotes.find((r) => r.name === "origin");
-  if (!origin?.refs?.fetch) throw new Error("No remote origin found");
+  if (!origin?.refs?.fetch) throw new FriendlyError("No git remote found in this folder. Re-clone the codebase from your ticket.");
 
-  const originMatch = /github\.com[:/]([^/]+)\/([^/.]+)(\.git)?$/.exec(origin.refs.fetch);
-  if (!originMatch) throw new Error("Could not parse remote URL");
+  const fork = parseOwnerRepo(origin.refs.fetch);
+  const base = parseOwnerRepo(originalRepoUrl);
+  const sameOwner = fork.owner.toLowerCase() === base.owner.toLowerCase();
+  const head = sameOwner ? branchName : `${fork.owner}:${branchName}`;
 
-  const forkOwner = originMatch[1];
-  const repoName = originMatch[2];
-
-  const originalMatch = /github\.com[:/]([^/]+)\/([^/.]+)(\.git)?$/.exec(originalRepoUrl);
-  const baseOwner = originalMatch?.[1] ?? forkOwner;
-
-  const isDirectPush = forkOwner.toLowerCase() === baseOwner.toLowerCase();
-  const head = isDirectPush ? branchName : `${forkOwner}:${branchName}`;
-
-  const res = await axios.post(
-    `https://api.github.com/repos/${baseOwner}/${repoName}/pulls`,
-    { title: ticketTitle, head, base: "main", body: "" },
-    { headers: { Authorization: `token ${githubToken}`, Accept: "application/vnd.github+json" } }
-  );
-
-  return res.data.html_url as string;
+  try {
+    const res = await axios.post(
+      `${GH_API}/repos/${base.owner}/${base.repo}/pulls`,
+      { title: ticketTitle, head, base: "main", body: "Submitted via DevSimulate." },
+      { headers }
+    );
+    return res.data.html_url as string;
+  } catch (err) {
+    // A PR for this branch may already exist — find and return it
+    if (axios.isAxiosError(err) && err.response?.status === 422) {
+      try {
+        const list = await axios.get(
+          `${GH_API}/repos/${base.owner}/${base.repo}/pulls?head=${fork.owner}:${branchName}&state=open`,
+          { headers }
+        );
+        if (list.data?.[0]?.html_url) return list.data[0].html_url as string;
+      } catch { /* fall through */ }
+      throw new FriendlyError("Push your branch first, then submit. (No commits found to open a PR from.)");
+    }
+    if (axios.isAxiosError(err) && (err.response?.status === 403 || err.response?.status === 401)) {
+      throw new FriendlyError("GitHub denied creating the PR. Reconnect your web session and approve repo access.");
+    }
+    throw new FriendlyError("Couldn’t open the pull request automatically. Try again, or open it manually on GitHub.");
+  }
 }
 
 /**
- * Fully automatic: forks repo, clones to ~/DevSimulate/{repo},
- * creates branch, pushes upstream — no dialogs, no folder picker.
+ * Fully automatic: ensures a fork, clones it to ~/DevSimulate/{repo} with an
+ * authenticated remote (no credential prompts), creates the ticket branch,
+ * pushes it, and opens the folder. Every failure surfaces a clear message.
  */
 export async function cloneAndOpenCodebase(
   ticket: TicketWithCodebase,
   branchName: string,
   _githubUsername: string
 ): Promise<void> {
-  const repoUrl = ticket.codebase.repoUrl;
-  const repoName = repoUrl.split("/").pop()?.replace(/\.git$/, "") ?? "codebase";
-  const repoOwner = repoUrl.split("/").slice(-2)[0] ?? "";
+  const { owner: srcOwner, repo: repoName } = parseOwnerRepo(ticket.codebase.repoUrl);
 
-  // Get GitHub token from VS Code auth
   const session = await getGitHubSession();
-  const githubToken = session.accessToken;
+  const token = session.accessToken;
   const username = session.account.label;
+  const isOwner = srcOwner.toLowerCase() === username.toLowerCase();
 
-  const isOwner = repoOwner.toLowerCase() === username.toLowerCase();
-
-  // Default location: ~/DevSimulate/{repoName}
   const targetDir = path.join(os.homedir(), "DevSimulate", repoName);
-  const devSimDir = path.join(os.homedir(), "DevSimulate");
-  if (!fs.existsSync(devSimDir)) fs.mkdirSync(devSimDir, { recursive: true });
+  const parentDir = path.join(os.homedir(), "DevSimulate");
+  if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
 
   await vscode.window.withProgress(
     {
@@ -219,24 +249,29 @@ export async function cloneAndOpenCodebase(
     },
     async (progress) => {
       if (fs.existsSync(targetDir)) {
-        progress.report({ message: "Already cloned — switching to your branch…" });
+        progress.report({ message: "Already set up — switching to your branch…" });
         await ensureBranch(makeGit(targetDir), branchName);
-      } else {
-        let cloneUrl: string;
+        return;
+      }
 
-        if (isOwner) {
-          cloneUrl = repoUrl;
-          progress.report({ message: "Cloning repository…" });
-        } else {
-          progress.report({ message: "Forking repository to your account…" });
-          cloneUrl = await autoFork(githubToken, repoOwner, repoName);
-          progress.report({ message: "Cloning your fork…" });
-        }
+      // Owner pushes to the source directly; everyone else gets a fork.
+      const cloneOwner = isOwner ? srcOwner : await (async () => {
+        progress.report({ message: "Forking the codebase to your GitHub account…" });
+        return ensureFork(token, srcOwner, repoName, username);
+      })();
 
-        await makeGit().clone(cloneUrl, targetDir, ["--depth", "1"]);
+      progress.report({ message: "Downloading the code…" });
+      try {
+        await makeGit().clone(authUrl(token, cloneOwner, repoName), targetDir, ["--depth", "1"]);
+      } catch {
+        throw new FriendlyError("Couldn’t download the code. Check your internet connection and try again.");
+      }
 
-        progress.report({ message: "Creating branch…" });
+      progress.report({ message: "Creating your branch…" });
+      try {
         await ensureBranch(makeGit(targetDir), branchName);
+      } catch {
+        throw new FriendlyError("Cloned the code, but couldn’t create/push your branch. Open the folder and run: git push -u origin " + branchName);
       }
 
       progress.report({ message: "Opening in VS Code…" });
@@ -247,7 +282,8 @@ export async function cloneAndOpenCodebase(
 }
 
 /**
- * Creates branch and pushes with upstream tracking set.
+ * Creates the ticket branch if missing, checks it out, and pushes with upstream
+ * tracking so a plain `git push` works afterwards.
  */
 async function ensureBranch(git: SimpleGit, branchName: string): Promise<void> {
   const branches = await git.branch();
