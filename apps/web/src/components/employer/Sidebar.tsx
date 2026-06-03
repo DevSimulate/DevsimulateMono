@@ -7,11 +7,8 @@ import { clearToken, getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
 import {
   LayoutDashboard,
-  ClipboardList,
   Users,
-  Briefcase,
   Building2,
-  BarChart3,
   Settings,
   LogOut,
   ChevronRight,
@@ -19,14 +16,11 @@ import {
 } from "lucide-react";
 
 const NAV = [
-  { href: "/employer/dashboard",   label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/employer/campaigns",   label: "Campaigns",    icon: Megaphone },
-  { href: "/employer/assessments", label: "Assessments",  icon: ClipboardList },
-  { href: "/employer/candidates",  label: "Candidates",   icon: Users },
-  { href: "/employer/jobs",        label: "Job Postings", icon: Briefcase },
-  { href: "/employer/team",        label: "Team",         icon: Building2 },
-  { href: "/employer/reports",     label: "Reports",      icon: BarChart3 },
-  { href: "/employer/settings",    label: "Settings",     icon: Settings },
+  { href: "/employer/dashboard",   label: "Dashboard",  icon: LayoutDashboard },
+  { href: "/employer/campaigns",   label: "Campaigns",  icon: Megaphone },
+  { href: "/employer/candidates",  label: "Candidates", icon: Users },
+  { href: "/employer/team",        label: "Team",       icon: Building2 },
+  { href: "/employer/settings",    label: "Settings",   icon: Settings },
 ];
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
