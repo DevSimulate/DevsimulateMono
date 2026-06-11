@@ -339,18 +339,13 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       aiDeclaration!
     );
 
-    // NO BONUS. The follow-up Q&A is a verification gate, not a points source.
-    // The score is the quality of the actual work (the PR). Strong answers
-    // confirm understanding and leave the score intact; they are never rewarded
-    // with extra points — especially since declared AI use is already allowed.
-    // Weak answers that contradict the declaration still incur a penalty.
-    const MISMATCH_PENALTY: Record<string, number> = {
-      NO_AI_USED:           20,
-      AI_USED_FOR_PHRASING: 10,
-    };
-    const mismatchPenalty = scored.declarationMismatch
-      ? (MISMATCH_PENALTY[aiDeclaration!] ?? 20)
-      : 0;
+    // NO BONUS and NO AUTO-PENALTY. The follow-up Q&A is a verification gate, not a
+    // points source. AI use is allowed and expected, so we no longer dock points for a
+    // declaration "mismatch" — that punished AI use rather than measuring judgment.
+    // Instead the PR review's Verification dimension already scores whether the candidate
+    // understood and verified their work, and `declarationMismatch` / `employerSummary`
+    // are surfaced to the employer as the Verification Quality note (advisory, not a gate).
+    const mismatchPenalty = 0;
     const effectiveBonus = 0;
 
     const updated = await prisma.followUpQuestion.update({
@@ -399,7 +394,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
 
     const bonusNote =
       scored.declarationMismatch
-        ? `Declaration mismatch detected — ${mismatchPenalty} pts deducted because your answers did not match your declaration.`
+        ? `Your answers read as confident but didn't show how you verified the fix. No points were deducted — but a reviewer may probe your understanding. Strong answers explain how you know it works, not just what it does.`
         : aiDeclaration === "AI_USED_FOR_ANSWER"
         ? `You honestly declared AI wrote your answers. No penalty — transparency noted for the reviewer.`
         : aiDeclaration === "AI_USED_FOR_UNDERSTANDING"

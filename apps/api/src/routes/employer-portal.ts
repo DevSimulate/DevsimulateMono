@@ -21,13 +21,18 @@ async function getRole(userId: string, orgId: string): Promise<OrgRole | null> {
 
 const toAuth = (risk: number) => Math.max(0, Math.min(100, 100 - risk));
 const band = (a: number) => (a >= 70 ? "HIGH" : a >= 40 ? "MEDIUM" : "LOW");
-function flagged(auth: number, mismatch: boolean, pastes: number): boolean {
-  return pastes > 0 || (auth < 50 && mismatch);
+// Advisory only. AI use is allowed, and paste counts are trivially bypassable and
+// over-flag honest candidates — so they no longer gate. A flag means "verification
+// concern worth a human look," not "auto-reject."
+function flagged(auth: number, mismatch: boolean): boolean {
+  return mismatch || auth < 40;
 }
+// Judgment (the score, which now includes the Verification dimension) drives the verdict.
+// A flag never auto-rejects — it routes the candidate to human review by capping at MAYBE.
 function verdict(total: number, auth: number, flag: boolean): string {
-  if (flag || total < 50) return "NO";
-  if (total > 80 && auth > 80) return "STRONG_YES";
-  if (total > 70 && auth > 65) return "YES";
+  if (total < 50) return "NO";
+  if (!flag && total > 80 && auth > 80) return "STRONG_YES";
+  if (!flag && total > 70 && auth > 65) return "YES";
   if (total > 60) return "MAYBE";
   return "NO";
 }
@@ -83,7 +88,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
       scoreSum += sub.scoreTotal ?? 0;
       if (recent.length < 8) {
         const auth = toAuth(sub.riskScore);
-        const f = flagged(auth, sub.followUp?.declarationMismatch ?? false, sub.pasteAttempts ?? 0);
+        const f = flagged(auth, sub.followUp?.declarationMismatch ?? false);
         recent.push({
           id: c.id,
           githubUsername: c.user.githubUsername ?? "unknown",
@@ -146,7 +151,7 @@ router.get("/candidates", async (req: Request, res: Response): Promise<void> => 
       });
       if (!sub) continue;
       const auth = toAuth(sub.riskScore);
-      const f = flagged(auth, sub.followUp?.declarationMismatch ?? false, sub.pasteAttempts ?? 0);
+      const f = flagged(auth, sub.followUp?.declarationMismatch ?? false);
       out.push({
         id: c.id,
         campaignId: c.campaign.id,

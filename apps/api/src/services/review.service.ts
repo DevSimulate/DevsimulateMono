@@ -51,7 +51,9 @@ export async function reviewPullRequest(
 ): Promise<ClaudeReviewResult> {
   const rubric = ticket.rubric as Record<string, string>;
 
-  const systemPrompt = `You are a senior software engineer conducting structured code reviews for a developer training platform. Your job is to score a developer's pull request against a specific ticket.
+  const systemPrompt = `You are a senior staff engineer reviewing a candidate's pull request. You are NOT grading whether the code merely works. You are judging whether this person can be trusted to own outcomes in a real system: to diagnose the real problem, make sound decisions under constraints, verify their own work, and communicate their reasoning.
+
+Assume the candidate may have used AI tools. That is allowed and expected. You are measuring their JUDGMENT and OWNERSHIP, not whether they typed the code themselves. A candidate who used AI but deeply understands, verifies, and can defend the result is strong. A candidate who accepted plausible-looking output without understanding it is weak — even if the code works.
 
 You must respond with ONLY a valid JSON object — no markdown, no prose, no code fences. The JSON must conform exactly to this shape:
 {
@@ -61,21 +63,21 @@ You must respond with ONLY a valid JSON object — no markdown, no prose, no cod
   "scoreExecution": <integer 0-10>,
   "scoreTotal": <integer 0-100>,
   "feedback": {
-    "diagnosis": "<specific feedback on root cause understanding>",
-    "design": "<specific feedback on solution design and trade-offs>",
-    "communication": "<specific feedback on explanation quality in the PR description>",
+    "diagnosis": "<specific feedback on whether they found the REAL problem vs the stated one>",
+    "design": "<specific feedback on decision quality and acknowledged trade-offs>",
+    "communication": "<specific feedback on verification and how legible their reasoning is>",
     "execution": "<specific feedback on whether the solution actually works>"
   },
-  "summary": "<2-3 sentence overall review written as a senior engineer speaking directly to the developer>",
+  "summary": "<2-3 sentence overall review written as a senior staff engineer speaking directly to the candidate>",
   "topStrength": "<the single best thing they did>",
   "topImprovement": "<the single most important thing to improve>"
 }
 
 Scoring dimensions:
-- scoreDiagnosis (0-40): Did they identify the ROOT CAUSE, not just the symptom? Did they understand WHY the bug exists, not just WHAT it does? Full marks require demonstrating deep understanding of the system behaviour.
-- scoreDesign (0-30): Did they consider trade-offs and edge cases? Is the solution robust, maintainable, and appropriately scoped? Does it account for concurrency, failure modes, and production realities?
-- scoreCommunication (0-20): Can they explain their reasoning clearly in the PR description? Does it convey WHY they made each decision, not just what they changed?
-- scoreExecution (0-10): Does the code change actually address the problem? Are there obvious bugs, missing error handling, or broken logic in the implementation itself?
+- scoreDiagnosis (0-40) — THE MOST IMPORTANT. Did they identify the REAL problem, not just the literal ask? Did they question the premise of the ticket, find root cause vs treating a symptom, and notice what the ticket did NOT say (missing context, hidden assumptions, edge conditions)? Did they investigate the existing system before acting? Penalize heavily if they solved the literal ask while missing the actual underlying problem — even if the code works.
+- scoreDesign (0-30) — DECISION QUALITY under real constraints, not code elegance. Did they consider alternatives and choose one for defensible reasons? Did they acknowledge trade-offs — what they sacrificed and why? Did they respect the existing system's patterns and downstream effects? Reward explicit reasoning of the form "I chose X over Y because Z, at the cost of W." Penalize arbitrary choices with no justification and changes that ignore system-wide impact.
+- scoreCommunication (0-20) — VERIFICATION & COMMUNICATION, the defining skill of the AI era. Can they tell whether their own (possibly AI-generated) solution is actually correct? Did they show skepticism toward plausible-but-unverified output rather than trusting it blindly? Can they explain HOW they know it works in production conditions? Reward candidates who interrogate their solution; penalize those who present working-looking code with no evidence they checked it.
+- scoreExecution (0-10) — a correctness gate, not the main signal. Does the code run and solve the stated task, free of obvious defects? Do NOT over-reward clean or fast code. Execution is commoditized; judgment is not.
 
 scoreTotal must equal the sum of the four dimension scores.
 
@@ -180,12 +182,12 @@ ${prDiff.slice(0, 3000)}
 
 Generate ONE question that:
 - Names a SPECIFIC variable, function, method call, or line-level decision visible in the diff above
-- Tests whether they understood WHY that specific change was necessary, not just what it does
-- Cannot be answered correctly without having written and understood this specific fix
+- Probes VERIFICATION and JUDGMENT: how do they know this fix is correct? What did they check, what did they NOT trust, what edge case or failure mode did they consider? Or why this decision over an alternative?
+- Cannot be answered correctly without having written and verified this specific fix (a candidate who pasted a plausible solution without understanding it should not be able to answer)
 - Is NOT a generic question about the bug type, pattern, or concept
 
 Bad example: "How does mutex locking prevent race conditions?"
-Good example: "You added Lock() before calling ProcessInvoice() on line 34 — why there specifically, rather than at the start of the handler function?"
+Good example: "You added Lock() before calling ProcessInvoice() on line 34 — how did you confirm that's the right scope for the lock, and what breaks if a second request arrives while it's held?"
 
 Respond with ONLY valid JSON:
 { "question1": "<your specific question referencing exact code from the diff>" }`;
@@ -232,10 +234,10 @@ Q1 you asked: ${question1}
 Their answer to Q1: ${answer1}
 
 Now generate ONE follow-up question (Q2) that:
-- Directly responds to something specific in their A1 — a gap, an assumption they made, an interesting point they raised, or something they glossed over
+- Directly responds to something specific in their A1 — a gap, an unverified claim, an assumption they made, or something they glossed over
 - References their actual words or reasoning from A1
-- Tests deeper understanding: "You said X — what happens when Y?" or "You mentioned Z but didn't explain why — can you elaborate?"
-- Cannot be generated without having read their specific answer
+- Pressure-tests whether they actually understand and verified what they claimed: "You said X — how would you confirm that holds under Y?" or "You assumed Z — what evidence do you have, and what would you check before shipping?"
+- Cannot be generated without having read their specific answer; a candidate who relayed an AI answer without understanding it should struggle here
 
 Do NOT ask a generic second question. Q2 must feel like a natural continuation of the conversation.
 
@@ -273,7 +275,7 @@ export async function reviewSystemDesign(
 ): Promise<ClaudeReviewResult> {
   const rubric = ticket.rubric as Record<string, string>;
 
-  const systemPrompt = `You are a senior staff engineer and system design interviewer. Your job is to score a candidate's system design answer for a specific problem.
+  const systemPrompt = `You are a senior staff engineer and system design interviewer. You are judging whether this person can be trusted to own outcomes: to scope the real problem, make defensible decisions under constraints, and reason about how they'd verify the design holds in production. Assume AI tools may have been used — that is allowed. You are measuring judgment and ownership, not whether they typed it themselves: a candidate who can defend and stress-test their design is strong; one who lists plausible components they can't justify is weak.
 
 You must respond with ONLY a valid JSON object — no markdown, no prose, no code fences. The JSON must conform exactly to this shape:
 {
@@ -475,7 +477,7 @@ export async function scoreFollowUpAnswers(
 ): Promise<FollowUpScoreResult> {
   const declaredLabel = DECLARATION_LABELS[aiDeclaration] ?? "unknown AI usage";
 
-  const prompt = `You are a senior engineering interviewer scoring follow-up answers after a code review. You also assess whether the developer's self-declared AI usage matches the writing patterns you observe.
+  const prompt = `You are a senior engineering interviewer scoring follow-up answers after a code review. AI use is allowed and expected — you are assessing whether the candidate genuinely understands and verified their own work, not whether they used AI.
 
 Ticket: ${ticket.title}
 Codebase: ${ticket.codebase.name}
@@ -494,24 +496,14 @@ Score each answer 0-10 based on:
 - Genuine personal understanding (first-person reasoning, uncertainty, tradeoffs)
 - Engineering maturity (real-world thinking, edge cases, production awareness)
 
-## Task 2 — Authenticity assessment (for employer only, not shown to developer)
-Assess whether the answer patterns match the declared usage:
-- Signals of AI-generated content: overly structured, uses generic engineering buzzwords, no personal voice, no hesitation, covers every angle perfectly, lacks grounding in their specific diff
-- Signals of genuine independent thinking: personal phrasing, some uncertainty, specific references to their own code change, occasional imprecision, developer-voice reasoning
+## Task 2 — Verification Quality assessment (for employer only, not shown to developer)
+AI use is allowed and expected. Do NOT judge whether AI was used. Judge whether this candidate genuinely INTERROGATED their solution and any AI output, or accepted it uncritically. This is the signal an employer most needs.
+- Signals of genuine ownership: they can explain HOW they know the fix works, reference their specific diff, name what they checked or did NOT trust, acknowledge edge cases or limits, reason in their own voice with appropriate uncertainty.
+- Signals of uncritical acceptance: confident but hollow — describes WHAT the code does but never HOW it was verified; generic textbook framing ungrounded in THIS fix; no checks, no edge cases, no doubt; collapses or goes vague when the follow-up probes deeper.
 
-Set declarationMismatch to true ONLY if the developer declared NO_AI_USED or AI_USED_FOR_PHRASING but the answers strongly resemble AI-generated content. Do not flag for minor polish. High bar — require clear signal.
+Set declarationMismatch to true ONLY when the answers show clear signs the candidate did NOT understand or verify their own solution — confident, generic, ungrounded in the actual diff, with zero evidence of checking. This is now a weak/uncritical signal flag, NOT an "AI was used" flag. Require a clear signal; do not flag for polish, brevity, or honest declared AI use.
 
-IMPORTANT RULE FOR AI_USED_FOR_PHRASING:
-Developer declared they used AI only to polish their own writing. Their answers will naturally sound professional and well-structured. Do NOT flag mismatch based on writing quality alone.
-
-Only flag declarationMismatch: true for AI_USED_FOR_PHRASING if BOTH of these are true:
-1. Answers contain absolutely zero references to specific file names, line numbers, method names, or variable names from the actual PR diff
-2. Answers read like a generic textbook explanation that could apply to any bug of this type anywhere — not grounded in THIS codebase or THIS fix
-
-If answers sound polished BUT contain specific code references — declarationMismatch: false. This is exactly what honest AI phrasing looks like.
-If answers contain zero specific references AND read like a textbook explanation — declarationMismatch: true. This suggests AI wrote the understanding, not just the phrasing.
-
-Write employerSummary as 2-3 sentences describing what you observed: the declared level, what patterns you detected, and your confidence in the authenticity signal. This is for an employer reviewing the candidate — be factual, not accusatory.
+Write employerSummary as 1-3 sentences: did this candidate genuinely interrogate their solution and any AI output, or accept it uncritically? Point to specifics from their answers. This is the Verification Quality note for an employer — be factual, not accusatory.
 
 ## Task 3 — Developer feedback
 Write 2 sentences of constructive feedback the developer will see. Focus on what they got right and what was shallow. Never mention AI usage detection, flagging, or authenticity.
@@ -523,7 +515,7 @@ Respond with ONLY valid JSON:
   "scoreBonus": <sum of score1 + score2>,
   "feedback": "<2 sentences for the developer — constructive, no mention of AI detection>",
   "declarationMismatch": <true|false>,
-  "employerSummary": "<2-3 sentences for employer — factual pattern description>"
+  "employerSummary": "<1-3 sentence Verification Quality note for employer — did they interrogate their solution or accept it uncritically>"
 }`;
 
   const response = await anthropic.messages.create({

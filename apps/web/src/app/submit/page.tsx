@@ -163,14 +163,14 @@ function SubmitPageInner() {
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const writeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Blocks paste into the answer boxes and records the attempt. The Q&A is
-  // generated live from the candidate's own code — there's no legitimate reason
-  // to paste a long answer, so a paste attempt is logged as an integrity signal.
-  function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    e.preventDefault();
-    setPasteCount((n) => n + 1);
-    setPasteWarn(true);
-    setTimeout(() => setPasteWarn(false), 4000);
+  // Paste check temporarily DISABLED. AI use is allowed, the block is trivially
+  // bypassable, and it over-flags honest candidates — judgment is measured by the
+  // rubric + follow-up instead. To re-enable, restore the body below.
+  function handleAnswerPaste(_e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    // e.preventDefault();
+    // setPasteCount((n) => n + 1);
+    // setPasteWarn(true);
+    // setTimeout(() => setPasteWarn(false), 4000);
   }
 
   // Blocks copying the question / problem text so candidates can't lift it into
