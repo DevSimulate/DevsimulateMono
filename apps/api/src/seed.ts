@@ -127,6 +127,19 @@ Key facts engineers must know:
       expectedMinutes: 75,
     },
     {
+      // TRAP TICKET: the obvious AI fix (parallelise harder / add a lock / raise the
+      // timeout) is the BUG. The intern's Parallel.ForEach shares one EF DbContext,
+      // which is not thread-safe — that causes both the exception and the corruption.
+      // A driver catches it; a conduit relaying AI ships the bug.
+      id: "ticket-nova-130-seed-id-trap",
+      title: "NOVA-130: Monthly Billing Run Times Out",
+      description: "Our monthly billing job loops over every active customer and runs a few queries each to assemble their invoice. It's gotten slow and now times out before finishing. An intern already opened a draft PR that speeds it up by wrapping the per-customer work in Parallel.ForEach so customers are processed concurrently — it runs much faster on his laptop. But since it went to staging we're seeing intermittent 'A second operation was started on this context instance before a previous operation completed' errors, and a handful of customers got invoices with the wrong line items. Make the billing run finish in time WITHOUT these errors or data corruption. Review the intern's approach before building on it.",
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/NovaTechCRM.Services/BillingService.cs", "src/NovaTechCRM.Infrastructure/BackgroundJobs/MonthlyBillingJob.cs", "src/NovaTechCRM.Api/Program.cs"],
+      rubric: { diagnosis: "THE TRAP: the real root cause is that the intern's Parallel.ForEach shares a single injected NovaTechDbContext across concurrent operations — and EF Core's DbContext is NOT thread-safe. That is the source of BOTH the 'second operation started on this context' exception AND the wrong-line-item corruption (interleaved tracked entities). Full marks require identifying that the parallelism over a shared context is itself the bug — not merely that the job is slow. PENALIZE HEAVILY any answer that treats this as a pure performance problem and proposes 'parallelise more', 'add a lock around the context', 'increase the timeout', 'retry on failure', or 'scale the DB' — those are the confident-but-wrong fixes an AI suggests from the ticket framing.", design: "Did they choose a CORRECT fix and justify it? Acceptable: (a) make it set-based — replace the per-customer N+1 with one batched query so concurrency isn't needed (best), or (b) keep bounded parallelism but give each unit of work its OWN context via IDbContextFactory.CreateDbContext plus a throttle. Reward 'I chose X over Y because Z, at the cost of W' and the insight that locking the shared context just serialises everything while still risking change-tracker corruption.", communication: "VERIFICATION: can they explain HOW they know the corruption is gone, not just that it's faster? Reward stating the DbContext thread-safety rule explicitly, explaining why it 'worked on the intern's laptop' (low concurrency) but fails under load, and describing how they'd verify (run billing concurrently and assert line items match a single-threaded baseline).", execution: "Does the fix remove BOTH symptoms — the concurrency exception and the wrong-line-item corruption — while finishing in time? A fix that only silences the exception (try/catch or a lock) but leaves the data-correctness risk does NOT pass." },
+      expectedMinutes: 120,
+    },
+    {
       id: "ticket-nova-105-seed-id-011",
       title: "NOVA-105: Customer Tier Not Recalculated After Large Refunds",
       description: "The sales team noticed 9 enterprise customers have Gold or Platinum tier badges but should have been downgraded months ago. Each of these customers had large refunds processed — one customer spent $22,000 (Platinum) but was refunded $19,000, leaving effective lifetime spend of $3,000 (Silver). They are still Platinum and receiving Platinum-tier discounts worth thousands of dollars. Figure out why tier evaluation is not accounting for refunds.",
