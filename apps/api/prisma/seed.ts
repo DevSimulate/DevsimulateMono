@@ -92,6 +92,43 @@ Key facts engineers must know:
     },
   });
 
+  // Ticket — NOVA-114 (TRAP TICKET)
+  // The OBVIOUS fix is wrong. The ticket nudges toward "make the billing run
+  // faster with parallelism" — which is exactly what an AI conduit will do, and
+  // it is the BUG: EF Core's DbContext is not thread-safe, so parallelizing over a
+  // shared injected context is what corrupts data / throws intermittently. A real
+  // engineer recognizes the parallelism itself as the defect; a candidate who
+  // relayed an AI answer "ships the bug." The rubric scores that divergence.
+  await prisma.ticket.upsert({
+    where: { id: "ticket-nova-114-trap-seed-id-014" },
+    update: {},
+    create: {
+      id: "ticket-nova-114-trap-seed-id-014",
+      title: "NOVA-114: Monthly Billing Run Times Out",
+      description:
+        "Our monthly billing job loops over every active customer and runs a few queries each to assemble their invoice. It's gotten slow and now times out before finishing. An intern already opened a draft PR that speeds it up by wrapping the per-customer work in Parallel.ForEach so customers are processed concurrently — it runs much faster on his laptop. But since it went to staging we're seeing intermittent 'A second operation was started on this context instance before a previous operation completed' errors, and a handful of customers got invoices with the wrong line items. Make the billing run finish in time WITHOUT these errors or data corruption. Review the intern's approach before building on it.",
+      stack: Stack.DOTNET,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: [
+        "src/NovaTechCRM.Services/BillingService.cs",
+        "src/NovaTechCRM.Services/InvoiceService.cs",
+        "src/NovaTechCRM.Api/Program.cs",
+      ],
+      rubric: {
+        diagnosis:
+          "THE TRAP: the real root cause is that the intern's Parallel.ForEach (or Task.WhenAll) shares a single injected AppDbContext/DbContext across concurrent operations — and EF Core's DbContext is NOT thread-safe. That is the source of BOTH the 'second operation started on this context' exception AND the wrong-line-item corruption (interleaved tracked entities). FULL MARKS require identifying that the parallelism over a shared context is itself the bug — not merely that the job is slow. PENALIZE HEAVILY any answer that treats this as a pure performance problem and proposes 'parallelize more', 'add a lock around the context', 'increase the command/job timeout', 'retry on failure', or 'scale the DB' — those are the confident-but-wrong fixes an AI suggests from the ticket framing, and they keep or hide the corruption rather than removing it.",
+        design:
+          "Did they choose a CORRECT fix and justify it? Acceptable: (a) make it set-based — replace the per-customer N+1 with one batched query so concurrency isn't needed at all (best), or (b) keep bounded parallelism but give each unit of work its OWN context via IDbContextFactory.CreateDbContext (plus a throttle / Parallel.ForEachAsync with MaxDegreeOfParallelism). Reward explicit reasoning of the form 'I chose X over Y because Z, at the cost of W' and an acknowledgement that simply locking the shared context serializes everything (defeating the point) while still risking change-tracker corruption. Penalize a fix that keeps the shared context.",
+        communication:
+          "VERIFICATION & COMMUNICATION: can they explain HOW they know the corruption is gone, not just that it's faster? Reward candidates who state the DbContext thread-safety rule explicitly, explain why the intern's version 'worked on his laptop' (low concurrency / timing) but fails under load, and describe how they'd verify (run the billing job concurrently and assert invoice line items match a single-threaded baseline). Penalize confident claims with no evidence of checking.",
+        execution:
+          "Does the fix actually compile and remove BOTH symptoms — the concurrency exception and the wrong-line-item corruption — while finishing in time? A fix that only silences the exception (e.g. a try/catch or a lock) but leaves the data-correctness risk does NOT pass this gate.",
+      },
+      expectedMinutes: 120,
+      codebaseId: codebase.id,
+    },
+  });
+
   // Ticket 3 — NOVA-58
   await prisma.ticket.upsert({
     where: { id: "ticket-nova-58-seed-id-003" },

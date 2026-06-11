@@ -98,7 +98,12 @@ export async function upsertUserFromGitHub(
  */
 export function signJwt(user: User): string {
   const secret = process.env.JWT_SECRET;
-  const expiresIn = process.env.JWT_EXPIRES_IN ?? "7d";
+  // 30 days so a candidate's session comfortably survives a long assessment
+  // (sign in → clone & fix the bug in VS Code → come back to submit). A short
+  // value here was causing "Your session expired" on the submit step.
+  // NOTE: a JWT_EXPIRES_IN env var on Railway OVERRIDES this — if sessions still
+  // expire too fast, check/remove that env var (it may be set to e.g. "15m"/"1h").
+  const expiresIn = process.env.JWT_EXPIRES_IN ?? "30d";
 
   if (!secret) {
     throw new Error("JWT_SECRET is not configured");

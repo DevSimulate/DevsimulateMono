@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
+import { getToken, clearToken } from "@/lib/auth";
 import Logo from "@/components/Logo";
 import clsx from "clsx";
 
@@ -282,6 +282,14 @@ function SubmitPageInner() {
       });
       const data = await r.json();
       if (r.status === 402) { setStage("upgrade"); return; }
+      if (r.status === 401) {
+        // Stale/expired session — re-authenticate and return here afterwards
+        // instead of stranding the candidate on a dead "invalid token" error.
+        clearToken();
+        localStorage.setItem("ds_submit_return", window.location.href);
+        window.location.href = GITHUB_AUTH_URL;
+        return;
+      }
       if (!r.ok) throw new Error(data.error ?? "Submission failed");
 
       const sid: string = data.data.id;
@@ -307,6 +315,14 @@ function SubmitPageInner() {
       });
       const data = await r.json();
       if (r.status === 402) { setStage("upgrade"); return; }
+      if (r.status === 401) {
+        // Stale/expired session — re-authenticate and return here afterwards
+        // instead of stranding the candidate on a dead "invalid token" error.
+        clearToken();
+        localStorage.setItem("ds_submit_return", window.location.href);
+        window.location.href = GITHUB_AUTH_URL;
+        return;
+      }
       if (!r.ok) throw new Error(data.error ?? "Submission failed");
 
       const sid: string = data.data.id;
@@ -898,12 +914,13 @@ function SubmitPageInner() {
                   </div>
                 ) : null;
               })()}
-              {!result.declarationMismatch && (
-                <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
-                  style={{ background: "#CCFBF1", color: "#0D9488" }}>
-                  ✓ Understanding verified in follow-up
-                </div>
-              )}
+              {/* Honest label only. The follow-up is a probe, not proof — we cannot
+                  assert "understanding verified" from text answers (a careful AI user
+                  passes it too). Surface completion; leave the judgment to the reviewer. */}
+              <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
+                style={{ background: "#EEF2FF", color: "#4F46E5" }}>
+                ✓ Follow-up completed
+              </div>
             </div>
 
             <div className="card p-6">
