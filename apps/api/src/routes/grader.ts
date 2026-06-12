@@ -28,10 +28,32 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    await prisma.submission.update({
-      where: { id: submissionId },
-      data: { graderResult: { ticketId: ticketId ?? null, passed: !!passed, at: new Date().toISOString() } },
-    });
+    const data: {
+      graderResult: object;
+      scoreExecution?: number;
+      scoreTotal?: number;
+    } = {
+      graderResult: { ticketId: ticketId ?? null, passed: !!passed, at: new Date().toISOString() },
+    };
+
+    // A FAILED hidden test is objective proof the fix is broken. Zero out Execution
+    // (the correctness dimension) and cap the total into the fail band — which also
+    // forces the verdict to NO everywhere, since verdict is derived from the score.
+    // A PASS is the floor, not a reward: no bonus, just recorded + shown as verified.
+    if (passed === false) {
+      const sub = await prisma.submission.findUnique({
+        where: { id: submissionId },
+        select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true },
+      });
+      if (sub) {
+        const withoutExecution =
+          (sub.scoreDiagnosis ?? 0) + (sub.scoreDesign ?? 0) + (sub.scoreCommunication ?? 0);
+        data.scoreExecution = 0;
+        data.scoreTotal = Math.min(withoutExecution, 45); // hard fail — broken code can't pass
+      }
+    }
+
+    await prisma.submission.update({ where: { id: submissionId }, data });
     console.log(`[grader] result stored for ${submissionId}: passed=${!!passed}`);
     res.json({ ok: true });
   } catch (e) {
