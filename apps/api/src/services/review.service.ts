@@ -536,3 +536,89 @@ Respond with ONLY valid JSON:
     throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
   }
 }
+
+/**
+ * Generates ONE pointed question the candidate must answer ALOUD (transcribed),
+ * derived from their actual diff so it can't be pre-scripted. Someone who
+ * understands their fix answers it fluently; a conduit who relayed AI cannot.
+ */
+export async function generateVerbalQuestion(
+  ticket: TicketWithCodebase,
+  prDiff: string
+): Promise<{ question: string }> {
+  const prompt = `You are a senior engineering interviewer. The candidate will answer your question OUT LOUD on camera, in their own words, in 90 seconds — they cannot prepare or paste it.
+
+Ticket: ${ticket.title}
+Their actual code change:
+\`\`\`diff
+${prDiff.slice(0, 3000)}
+\`\`\`
+
+Generate ONE question that:
+- Names a SPECIFIC decision, variable, or line from THEIR diff.
+- Asks WHY they did it, or "what would break if…", or "what did you check" — never "what does it do".
+- Someone who genuinely understands their fix can answer fluently in 1-2 sentences; someone who relayed an AI answer will be vague or contradict their written explanation.
+
+Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact code>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 256,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(clean) as { question: string };
+}
+
+export interface VerbalScoreResult {
+  score: number;       // 0-10 verbal understanding
+  consistent: boolean; // does the spoken answer match the written answers + the code?
+  note: string;        // 1-2 sentence employer-facing note
+}
+
+/**
+ * Compares the candidate's SPOKEN answer (transcribed) to their WRITTEN follow-up
+ * answers and their code. The signal: does their out-loud explanation genuinely
+ * match what they wrote and did, or did they relay AI text they can't defend aloud.
+ * Advisory in v1 — produces a verbal-understanding signal, does not move the score.
+ */
+export async function scoreVerbalAnswer(
+  question: string,
+  transcript: string,
+  answer1: string,
+  answer2: string,
+  prDiff: string
+): Promise<VerbalScoreResult> {
+  const prompt = `Compare a candidate's SPOKEN answer (auto-transcribed — judge the CONTENT, ignore grammar/transcription errors) to their WRITTEN follow-up answers and their code. You are checking whether they genuinely understand their own fix or relayed AI output they can't defend out loud.
+
+Question asked aloud: ${question}
+Spoken answer (transcribed): ${transcript || "(no speech captured)"}
+
+Their written answer 1: ${answer1}
+Their written answer 2: ${answer2}
+
+Their code change:
+\`\`\`diff
+${prDiff.slice(0, 2500)}
+\`\`\`
+
+Score 0-10:
+- HIGH: the spoken explanation is specific to THIS fix, first-person, consistent with their written answers and the actual code, and fluent.
+- LOW: vague, generic, contradicts their written answers or the code, or sounds read/scripted rather than understood.
+
+Set "consistent" to false if the spoken answer contradicts the written answers or the actual fix, or if no real explanation was given.
+
+Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 400,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(clean) as VerbalScoreResult;
+}

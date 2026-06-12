@@ -72,12 +72,13 @@ type Stage =
   | "q1"
   | "loading_q2"
   | "q2"
+  | "verbal"
   | "scoring"
   | "score"
   | "upgrade";
 
-const STEP_LABELS_CODE   = ["Describe", "Review", "Q1", "Q2", "Score"];
-const STEP_LABELS_DESIGN = ["Write",    "Review", "Q1", "Q2", "Score"];
+const STEP_LABELS_CODE   = ["Describe", "Review", "Q1", "Q2", "Speak", "Score"];
+const STEP_LABELS_DESIGN = ["Write",    "Review", "Q1", "Q2", "Speak", "Score"];
 
 function stepIndex(stage: Stage): number {
   const map: Record<Stage, number> = {
@@ -88,8 +89,9 @@ function stepIndex(stage: Stage): number {
     q1:         2,
     loading_q2: 3,
     q2:         3,
-    scoring:    4,
-    score:      4,
+    verbal:     4,
+    scoring:    5,
+    score:      5,
     upgrade:    0,
   };
   return map[stage];
@@ -159,6 +161,17 @@ function SubmitPageInner() {
   const [blurCount,    setBlurCount]    = useState(0);
   const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
+  // Verbal explanation step (camera on for presence; only the transcript is kept)
+  const [verbalQuestion, setVerbalQuestion] = useState("");
+  const [transcript,     setTranscript]     = useState("");
+  const [verbalTimeLeft, setVerbalTimeLeft] = useState(90);
+  const [verbalBusy,     setVerbalBusy]     = useState(false);
+  const videoRef       = useRef<HTMLVideoElement | null>(null);
+  const streamRef      = useRef<MediaStream | null>(null);
+  const transcriptRef  = useRef<string>("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
+  const verbalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const writeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -477,12 +490,98 @@ function SubmitPageInner() {
         mismatchPenalty:     data.data.mismatchPenalty     ?? 0,
         bonusNote:           data.data.bonusNote           ?? null,
       });
+
+      // Verbal explanation step — fetch the on-the-spot question; if anything fails
+      // (no PR diff, generation error), skip straight to the score.
+      try {
+        const vq = await fetch(`${API_URL}/submissions/${submissionId}/verbal-question`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}` },
+        });
+        const vqd = await vq.json();
+        if (vq.ok && vqd.data?.question) {
+          setVerbalQuestion(vqd.data.question);
+          setStage("verbal");
+          return;
+        }
+      } catch { /* fall through */ }
       setStage("score");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scoring failed — please try again.");
       setStage("q2");
     }
   }
+
+  function stopVerbalMedia() {
+    if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+    recognitionRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+
+  async function handleVerbalSubmit() {
+    if (verbalBusy) return;
+    setVerbalBusy(true);
+    stopVerbalMedia();
+    const token = getToken();
+    try {
+      await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ question: verbalQuestion, transcript: transcriptRef.current }),
+      });
+    } catch { /* best-effort — verbal is advisory */ }
+    setVerbalBusy(false);
+    setStage("score");
+  }
+
+  // Start camera (self-view, never uploaded) + live speech-to-text when entering the
+  // verbal stage. Only the transcript is sent; the audio/video never leave the browser.
+  useEffect(() => {
+    if (stage !== "verbal") return;
+    let cancelled = false;
+    setTranscript(""); transcriptRef.current = ""; setVerbalTimeLeft(90);
+
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+      })
+      .catch(() => { /* no camera/mic permission — transcript may be empty */ });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) {
+      const rec = new SR();
+      rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (e: any) => {
+        let t = "";
+        for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
+        t = t.trim();
+        transcriptRef.current = t;
+        setTranscript(t);
+      };
+      rec.onerror = () => { /* ignore; e.g. no-speech */ };
+      try { rec.start(); } catch { /* already started */ }
+      recognitionRef.current = rec;
+    }
+
+    verbalTimerRef.current = setInterval(() => {
+      setVerbalTimeLeft((s) => (s <= 1 ? 0 : s - 1));
+    }, 1000);
+
+    return () => { cancelled = true; stopVerbalMedia(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
+
+  // Auto-submit when the 90s runs out.
+  useEffect(() => {
+    if (stage === "verbal" && verbalTimeLeft === 0 && !verbalBusy) handleVerbalSubmit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verbalTimeLeft, stage]);
 
   const mins      = Math.floor(timeLeft / 60).toString().padStart(2, "0");
   const secs      = (timeLeft % 60).toString().padStart(2, "0");
@@ -847,6 +946,41 @@ function SubmitPageInner() {
             <button onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration || timeLeft === 0}
               className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
               {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get My Score →"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Stage: Verbal explanation ── */}
+        {stage === "verbal" && (
+          <div className="card rounded-2xl p-6 fade-in-up">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-bold" style={{ color: "#1A1A1A" }}>Explain it out loud</h2>
+              <span className="text-sm font-mono font-bold rounded-full px-3 py-1"
+                style={{ background: verbalTimeLeft <= 15 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 15 ? "#DC2626" : "#4F46E5" }}>
+                0:{verbalTimeLeft.toString().padStart(2, "0")}
+              </span>
+            </div>
+            <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
+              Your camera is on. Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept.
+            </p>
+
+            <div className="flex gap-4 mb-4 items-start">
+              <video ref={videoRef} muted autoPlay playsInline
+                className="rounded-xl shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
+              <div className="flex-1 rounded-xl p-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+                <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Answer aloud</div>
+                <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl px-4 py-3 mb-4 min-h-[64px] text-sm leading-relaxed"
+              style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: transcript ? "#1A1A1A" : "#9CA3AF" }}>
+              {transcript || "Listening… start speaking. (Live transcript appears here — Chrome/Edge.)"}
+            </div>
+
+            <button onClick={handleVerbalSubmit} disabled={verbalBusy}
+              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed">
+              {verbalBusy ? "Submitting…" : "Submit explanation →"}
             </button>
           </div>
         )}

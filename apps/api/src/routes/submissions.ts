@@ -3,7 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
-import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff } from "../services/review.service";
+import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer } from "../services/review.service";
 import { updateUserSkillScore } from "../services/score.service";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
@@ -544,6 +544,59 @@ router.post("/:id/followup/answer1", async (req: Request, res: Response): Promis
     const message = err instanceof Error ? err.message : "Failed to generate Q2";
     console.error("[submissions] answer1 error:", message);
     res.status(500).json({ error: message });
+  }
+});
+
+// ── Verbal explanation (spoken aloud, transcribed; audio not stored) ──────────
+const PR_RE = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/;
+
+/** POST /submissions/:id/verbal-question — a fresh, on-the-spot spoken question. */
+router.post("/:id/verbal-question", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: req.params.id },
+      include: { ticket: { include: { codebase: true } } },
+    });
+    if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
+    const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+    if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+    const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+    const { question } = await generateVerbalQuestion(sub.ticket as never, diff);
+    res.json({ data: { question } });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to generate verbal question" });
+  }
+});
+
+/** POST /submissions/:id/verbal — body { question, transcript }; scores spoken vs written. */
+router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { question, transcript } = req.body as { question?: string; transcript?: string };
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: req.params.id },
+      include: { followUp: true },
+    });
+    if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
+    if (!sub.followUp) { res.status(400).json({ error: "Complete the follow-up first" }); return; }
+    const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+    if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+    const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+    const scored = await scoreVerbalAnswer(
+      question ?? "",
+      transcript ?? "",
+      sub.followUp.answer1 ?? "",
+      sub.followUp.answer2 ?? "",
+      diff
+    );
+    await prisma.followUpQuestion.update({
+      where: { id: sub.followUp.id },
+      data: { verbalTranscript: transcript ?? "", verbalScore: scored.score, verbalNote: scored.note },
+    });
+    res.json({ data: scored });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to score verbal answer" });
   }
 });
 

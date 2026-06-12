@@ -177,6 +177,9 @@ model FollowUpQuestion {
   aiDeclaration       AIUsageDeclaration?
   declarationMismatch Boolean               @default(false)
   employerSummary     String?               @db.Text
+  verbalTranscript    String?               @db.Text  // spoken explanation, transcribed (audio not stored)
+  verbalScore         Int?                            // 0-10 verbal understanding
+  verbalNote          String?               @db.Text  // employer-facing note on spoken vs written
   answeredAt          DateTime?
   createdAt           DateTime              @default(now())
 }
