@@ -590,11 +590,22 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
       sub.followUp.answer2 ?? "",
       diff
     );
+
+    // Graduated penalty — the verbal check is fuzzier than the objective hidden
+    // test, so it deducts rather than hard-caps. Confirms understanding (>=7): no
+    // change. Couldn't defend it aloud or contradicts the written answers: -20.
+    let verbalPenalty = 0;
+    if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
+    else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
+    const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
+
+    await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal } });
     await prisma.followUpQuestion.update({
       where: { id: sub.followUp.id },
       data: { verbalTranscript: transcript ?? "", verbalScore: scored.score, verbalNote: scored.note },
     });
-    res.json({ data: scored });
+
+    res.json({ data: { ...scored, penalty: verbalPenalty, newScoreTotal } });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to score verbal answer" });
   }

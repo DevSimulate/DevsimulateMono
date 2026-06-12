@@ -43,6 +43,9 @@ interface ReviewResult {
   declarationMismatch: boolean;
   mismatchPenalty: number;
   bonusNote: string | null;
+  verbalNote?: string | null;
+  verbalScore?: number;
+  verbalPenalty?: number;
 }
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -526,12 +529,22 @@ function SubmitPageInner() {
     stopVerbalMedia();
     const token = getToken();
     try {
-      await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ question: verbalQuestion, transcript: transcriptRef.current }),
       });
-    } catch { /* best-effort — verbal is advisory */ }
+      const d = await r.json();
+      if (r.ok && d.data) {
+        setResult((prev) => prev ? {
+          ...prev,
+          scoreTotal:   d.data.newScoreTotal ?? prev.scoreTotal,
+          verbalNote:   d.data.note,
+          verbalScore:  d.data.score,
+          verbalPenalty: d.data.penalty ?? 0,
+        } : prev);
+      }
+    } catch { /* best-effort */ }
     setVerbalBusy(false);
     setStage("score");
   }
@@ -1048,6 +1061,18 @@ function SubmitPageInner() {
                   </div>
                 ) : null;
               })()}
+              {result.verbalNote && (
+                <div className="text-xs mb-3 rounded-lg px-3 py-2 text-left inline-block"
+                  style={{
+                    background: (result.verbalPenalty ?? 0) > 0 ? "#FEE2E2" : "#CCFBF1",
+                    color:      (result.verbalPenalty ?? 0) > 0 ? "#DC2626" : "#0D9488",
+                  }}>
+                  <span className="font-bold">Spoken explanation: </span>
+                  {(result.verbalPenalty ?? 0) > 0
+                    ? `couldn't fully back your written answer aloud (−${result.verbalPenalty} pts).`
+                    : "matched your written answer — understanding confirmed."}
+                </div>
+              )}
               {/* Honest label only. The follow-up is a probe, not proof — we cannot
                   assert "understanding verified" from text answers (a careful AI user
                   passes it too). Surface completion; leave the judgment to the reviewer. */}
