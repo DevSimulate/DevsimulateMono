@@ -582,6 +582,22 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
     if (!sub.followUp) { res.status(400).json({ error: "Complete the follow-up first" }); return; }
     const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
     if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+    // No transcript captured (unsupported browser / mic denied) → don't penalise a
+    // technical issue. Record it as not-scored and flag for review instead.
+    const words = (transcript ?? "").trim().split(/\s+/).filter(Boolean);
+    if (words.length < 5) {
+      await prisma.followUpQuestion.update({
+        where: { id: sub.followUp.id },
+        data: {
+          verbalTranscript: transcript ?? "",
+          verbalScore: null,
+          verbalNote: "No spoken answer captured (browser/mic) — not scored; flag for review.",
+        },
+      });
+      res.json({ data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } });
+      return;
+    }
+
     const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
     const scored = await scoreVerbalAnswer(
       question ?? "",
