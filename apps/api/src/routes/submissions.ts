@@ -6,6 +6,7 @@ import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff } from "../services/review.service";
 import { updateUserSkillScore } from "../services/score.service";
 import { reviewEvents } from "../lib/review-events";
+import { triggerHiddenTest } from "../lib/grader";
 
 const router = Router();
 
@@ -109,6 +110,13 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
       await reviewQueue.add("review-pr", jobData, { jobId: `review-${submission.id}` });
       console.log(`[submissions] Queued code review for submission ${submission.id} (PR #${prNumber})`);
+
+      // Fire the hidden-test grader (best-effort, non-blocking) — objective
+      // correctness check that runs the candidate's fix on a private CI runner.
+      void triggerHiddenTest({
+        repoOwner, repoName, branch: branchName!, ticketId, submissionId: submission.id,
+      });
+
       res.status(201).json({ data: submission });
     }
   } catch (err) {

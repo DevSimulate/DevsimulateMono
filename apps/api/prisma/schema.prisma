@@ -152,6 +152,7 @@ model Submission {
   scoreCommunication Int?
   scoreExecution     Int?
   claudeReview       Json?
+  graderResult       Json?               // hidden-test outcome from the CI grader: { ticketId, passed, at }
   riskScore          Int                 @default(0)
   pasteAttempts      Int                 @default(0)
   submittedAt        DateTime            @default(now())

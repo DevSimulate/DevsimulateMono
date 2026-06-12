@@ -16,6 +16,7 @@ import employerPortalRouter from "./routes/employer-portal";
 import githubRouter from "./routes/github";
 import waitlistRouter from "./routes/waitlist";
 import feedbackRouter from "./routes/feedback";
+import graderRouter from "./routes/grader";
 import { startReviewWorker } from "./lib/queue";
 
 const app = express();
@@ -80,6 +81,7 @@ app.use("/billing", billingRouter);
 app.use("/github", githubRouter);
 app.use("/waitlist", waitlistRouter);
 app.use("/feedback", feedbackRouter);
+app.use("/grader", graderRouter);
 app.use("/employer/campaigns", campaignsRouter);
 app.use("/employer", employerPortalRouter);
 app.use("/", employerDemoRouter);
