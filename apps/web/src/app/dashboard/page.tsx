@@ -94,6 +94,21 @@ function SubmissionCard({ submission }: { submission: Submission }) {
             <ScoreBar label="Execution (10)" value={submission.scoreExecution} max={10} />
           </div>
 
+          {(() => {
+            const g = (submission as { graderResult?: { result?: string } }).graderResult;
+            const m: Record<string, { bg: string; fg: string; text: string }> = {
+              pass:         { bg: "#CCFBF1", fg: "#0D9488", text: "✓ Verified correct under load — automated test passed" },
+              fail:         { bg: "#FEE2E2", fg: "#DC2626", text: "🚩 Failed automated correctness test — Execution capped to 0" },
+              inconclusive: { bg: "#FEF3C7", fg: "#D97706", text: "⚠ Automated test couldn't run (build issue) — flagged for review, score not penalised" },
+            };
+            const c = g?.result ? m[g.result] : undefined;
+            return c ? (
+              <div className="mb-3 text-xs font-semibold rounded-lg px-3 py-2" style={{ background: c.bg, color: c.fg }}>
+                {c.text}
+              </div>
+            ) : null;
+          })()}
+
           {review && (
             <div className="rounded-xl p-4 mb-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
               <p className="text-sm italic leading-relaxed mb-3" style={{ color: "#6B6B6B" }}>

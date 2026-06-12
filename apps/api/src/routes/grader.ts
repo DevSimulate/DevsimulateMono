@@ -17,11 +17,14 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { submissionId, ticketId, passed } = req.body as {
-    submissionId?: string;
-    ticketId?: string;
-    passed?: boolean;
-  };
+  const body = req.body as { submissionId?: string; ticketId?: string; result?: string; passed?: boolean };
+  const submissionId = body.submissionId;
+  // result: "pass" | "fail" | "inconclusive". Fall back to the old boolean shape.
+  const result: "pass" | "fail" | "inconclusive" =
+    body.result === "pass" || body.result === "fail" || body.result === "inconclusive"
+      ? body.result
+      : body.passed === true ? "pass" : body.passed === false ? "fail" : "inconclusive";
+
   if (!submissionId) {
     res.status(400).json({ error: "submissionId is required" });
     return;
@@ -33,14 +36,15 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
       scoreExecution?: number;
       scoreTotal?: number;
     } = {
-      graderResult: { ticketId: ticketId ?? null, passed: !!passed, at: new Date().toISOString() },
+      graderResult: { ticketId: body.ticketId ?? null, result, at: new Date().toISOString() },
     };
 
-    // A FAILED hidden test is objective proof the fix is broken. Zero out Execution
-    // (the correctness dimension) and cap the total into the fail band — which also
-    // forces the verdict to NO everywhere, since verdict is derived from the score.
-    // A PASS is the floor, not a reward: no bonus, just recorded + shown as verified.
-    if (passed === false) {
+    // ONLY a real test failure (compiled fine, but the fix didn't hold) is objective
+    // proof the code is broken — zero Execution and cap the total into the fail band,
+    // which also forces verdict NO (verdict derives from score). A "pass" is the floor
+    // (no bonus). "inconclusive" means it couldn't even compile (stale base / build
+    // error) — we do NOT penalise; it's flagged for a human instead.
+    if (result === "fail") {
       const sub = await prisma.submission.findUnique({
         where: { id: submissionId },
         select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true },
@@ -54,7 +58,7 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
     }
 
     await prisma.submission.update({ where: { id: submissionId }, data });
-    console.log(`[grader] result stored for ${submissionId}: passed=${!!passed}`);
+    console.log(`[grader] result stored for ${submissionId}: ${result}`);
     res.json({ ok: true });
   } catch (e) {
     console.error("[grader] failed to store result:", e instanceof Error ? e.message : e);
