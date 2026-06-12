@@ -582,10 +582,11 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
     if (!sub.followUp) { res.status(400).json({ error: "Complete the follow-up first" }); return; }
     const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
     if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
-    // No transcript captured (unsupported browser / mic denied) → don't penalise a
-    // technical issue. Record it as not-scored and flag for review instead.
+    // ONLY a genuinely empty transcript (unsupported browser / mic denied / silence)
+    // is "not captured" — don't penalise a technical issue. A real short answer like
+    // "I don't know" is a FAILING answer and must be scored, not skipped.
     const words = (transcript ?? "").trim().split(/\s+/).filter(Boolean);
-    if (words.length < 5) {
+    if (words.length <= 1) {
       await prisma.followUpQuestion.update({
         where: { id: sub.followUp.id },
         data: {

@@ -1061,18 +1061,22 @@ function SubmitPageInner() {
                   </div>
                 ) : null;
               })()}
-              {result.verbalNote && (
-                <div className="text-xs mb-3 rounded-lg px-3 py-2 text-left inline-block"
-                  style={{
-                    background: (result.verbalPenalty ?? 0) > 0 ? "#FEE2E2" : "#CCFBF1",
-                    color:      (result.verbalPenalty ?? 0) > 0 ? "#DC2626" : "#0D9488",
-                  }}>
-                  <span className="font-bold">Spoken explanation: </span>
-                  {(result.verbalPenalty ?? 0) > 0
-                    ? `couldn't fully back your written answer aloud (−${result.verbalPenalty} pts).`
-                    : "matched your written answer — understanding confirmed."}
-                </div>
-              )}
+              {result.verbalNote && (() => {
+                const penalised = (result.verbalPenalty ?? 0) > 0;
+                const notCaptured = result.verbalScore === null || result.verbalScore === undefined;
+                const bg = penalised ? "#FEE2E2" : notCaptured ? "#FEF3C7" : "#CCFBF1";
+                const fg = penalised ? "#DC2626" : notCaptured ? "#D97706" : "#0D9488";
+                const msg = penalised
+                  ? `couldn't back your written answer aloud (−${result.verbalPenalty} pts).`
+                  : notCaptured
+                    ? "no spoken answer captured — flagged for review."
+                    : "matched your written answer — understanding confirmed.";
+                return (
+                  <div className="text-xs mb-3 rounded-lg px-3 py-2 text-left inline-block" style={{ background: bg, color: fg }}>
+                    <span className="font-bold">Spoken explanation: </span>{msg}
+                  </div>
+                );
+              })()}
               {/* Honest label only. The follow-up is a probe, not proof — we cannot
                   assert "understanding verified" from text answers (a careful AI user
                   passes it too). Surface completion; leave the judgment to the reviewer. */}
