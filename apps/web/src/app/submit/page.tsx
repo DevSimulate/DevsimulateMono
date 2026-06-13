@@ -174,6 +174,7 @@ function SubmitPageInner() {
   const videoRef       = useRef<HTMLVideoElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
   const transcriptRef  = useRef<string>("");
+  const keepListeningRef = useRef<boolean>(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const verbalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -518,6 +519,7 @@ function SubmitPageInner() {
   }
 
   function stopVerbalMedia() {
+    keepListeningRef.current = false;
     if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     recognitionRef.current = null;
@@ -530,13 +532,16 @@ function SubmitPageInner() {
   // failed-capture retry can restart it. Only the transcript is sent.
   function startVerbalMedia() {
     setTranscript(""); transcriptRef.current = ""; setVerbalTimeLeft(VERBAL_SECONDS);
+    keepListeningRef.current = true;
 
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
+    // Camera self-view ONLY — audio:false so the mic stays free for Web Speech.
+    // (Requesting audio here grabs the mic and Web Speech then gets no audio.)
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: false })
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
       })
-      .catch(() => { /* no camera/mic permission — transcript may be empty */ });
+      .catch(() => { /* no camera permission — the transcript still works via Web Speech */ });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -551,7 +556,12 @@ function SubmitPageInner() {
         transcriptRef.current = t;
         setTranscript(t);
       };
-      rec.onerror = () => { /* ignore; e.g. no-speech */ };
+      // Web Speech stops itself on pauses / after ~60s — restart it so we keep
+      // capturing for the whole window.
+      rec.onend = () => {
+        if (keepListeningRef.current) { try { rec.start(); } catch { /* ignore */ } }
+      };
+      rec.onerror = () => { /* e.g. no-speech / network — onend will restart */ };
       try { rec.start(); } catch { /* already started */ }
       recognitionRef.current = rec;
     }
