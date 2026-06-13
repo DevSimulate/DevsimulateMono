@@ -164,8 +164,10 @@ function SubmitPageInner() {
   const [blurCount,    setBlurCount]    = useState(0);
   const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
-  // Verbal explanation step (camera on for presence; audio → Whisper → text)
+  // Verbal explanation step (camera on for presence; live text via Web Speech, or
+  // record→Whisper as a fallback when Web Speech isn't available)
   const [verbalQuestion, setVerbalQuestion] = useState("");
+  const [transcript,     setTranscript]     = useState("");
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(120);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
@@ -174,6 +176,11 @@ function SubmitPageInner() {
   const streamRef      = useRef<MediaStream | null>(null);
   const recorderRef    = useRef<MediaRecorder | null>(null);
   const chunksRef      = useRef<Blob[]>([]);
+  const transcriptRef  = useRef<string>("");
+  const useWhisperRef  = useRef<boolean>(false);   // true when Web Speech is unavailable
+  const keepListeningRef = useRef<boolean>(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const verbalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -516,7 +523,10 @@ function SubmitPageInner() {
   }
 
   function stopVerbalMedia() {
+    keepListeningRef.current = false;
     if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+    recognitionRef.current = null;
     try { if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop(); } catch { /* ignore */ }
     recorderRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -524,30 +534,53 @@ function SubmitPageInner() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  // Start camera self-view + record the mic (audio recorded, then sent to Whisper for
-  // transcription server-side). The video is shown but never uploaded.
+  // Live text via Web Speech (Chrome/Edge). When unavailable, record audio for Whisper.
   function startVerbalMedia() {
     setVerbalTimeLeft(VERBAL_SECONDS);
-    chunksRef.current = [];
+    setTranscript(""); transcriptRef.current = ""; chunksRef.current = [];
+    keepListeningRef.current = true;
 
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    useWhisperRef.current = !SR;
+
+    // Camera self-view. With Web Speech we need audio:false so the mic stays free for
+    // it; in the Whisper fallback we capture audio to record.
+    navigator.mediaDevices?.getUserMedia({ video: true, audio: useWhisperRef.current })
       .then((stream) => {
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
 
-        // Record ONLY the audio track (no video uploaded).
-        const audioStream = new MediaStream(stream.getAudioTracks());
-        let mime = "";
-        if (typeof MediaRecorder !== "undefined") {
-          if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
-          else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+        if (useWhisperRef.current) {
+          const audioStream = new MediaStream(stream.getAudioTracks());
+          let mime = "";
+          if (typeof MediaRecorder !== "undefined") {
+            if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+            else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+          }
+          const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
+          rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+          rec.start();
+          recorderRef.current = rec;
         }
-        const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
-        rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-        rec.start();
-        recorderRef.current = rec;
       })
-      .catch(() => { /* mic/camera denied — upload will be empty → asked to retry */ });
+      .catch(() => { /* permission denied — empty result → asked to retry */ });
+
+    // Web Speech: live transcript into the box.
+    if (SR) {
+      const rec = new SR();
+      rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (e: any) => {
+        let t = "";
+        for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
+        t = t.trim(); transcriptRef.current = t; setTranscript(t);
+      };
+      rec.onend = () => { if (keepListeningRef.current) { try { rec.start(); } catch { /* ignore */ } } };
+      rec.onerror = () => { /* onend will restart */ };
+      try { rec.start(); } catch { /* already started */ }
+      recognitionRef.current = rec;
+    }
 
     verbalTimerRef.current = setInterval(() => {
       setVerbalTimeLeft((s) => (s <= 1 ? 0 : s - 1));
@@ -571,19 +604,30 @@ function SubmitPageInner() {
     if (verbalBusy) return;
     setVerbalBusy(true);
 
-    const audio = await stopAndGetAudio();
+    // Capture before stopping media (Whisper path needs the recorded blob).
+    const audio = useWhisperRef.current ? await stopAndGetAudio() : null;
+    const spokenText = transcriptRef.current;
     stopVerbalMedia();
-    setScoringMsg("Transcribing your explanation…");
+    setScoringMsg(useWhisperRef.current ? "Transcribing your explanation…" : "Calculating your final score…");
     setStage("scoring"); // score is only finalised AFTER the spoken explanation
 
     const token = getToken();
     try {
-      const url = `${API_URL}/submissions/${submissionId}/verbal-audio?question=${encodeURIComponent(verbalQuestion)}`;
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": audio.type || "audio/webm" },
-        body: audio,
-      });
+      let r: Response;
+      if (useWhisperRef.current) {
+        const url = `${API_URL}/submissions/${submissionId}/verbal-audio?question=${encodeURIComponent(verbalQuestion)}`;
+        r = await fetch(url, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": audio?.type || "audio/webm" },
+          body: audio as Blob,
+        });
+      } else {
+        r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ question: verbalQuestion, transcript: spokenText }),
+        });
+      }
       const d = await r.json().catch(() => ({}));
 
       // The verbal step is REQUIRED. A failure (server/config error, or no speech
@@ -1025,10 +1069,14 @@ function SubmitPageInner() {
               </div>
             </div>
 
-            <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2 text-sm"
+            <div className="rounded-xl px-4 py-3 mb-2 flex items-center gap-2 text-xs"
               style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
-              <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: "#DC2626" }} />
-              Recording — speak your answer now. Click <span className="font-semibold">Submit</span> when done (or when the timer ends).
+              <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
+              Recording — speak now. Your words appear below.
+            </div>
+            <div className="rounded-xl px-4 py-3 mb-4 min-h-[72px] text-sm leading-relaxed"
+              style={{ background: "#F7F6F3", border: "1px solid #E4E2DD", color: transcript ? "#1A1A1A" : "#9CA3AF" }}>
+              {transcript || "Your transcript will appear here as you speak…"}
             </div>
 
             <button onClick={handleVerbalSubmit} disabled={verbalBusy}
