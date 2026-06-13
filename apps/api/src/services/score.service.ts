@@ -59,6 +59,27 @@ export async function updateUserSkillScore(
 }
 
 /**
+ * Recomputes the user's skill score from the FINAL scoreTotal of their reviewed
+ * submissions (newest-weighted EWMA). Idempotent — safe to call again after a
+ * deduction (verbal / hidden test) so the Skill Score reflects the adjusted score,
+ * not the pre-deduction one. Replaces the running update for post-deduction refreshes.
+ */
+export async function recomputeUserSkillScore(userId: string): Promise<void> {
+  const subs = await prisma.submission.findMany({
+    where: { userId, status: "REVIEWED" },
+    select: { scoreTotal: true },
+    orderBy: { submittedAt: "asc" },
+  });
+  if (subs.length === 0) return;
+
+  let s = subs[0].scoreTotal ?? 0;
+  for (let i = 1; i < subs.length; i++) {
+    s = Math.round(0.8 * s + 0.2 * (subs[i].scoreTotal ?? 0));
+  }
+  await prisma.user.update({ where: { id: userId }, data: { skillScore: s } });
+}
+
+/**
  * Calculates a risk score for a submission based on heuristics:
  * - Very short PR description (< 100 chars) = developer may not have read the ticket
  * - No mention of root cause in description = possible surface-level fix

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { verifyGraderSignature } from "../lib/grader";
+import { recomputeUserSkillScore } from "../services/score.service";
 
 const router = Router();
 
@@ -57,7 +58,10 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    await prisma.submission.update({ where: { id: submissionId }, data });
+    const updated = await prisma.submission.update({
+      where: { id: submissionId }, data, select: { userId: true },
+    });
+    if (result === "fail") await recomputeUserSkillScore(updated.userId); // reflect deduction
     console.log(`[grader] result stored for ${submissionId}: ${result}`);
     res.json({ ok: true });
   } catch (e) {

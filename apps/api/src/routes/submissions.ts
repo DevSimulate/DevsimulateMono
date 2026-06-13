@@ -5,7 +5,7 @@ import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer } from "../services/review.service";
-import { updateUserSkillScore } from "../services/score.service";
+import { recomputeUserSkillScore } from "../services/score.service";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
 
@@ -399,7 +399,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       where: { id: req.params.id },
       data: { scoreTotal: finalScore },
     });
-    await updateUserSkillScore(submission.userId, finalScore);
+    await recomputeUserSkillScore(submission.userId);
 
     const bonusNote =
       scored.declarationMismatch
@@ -622,6 +622,7 @@ async function processVerbal(
     where: { id: sub.followUp.id },
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
   });
+  await recomputeUserSkillScore(sub.userId); // reflect the verbal deduction in Skill Score
 
   return { status: 200, body: { data: { ...scored, penalty: verbalPenalty, newScoreTotal } } };
 }
