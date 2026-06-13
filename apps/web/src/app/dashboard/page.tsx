@@ -39,6 +39,8 @@ interface FollowUp {
   claudeFeedback: string | null;
   answeredAt: string | null;
   scoreBonus: number | null;
+  verbalScore: number | null;
+  verbalNote: string | null;
 }
 
 function SubmissionCard({ submission }: { submission: Submission }) {
@@ -107,6 +109,23 @@ function SubmissionCard({ submission }: { submission: Submission }) {
                 {c.text}
               </div>
             ) : null;
+          })()}
+
+          {/* Reconcile the breakdown (PR review) with the final score after deductions */}
+          {(() => {
+            const prBase = (submission.scoreDiagnosis ?? 0) + (submission.scoreDesign ?? 0) +
+                           (submission.scoreCommunication ?? 0) + (submission.scoreExecution ?? 0);
+            const gap = prBase - (submission.scoreTotal ?? 0);
+            if (gap <= 0) return null;
+            const vScore = followUp?.verbalScore;
+            const reason = vScore != null
+              ? (vScore <= 3 ? " — spoken explanation couldn't be defended aloud" : " — weak spoken explanation")
+              : "";
+            return (
+              <div className="mb-3 text-xs rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                <span className="font-bold">PR review {prBase} → final {submission.scoreTotal} (−{gap})</span>{reason}.
+              </div>
+            );
           })()}
 
           {review && (
