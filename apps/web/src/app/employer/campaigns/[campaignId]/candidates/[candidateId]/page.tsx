@@ -41,6 +41,8 @@ interface CandidateDetail {
       scoreCommunication: number | null;
       scoreExecution: number | null;
       claudeReview: ClaudeReview | null;
+      graderResult: { result?: string } | null;
+      pasteAttempts: number | null;
       submittedAt: string;
       ticket: { title: string; difficulty: string };
       followUp: {
@@ -49,6 +51,11 @@ interface CandidateDetail {
         aiDeclaration: AIDeclaration | null;
         claudeFeedback: string | null;
         scoreBonus: number | null;
+        verbalTranscript: string | null;
+        verbalScore: number | null;
+        verbalNote: string | null;
+        employerSummary: string | null;
+        declarationMismatch: boolean | null;
       } | null;
     } | null;
   };
@@ -156,6 +163,38 @@ export default function CandidateDetailPage() {
           </div>
         </div>
 
+        {/* Final-score reconciliation + automated test + integrity flags */}
+        {(() => {
+          const prBase = (s.scoreDiagnosis ?? 0) + (s.scoreDesign ?? 0) + (s.scoreCommunication ?? 0) + (s.scoreExecution ?? 0);
+          const gap = prBase - (s.scoreTotal ?? 0);
+          const g = s.graderResult?.result;
+          const gMap: Record<string, { bg: string; color: string; text: string }> = {
+            pass:         { bg: "#052e16", color: "#4ade80", text: "✓ Verified correct under load — hidden test passed" },
+            fail:         { bg: "#450a0a", color: "#f87171", text: "🚩 Failed hidden correctness test — Execution capped" },
+            inconclusive: { bg: "#422006", color: "#fbbf24", text: "⚠ Hidden test couldn't run — flagged for review" },
+          };
+          const gc = g ? gMap[g] : undefined;
+          const pastes = s.pasteAttempts ?? 0;
+          if (gap <= 0 && !gc && pastes === 0) return null;
+          return (
+            <div className="space-y-2">
+              {gap > 0 && (
+                <div className="rounded-lg px-4 py-2 text-xs" style={{ background: "#1a1305", color: "#fbbf24", border: "1px solid #422006" }}>
+                  <span className="font-bold">PR review {prBase} → final {s.scoreTotal} (−{gap})</span> after verification deductions (verbal / hidden test).
+                </div>
+              )}
+              {gc && (
+                <div className="rounded-lg px-4 py-2 text-xs font-semibold" style={{ background: gc.bg, color: gc.color }}>{gc.text}</div>
+              )}
+              {pastes > 0 && (
+                <div className="rounded-lg px-4 py-2 text-xs font-semibold" style={{ background: "#422006", color: "#fbbf24" }}>
+                  ⚠ {pastes} paste attempt{pastes > 1 ? "s" : ""} into answer fields (advisory)
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Time-on-task — tracked signal, not a hard gate */}
         {timing && (
           <div className="rounded-xl p-4 flex items-center gap-4" style={{ background: "#111111", border: "1px solid #222222" }}>
@@ -258,9 +297,40 @@ export default function CandidateDetailPage() {
               <div className="rounded-lg p-3" style={{ background: "#0d0d1a", border: "1px solid #2d2b55" }}>
                 <span className="text-xs font-bold" style={{ color: "#818cf8" }}>Assessment: </span>
                 <span className="text-xs" style={{ color: "#cccccc" }}>{fu.claudeFeedback}</span>
-                {fu.scoreBonus !== null && fu.scoreBonus > 0 && (
-                  <span className="ml-2 text-xs font-bold" style={{ color: "#4ade80" }}>+{fu.scoreBonus} pts</span>
-                )}
+              </div>
+            )}
+            {fu.employerSummary && (
+              <div className="rounded-lg p-3" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a" }}>
+                <span className="text-xs font-bold" style={{ color: "#fbbf24" }}>Verification note: </span>
+                <span className="text-xs" style={{ color: "#cccccc" }}>{fu.employerSummary}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Spoken explanation — verbal defense (the un-fakeable signal) */}
+        {(fu?.verbalNote || fu?.verbalTranscript) && (
+          <div className="rounded-xl p-5 space-y-3" style={{ background: "#111111", border: "1px solid #222222" }}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-widest" style={{ color: "#555" }}>Spoken Explanation — Verbal Defense</div>
+              {fu?.verbalScore != null && (
+                <span className="text-xs font-bold px-3 py-1 rounded-lg" style={{
+                  background: fu.verbalScore >= 7 ? "#052e16" : fu.verbalScore >= 4 ? "#422006" : "#450a0a",
+                  color:      fu.verbalScore >= 7 ? "#4ade80" : fu.verbalScore >= 4 ? "#fbbf24" : "#f87171",
+                }}>{fu.verbalScore}/10 verbal</span>
+              )}
+            </div>
+            {fu?.verbalNote && (
+              <div className="rounded-lg p-3 text-xs" style={{ background: "#0d0d1a", border: "1px solid #2d2b55", color: "#cccccc" }}>
+                <span className="font-bold" style={{ color: "#818cf8" }}>Verbal assessment: </span>{fu.verbalNote}
+              </div>
+            )}
+            {fu?.verbalTranscript && (
+              <div>
+                <div className="text-xs mb-1" style={{ color: "#666" }}>What they said aloud (transcribed):</div>
+                <p className="text-sm leading-relaxed rounded-lg p-3 whitespace-pre-wrap" style={{ background: "#0d0d0d", color: "#bbbbbb" }}>
+                  &ldquo;{fu.verbalTranscript}&rdquo;
+                </p>
               </div>
             )}
           </div>
