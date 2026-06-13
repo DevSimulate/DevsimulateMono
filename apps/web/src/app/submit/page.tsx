@@ -167,7 +167,6 @@ function SubmitPageInner() {
   // Verbal explanation step (camera on for presence; live text via Web Speech, or
   // record→Whisper as a fallback when Web Speech isn't available)
   const [verbalQuestion, setVerbalQuestion] = useState("");
-  const [transcript,     setTranscript]     = useState("");
   const [verbalReady,    setVerbalReady]    = useState(false); // true after camera+mic granted
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(120);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
@@ -177,11 +176,6 @@ function SubmitPageInner() {
   const streamRef      = useRef<MediaStream | null>(null);
   const recorderRef    = useRef<MediaRecorder | null>(null);
   const chunksRef      = useRef<Blob[]>([]);
-  const transcriptRef  = useRef<string>("");
-  const useWhisperRef  = useRef<boolean>(false);   // true when Web Speech is unavailable
-  const keepListeningRef = useRef<boolean>(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
   const verbalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -524,10 +518,7 @@ function SubmitPageInner() {
   }
 
   function stopVerbalMedia() {
-    keepListeningRef.current = false;
     if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
-    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
-    recognitionRef.current = null;
     try { if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop(); } catch { /* ignore */ }
     recorderRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -540,12 +531,7 @@ function SubmitPageInner() {
   // the candidate never speaks before the mic is live.
   async function beginVerbal() {
     setError(null);
-    setTranscript(""); transcriptRef.current = ""; chunksRef.current = [];
-    keepListeningRef.current = true;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    useWhisperRef.current = !SR;
+    chunksRef.current = [];
 
     // Ask for camera AND mic up front in one prompt.
     let stream: MediaStream;
@@ -558,35 +544,17 @@ function SubmitPageInner() {
     streamRef.current = stream;
     if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
 
-    if (useWhisperRef.current) {
-      // Whisper path: record the audio track.
-      const audioStream = new MediaStream(stream.getAudioTracks());
-      let mime = "";
-      if (typeof MediaRecorder !== "undefined") {
-        if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
-        else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
-      }
-      const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
-      rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-      rec.start();
-      recorderRef.current = rec;
-    } else {
-      // Web Speech path: free the mic (we already have permission) so Web Speech can
-      // use it without a conflict; keep the video track for the self-view.
-      stream.getAudioTracks().forEach((t) => t.stop());
-      const rec = new SR();
-      rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rec.onresult = (e: any) => {
-        let t = "";
-        for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
-        t = t.trim(); transcriptRef.current = t; setTranscript(t);
-      };
-      rec.onend = () => { if (keepListeningRef.current) { try { rec.start(); } catch { /* ignore */ } } };
-      rec.onerror = () => { /* onend will restart */ };
-      try { rec.start(); } catch { /* already started */ }
-      recognitionRef.current = rec;
+    // Record the audio track → sent to Whisper on submit (accurate, all browsers).
+    const audioStream = new MediaStream(stream.getAudioTracks());
+    let mime = "";
+    if (typeof MediaRecorder !== "undefined") {
+      if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+      else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
     }
+    const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
+    rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+    rec.start();
+    recorderRef.current = rec;
 
     setVerbalReady(true);
     setVerbalTimeLeft(VERBAL_SECONDS);
@@ -612,30 +580,19 @@ function SubmitPageInner() {
     if (verbalBusy) return;
     setVerbalBusy(true);
 
-    // Capture before stopping media (Whisper path needs the recorded blob).
-    const audio = useWhisperRef.current ? await stopAndGetAudio() : null;
-    const spokenText = transcriptRef.current;
+    const audio = await stopAndGetAudio();
     stopVerbalMedia();
-    setScoringMsg(useWhisperRef.current ? "Transcribing your explanation…" : "Calculating your final score…");
+    setScoringMsg("Transcribing your explanation…");
     setStage("scoring"); // score is only finalised AFTER the spoken explanation
 
     const token = getToken();
     try {
-      let r: Response;
-      if (useWhisperRef.current) {
-        const url = `${API_URL}/submissions/${submissionId}/verbal-audio?question=${encodeURIComponent(verbalQuestion)}`;
-        r = await fetch(url, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": audio?.type || "audio/webm" },
-          body: audio as Blob,
-        });
-      } else {
-        r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ question: verbalQuestion, transcript: spokenText }),
-        });
-      }
+      const url = `${API_URL}/submissions/${submissionId}/verbal-audio?question=${encodeURIComponent(verbalQuestion)}`;
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": audio.type || "audio/webm" },
+        body: audio,
+      });
       const d = await r.json().catch(() => ({}));
 
       // The verbal step is REQUIRED. A failure (server/config error, or no speech
@@ -1095,14 +1052,10 @@ function SubmitPageInner() {
                   </div>
                 </div>
 
-                <div className="rounded-xl px-4 py-3 mb-2 flex items-center gap-2 text-xs"
+                <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2 text-sm"
                   style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
                   <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
-                  Recording — speak now. Your words appear below.
-                </div>
-                <div className="rounded-xl px-4 py-3 mb-4 min-h-[72px] text-sm leading-relaxed"
-                  style={{ background: "#F7F6F3", border: "1px solid #E4E2DD", color: transcript ? "#1A1A1A" : "#9CA3AF" }}>
-                  {transcript || "Your transcript will appear here as you speak…"}
+                  Recording — speak your answer now. Click <span className="font-semibold">Submit</span> when done (it transcribes after you submit).
                 </div>
 
                 <button onClick={handleVerbalSubmit} disabled={verbalBusy}
