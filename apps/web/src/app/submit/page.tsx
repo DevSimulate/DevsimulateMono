@@ -168,6 +168,7 @@ function SubmitPageInner() {
   // record→Whisper as a fallback when Web Speech isn't available)
   const [verbalQuestion, setVerbalQuestion] = useState("");
   const [transcript,     setTranscript]     = useState("");
+  const [verbalReady,    setVerbalReady]    = useState(false); // true after camera+mic granted
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(120);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
@@ -534,9 +535,11 @@ function SubmitPageInner() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  // Live text via Web Speech (Chrome/Edge). When unavailable, record audio for Whisper.
-  function startVerbalMedia() {
-    setVerbalTimeLeft(VERBAL_SECONDS);
+  // Triggered by the "Start" button. Requests camera+mic permission FIRST (one
+  // combined prompt) and only starts the timer + recording AFTER it's granted — so
+  // the candidate never speaks before the mic is live.
+  async function beginVerbal() {
+    setError(null);
     setTranscript(""); transcriptRef.current = ""; chunksRef.current = [];
     keepListeningRef.current = true;
 
@@ -544,30 +547,33 @@ function SubmitPageInner() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     useWhisperRef.current = !SR;
 
-    // Camera self-view. With Web Speech we need audio:false so the mic stays free for
-    // it; in the Whisper fallback we capture audio to record.
-    navigator.mediaDevices?.getUserMedia({ video: true, audio: useWhisperRef.current })
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+    // Ask for camera AND mic up front in one prompt.
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch {
+      setError("Please allow camera and microphone access, then click Start.");
+      return;
+    }
+    streamRef.current = stream;
+    if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
 
-        if (useWhisperRef.current) {
-          const audioStream = new MediaStream(stream.getAudioTracks());
-          let mime = "";
-          if (typeof MediaRecorder !== "undefined") {
-            if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
-            else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
-          }
-          const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
-          rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
-          rec.start();
-          recorderRef.current = rec;
-        }
-      })
-      .catch(() => { /* permission denied — empty result → asked to retry */ });
-
-    // Web Speech: live transcript into the box.
-    if (SR) {
+    if (useWhisperRef.current) {
+      // Whisper path: record the audio track.
+      const audioStream = new MediaStream(stream.getAudioTracks());
+      let mime = "";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm")) mime = "audio/webm";
+        else if (MediaRecorder.isTypeSupported("audio/mp4")) mime = "audio/mp4";
+      }
+      const rec = mime ? new MediaRecorder(audioStream, { mimeType: mime }) : new MediaRecorder(audioStream);
+      rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.start();
+      recorderRef.current = rec;
+    } else {
+      // Web Speech path: free the mic (we already have permission) so Web Speech can
+      // use it without a conflict; keep the video track for the self-view.
+      stream.getAudioTracks().forEach((t) => t.stop());
       const rec = new SR();
       rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -582,6 +588,8 @@ function SubmitPageInner() {
       recognitionRef.current = rec;
     }
 
+    setVerbalReady(true);
+    setVerbalTimeLeft(VERBAL_SECONDS);
     verbalTimerRef.current = setInterval(() => {
       setVerbalTimeLeft((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
@@ -662,19 +670,20 @@ function SubmitPageInner() {
     setStage("score");
   }
 
-  // Start camera + live STT on entering the verbal stage.
+  // On entering the verbal stage, wait for the candidate to click Start (which asks
+  // for camera+mic) — don't auto-start, so the timer never runs during the prompt.
   useEffect(() => {
     if (stage !== "verbal") return;
-    startVerbalMedia();
+    setVerbalReady(false);
     return () => stopVerbalMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
-  // Auto-submit when the timer runs out.
+  // Auto-submit when the timer runs out (only once recording has started).
   useEffect(() => {
-    if (stage === "verbal" && verbalTimeLeft === 0 && !verbalBusy) handleVerbalSubmit();
+    if (stage === "verbal" && verbalReady && verbalTimeLeft === 0 && !verbalBusy) handleVerbalSubmit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verbalTimeLeft, stage]);
+  }, [verbalTimeLeft, stage, verbalReady]);
 
   const mins      = Math.floor(timeLeft / 60).toString().padStart(2, "0");
   const secs      = (timeLeft % 60).toString().padStart(2, "0");
@@ -1048,41 +1057,60 @@ function SubmitPageInner() {
           <div className="card rounded-2xl p-6 fade-in-up">
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-lg font-bold" style={{ color: "#1A1A1A" }}>Explain it out loud</h2>
-              <span className="text-sm font-mono font-bold rounded-full px-3 py-1"
-                style={{ background: verbalTimeLeft <= 20 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 20 ? "#DC2626" : "#4F46E5" }}>
-                {Math.floor(verbalTimeLeft / 60)}:{(verbalTimeLeft % 60).toString().padStart(2, "0")}
-              </span>
+              {verbalReady && (
+                <span className="text-sm font-mono font-bold rounded-full px-3 py-1"
+                  style={{ background: verbalTimeLeft <= 20 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 20 ? "#DC2626" : "#4F46E5" }}>
+                  {Math.floor(verbalTimeLeft / 60)}:{(verbalTimeLeft % 60).toString().padStart(2, "0")}
+                </span>
+              )}
             </div>
             <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
-              Your camera is on. Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept. <span className="font-semibold">Your score is finalised after this.</span>
+              Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept. <span className="font-semibold">Your score is finalised after this.</span>
             </p>
             {error && (
               <div className="text-xs mb-4 rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#D97706" }}>{error}</div>
             )}
 
-            <div className="flex gap-4 mb-4 items-start">
-              <video ref={videoRef} muted autoPlay playsInline
-                className="rounded-xl shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
-              <div className="flex-1 rounded-xl p-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-                <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Answer aloud</div>
-                <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
-              </div>
-            </div>
+            {!verbalReady ? (
+              <>
+                <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+                  <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>You'll answer aloud</div>
+                  <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
+                </div>
+                <div className="rounded-xl px-4 py-3 mb-4 text-xs" style={{ background: "#EEF2FF", color: "#4F46E5" }}>
+                  When you click Start, your browser will ask for <span className="font-semibold">camera &amp; microphone</span>. Allow both. The <span className="font-semibold">2-minute timer begins only after</span> you start — so take your time here, then speak.
+                </div>
+                <button onClick={beginVerbal} className="btn-primary w-full">
+                  Start — allow camera &amp; mic →
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex gap-4 mb-4 items-start">
+                  <video ref={videoRef} muted autoPlay playsInline
+                    className="rounded-xl shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
+                  <div className="flex-1 rounded-xl p-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+                    <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Answer aloud</div>
+                    <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
+                  </div>
+                </div>
 
-            <div className="rounded-xl px-4 py-3 mb-2 flex items-center gap-2 text-xs"
-              style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
-              <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
-              Recording — speak now. Your words appear below.
-            </div>
-            <div className="rounded-xl px-4 py-3 mb-4 min-h-[72px] text-sm leading-relaxed"
-              style={{ background: "#F7F6F3", border: "1px solid #E4E2DD", color: transcript ? "#1A1A1A" : "#9CA3AF" }}>
-              {transcript || "Your transcript will appear here as you speak…"}
-            </div>
+                <div className="rounded-xl px-4 py-3 mb-2 flex items-center gap-2 text-xs"
+                  style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
+                  <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
+                  Recording — speak now. Your words appear below.
+                </div>
+                <div className="rounded-xl px-4 py-3 mb-4 min-h-[72px] text-sm leading-relaxed"
+                  style={{ background: "#F7F6F3", border: "1px solid #E4E2DD", color: transcript ? "#1A1A1A" : "#9CA3AF" }}>
+                  {transcript || "Your transcript will appear here as you speak…"}
+                </div>
 
-            <button onClick={handleVerbalSubmit} disabled={verbalBusy}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed">
-              {verbalBusy ? "Submitting…" : "Submit explanation →"}
-            </button>
+                <button onClick={handleVerbalSubmit} disabled={verbalBusy}
+                  className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed">
+                  {verbalBusy ? "Submitting…" : "Submit explanation →"}
+                </button>
+              </>
+            )}
           </div>
         )}
 
