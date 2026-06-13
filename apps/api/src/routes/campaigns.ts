@@ -49,13 +49,18 @@ function isFlagged(
   return authScore < 50 && mismatch;
 }
 
-/** Advisory verdict combining skill + integrity WITHOUT merging into one number. */
-function verdict(total: number, authScore: number, flagged: boolean): "STRONG_YES" | "YES" | "MAYBE" | "NO" {
-  if (flagged || total < 50) return "NO";
-  if (total > 80 && authScore > 80) return "STRONG_YES";
-  if (total > 70 && authScore > 65) return "YES";
-  if (total > 60) return "MAYBE";
-  return "NO";
+/**
+ * Verdict from the FINAL score, which already bakes in the real signals: a hidden-test
+ * fail caps the score (≤45) and a weak verbal defence deducts from it. The crude
+ * authenticity heuristic (PR description length / completion speed) is ADVISORY ONLY and
+ * no longer caps the verdict — a strong, verified candidate is a STRONG_YES even if their
+ * PR description was terse or they finished fast.
+ */
+function verdict(total: number): "STRONG_YES" | "YES" | "MAYBE" | "NO" {
+  if (total < 50) return "NO";
+  if (total >= 80) return "STRONG_YES";
+  if (total >= 65) return "YES";
+  return "MAYBE"; // 50–64
 }
 
 /**
@@ -676,7 +681,7 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
         authScore,
         authBand: authBand(authScore),
         flagged,
-        verdict: verdict(total, authScore, flagged),
+        verdict: verdict(total),
         // Recommended is gated on NOT flagged — a flagged candidate is never
         // auto-recommended, but is never auto-hidden either.
         recommended: !flagged && total >= Math.max(top20Threshold, 70),
