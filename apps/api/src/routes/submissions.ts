@@ -1,4 +1,5 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, raw } from "express";
+import { transcribeAudio } from "../lib/whisper";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
@@ -569,63 +570,95 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
   }
 });
 
-/** POST /submissions/:id/verbal — body { question, transcript }; scores spoken vs written. */
+/**
+ * Shared verbal scoring: given a transcript (from Whisper or browser STT), compare
+ * it to the written answers + code via Claude and apply the graduated penalty.
+ */
+async function processVerbal(
+  submissionId: string,
+  userId: string,
+  question: string,
+  transcript: string
+): Promise<{ status: number; body: object }> {
+  const sub = await prisma.submission.findUnique({
+    where: { id: submissionId },
+    include: { followUp: true },
+  });
+  if (!sub || sub.userId !== userId) return { status: 404, body: { error: "Submission not found" } };
+  if (!sub.followUp) return { status: 400, body: { error: "Complete the follow-up first" } };
+  const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+  if (!m) return { status: 400, body: { error: "No valid PR on this submission" } };
+
+  // ONLY a genuinely empty transcript (mic denied / silence / STT failure) is "not
+  // captured" — don't penalise a technical issue. A real short answer like "I don't
+  // know" is a FAILING answer and must be scored, not skipped.
+  const words = (transcript ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length <= 1) {
+    await prisma.followUpQuestion.update({
+      where: { id: sub.followUp.id },
+      data: {
+        verbalTranscript: transcript ?? "",
+        verbalScore: null,
+        verbalNote: "No spoken answer captured — not scored; flag for review.",
+      },
+    });
+    return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
+  }
+
+  const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+  const scored = await scoreVerbalAnswer(
+    question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", diff
+  );
+
+  // Graduated penalty — fuzzier than the objective hidden test, so it deducts
+  // rather than hard-caps. >=7: no change. Can't defend it aloud / inconsistent: -20.
+  let verbalPenalty = 0;
+  if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
+  else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
+  const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
+
+  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal } });
+  await prisma.followUpQuestion.update({
+    where: { id: sub.followUp.id },
+    data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
+  });
+
+  return { status: 200, body: { data: { ...scored, penalty: verbalPenalty, newScoreTotal } } };
+}
+
+/** POST /submissions/:id/verbal — body { question, transcript } (browser STT). */
 router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
   const { question, transcript } = req.body as { question?: string; transcript?: string };
   try {
-    const sub = await prisma.submission.findUnique({
-      where: { id: req.params.id },
-      include: { followUp: true },
-    });
-    if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
-    if (!sub.followUp) { res.status(400).json({ error: "Complete the follow-up first" }); return; }
-    const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
-    if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
-    // ONLY a genuinely empty transcript (unsupported browser / mic denied / silence)
-    // is "not captured" — don't penalise a technical issue. A real short answer like
-    // "I don't know" is a FAILING answer and must be scored, not skipped.
-    const words = (transcript ?? "").trim().split(/\s+/).filter(Boolean);
-    if (words.length <= 1) {
-      await prisma.followUpQuestion.update({
-        where: { id: sub.followUp.id },
-        data: {
-          verbalTranscript: transcript ?? "",
-          verbalScore: null,
-          verbalNote: "No spoken answer captured (browser/mic) — not scored; flag for review.",
-        },
-      });
-      res.json({ data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } });
-      return;
-    }
-
-    const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
-    const scored = await scoreVerbalAnswer(
-      question ?? "",
-      transcript ?? "",
-      sub.followUp.answer1 ?? "",
-      sub.followUp.answer2 ?? "",
-      diff
-    );
-
-    // Graduated penalty — the verbal check is fuzzier than the objective hidden
-    // test, so it deducts rather than hard-caps. Confirms understanding (>=7): no
-    // change. Couldn't defend it aloud or contradicts the written answers: -20.
-    let verbalPenalty = 0;
-    if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
-    else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
-    const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
-
-    await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal } });
-    await prisma.followUpQuestion.update({
-      where: { id: sub.followUp.id },
-      data: { verbalTranscript: transcript ?? "", verbalScore: scored.score, verbalNote: scored.note },
-    });
-
-    res.json({ data: { ...scored, penalty: verbalPenalty, newScoreTotal } });
+    const r = await processVerbal(req.params.id, userId, question ?? "", transcript ?? "");
+    res.status(r.status).json(r.body);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to score verbal answer" });
   }
 });
+
+/**
+ * POST /submissions/:id/verbal-audio?question=... — raw audio body (audio/webm).
+ * Transcribes with Whisper, then runs the same scoring. Used when OPENAI_API_KEY is set.
+ */
+router.post(
+  "/:id/verbal-audio",
+  raw({ type: () => true, limit: "25mb" }),
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const question = (req.query.question as string) ?? "";
+    try {
+      const audio = req.body as Buffer;
+      if (!audio || !audio.length) { res.status(400).json({ error: "No audio received" }); return; }
+      const mime = (req.headers["content-type"] as string) || "audio/webm";
+      const transcript = await transcribeAudio(audio, mime);
+      const r = await processVerbal(req.params.id, userId, question, transcript);
+      res.status(r.status).json(r.body);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to transcribe/score audio" });
+    }
+  }
+);
 
 export default router;
