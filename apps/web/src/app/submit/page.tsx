@@ -167,8 +167,10 @@ function SubmitPageInner() {
   // Verbal explanation step (camera on for presence; only the transcript is kept)
   const [verbalQuestion, setVerbalQuestion] = useState("");
   const [transcript,     setTranscript]     = useState("");
-  const [verbalTimeLeft, setVerbalTimeLeft] = useState(90);
+  const [verbalTimeLeft, setVerbalTimeLeft] = useState(120);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
+  const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
+  const VERBAL_SECONDS = 120;
   const videoRef       = useRef<HTMLVideoElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
   const transcriptRef  = useRef<string>("");
@@ -463,6 +465,7 @@ function SubmitPageInner() {
     if (!answer2.trim() || !declaration || !submissionId) return;
     const token = getToken();
     if (!token) return;
+    setScoringMsg("Analysing your answers…");
     setStage("scoring");
 
     try {
@@ -523,42 +526,13 @@ function SubmitPageInner() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }
 
-  async function handleVerbalSubmit() {
-    if (verbalBusy) return;
-    setVerbalBusy(true);
-    stopVerbalMedia();
-    const token = getToken();
-    try {
-      const r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ question: verbalQuestion, transcript: transcriptRef.current }),
-      });
-      const d = await r.json();
-      if (r.ok && d.data) {
-        setResult((prev) => prev ? {
-          ...prev,
-          scoreTotal:   d.data.newScoreTotal ?? prev.scoreTotal,
-          verbalNote:   d.data.note,
-          verbalScore:  d.data.score,
-          verbalPenalty: d.data.penalty ?? 0,
-        } : prev);
-      }
-    } catch { /* best-effort */ }
-    setVerbalBusy(false);
-    setStage("score");
-  }
-
-  // Start camera (self-view, never uploaded) + live speech-to-text when entering the
-  // verbal stage. Only the transcript is sent; the audio/video never leave the browser.
-  useEffect(() => {
-    if (stage !== "verbal") return;
-    let cancelled = false;
-    setTranscript(""); transcriptRef.current = ""; setVerbalTimeLeft(90);
+  // Start camera (self-view, never uploaded) + live speech-to-text. Reusable so a
+  // failed-capture retry can restart it. Only the transcript is sent.
+  function startVerbalMedia() {
+    setTranscript(""); transcriptRef.current = ""; setVerbalTimeLeft(VERBAL_SECONDS);
 
     navigator.mediaDevices?.getUserMedia({ video: true, audio: true })
       .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
       })
@@ -585,12 +559,53 @@ function SubmitPageInner() {
     verbalTimerRef.current = setInterval(() => {
       setVerbalTimeLeft((s) => (s <= 1 ? 0 : s - 1));
     }, 1000);
+  }
 
-    return () => { cancelled = true; stopVerbalMedia(); };
+  async function handleVerbalSubmit() {
+    if (verbalBusy) return;
+    setVerbalBusy(true);
+    stopVerbalMedia();
+    setScoringMsg("Calculating your final score…");
+    setStage("scoring"); // the score is only finalised AFTER the spoken explanation
+    const token = getToken();
+    try {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ question: verbalQuestion, transcript: transcriptRef.current }),
+      });
+      const d = await r.json();
+      if (r.ok && d.data) {
+        // No spoken answer captured → do NOT finalise the score; make them explain again.
+        if (d.data.score === null || d.data.score === undefined) {
+          setVerbalBusy(false);
+          setError("We couldn't hear your spoken answer. Use Chrome or Edge, allow your microphone, and explain again — your score is finalised only after the explanation.");
+          setStage("verbal"); // the verbal effect restarts the camera + mic
+          return;
+        }
+        setResult((prev) => prev ? {
+          ...prev,
+          scoreTotal:    d.data.newScoreTotal ?? prev.scoreTotal,
+          verbalNote:    d.data.note,
+          verbalScore:   d.data.score,
+          verbalPenalty: d.data.penalty ?? 0,
+        } : prev);
+      }
+    } catch { /* best-effort */ }
+    setVerbalBusy(false);
+    setError(null);
+    setStage("score");
+  }
+
+  // Start camera + live STT on entering the verbal stage.
+  useEffect(() => {
+    if (stage !== "verbal") return;
+    startVerbalMedia();
+    return () => stopVerbalMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
-  // Auto-submit when the 90s runs out.
+  // Auto-submit when the timer runs out.
   useEffect(() => {
     if (stage === "verbal" && verbalTimeLeft === 0 && !verbalBusy) handleVerbalSubmit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -969,13 +984,16 @@ function SubmitPageInner() {
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-lg font-bold" style={{ color: "#1A1A1A" }}>Explain it out loud</h2>
               <span className="text-sm font-mono font-bold rounded-full px-3 py-1"
-                style={{ background: verbalTimeLeft <= 15 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 15 ? "#DC2626" : "#4F46E5" }}>
-                0:{verbalTimeLeft.toString().padStart(2, "0")}
+                style={{ background: verbalTimeLeft <= 20 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 20 ? "#DC2626" : "#4F46E5" }}>
+                {Math.floor(verbalTimeLeft / 60)}:{(verbalTimeLeft % 60).toString().padStart(2, "0")}
               </span>
             </div>
             <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
-              Your camera is on. Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept.
+              Your camera is on. Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept. <span className="font-semibold">Your score is finalised after this.</span>
             </p>
+            {error && (
+              <div className="text-xs mb-4 rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#D97706" }}>{error}</div>
+            )}
 
             <div className="flex gap-4 mb-4 items-start">
               <video ref={videoRef} muted autoPlay playsInline
@@ -1027,9 +1045,9 @@ function SubmitPageInner() {
         {stage === "scoring" && (
           <div className="card p-10 text-center fade-in-up">
             <div className="inline-block w-12 h-12 rounded-full border-4 border-[#0D9488] border-t-transparent animate-spin mb-5" />
-            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Calculating your score…</div>
+            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>{scoringMsg}</div>
             <div className="text-sm" style={{ color: "#6B6B6B" }}>
-              Combining PR review with your answers. Almost done.
+              Almost done.
             </div>
           </div>
         )}
