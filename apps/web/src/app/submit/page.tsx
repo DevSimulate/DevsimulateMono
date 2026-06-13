@@ -584,24 +584,35 @@ function SubmitPageInner() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": audio.type || "audio/webm" },
         body: audio,
       });
-      const d = await r.json();
-      if (r.ok && d.data) {
-        // No speech captured → do NOT finalise the score; make them explain again.
-        if (d.data.score === null || d.data.score === undefined) {
-          setVerbalBusy(false);
-          setError("We couldn't hear your spoken answer — check your microphone and explain again. Your score is finalised only after the explanation.");
-          setStage("verbal");
-          return;
-        }
-        setResult((prev) => prev ? {
-          ...prev,
-          scoreTotal:    d.data.newScoreTotal ?? prev.scoreTotal,
-          verbalNote:    d.data.note,
-          verbalScore:   d.data.score,
-          verbalPenalty: d.data.penalty ?? 0,
-        } : prev);
+      const d = await r.json().catch(() => ({}));
+
+      // The verbal step is REQUIRED. A failure (server/config error, or no speech
+      // captured) must NOT silently award the score — send them back to explain again.
+      if (!r.ok || !d.data) {
+        setVerbalBusy(false);
+        setError("Couldn't process your explanation — check your microphone and try again. Your score is finalised only after the spoken explanation.");
+        setStage("verbal");
+        return;
       }
-    } catch { /* best-effort */ }
+      if (d.data.score === null || d.data.score === undefined) {
+        setVerbalBusy(false);
+        setError("We couldn't hear your spoken answer — check your microphone and explain again.");
+        setStage("verbal");
+        return;
+      }
+      setResult((prev) => prev ? {
+        ...prev,
+        scoreTotal:    d.data.newScoreTotal ?? prev.scoreTotal,
+        verbalNote:    d.data.note,
+        verbalScore:   d.data.score,
+        verbalPenalty: d.data.penalty ?? 0,
+      } : prev);
+    } catch {
+      setVerbalBusy(false);
+      setError("Couldn't reach the server to process your explanation — please try again.");
+      setStage("verbal");
+      return;
+    }
     setVerbalBusy(false);
     setError(null);
     setStage("score");
