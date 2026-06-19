@@ -21,6 +21,7 @@ export async function saveReviewResult(
     data: {
       status: "REVIEWED",
       scoreTotal: review.scoreTotal,
+      scorePrBase: review.scoreTotal,
       scoreDiagnosis: review.scoreDiagnosis,
       scoreDesign: review.scoreDesign,
       scoreCommunication: review.scoreCommunication,

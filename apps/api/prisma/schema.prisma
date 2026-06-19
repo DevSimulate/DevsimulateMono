@@ -153,6 +153,9 @@ model Submission {
   scoreExecution     Int?
   claudeReview       Json?
   graderResult       Json?               // hidden-test outcome from the CI grader: { ticketId, passed, at }
+  scorePrBase        Int?                // raw Claude PR score before any deductions — never mutated after initial save
+  verbalPenalty      Int                 @default(0)
+  hiddenTestPenalty  Int                 @default(0)
   riskScore          Int                 @default(0)
   pasteAttempts      Int                 @default(0)
   submittedAt        DateTime            @default(now())

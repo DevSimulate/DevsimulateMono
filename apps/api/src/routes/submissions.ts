@@ -617,7 +617,7 @@ async function processVerbal(
   else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
   const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
 
-  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal } });
+  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal, verbalPenalty } });
   await prisma.followUpQuestion.update({
     where: { id: sub.followUp.id },
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },

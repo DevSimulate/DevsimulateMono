@@ -48,13 +48,15 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
     if (result === "fail") {
       const sub = await prisma.submission.findUnique({
         where: { id: submissionId },
-        select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true },
+        select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true, scoreTotal: true },
       });
       if (sub) {
         const withoutExecution =
           (sub.scoreDiagnosis ?? 0) + (sub.scoreDesign ?? 0) + (sub.scoreCommunication ?? 0);
+        const cappedTotal = Math.min(withoutExecution, 45);
         data.scoreExecution = 0;
-        data.scoreTotal = Math.min(withoutExecution, 45); // hard fail — broken code can't pass
+        data.scoreTotal = cappedTotal;
+        (data as any).hiddenTestPenalty = Math.max(0, (sub.scoreTotal ?? 0) - cappedTotal);
       }
     }
 

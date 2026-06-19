@@ -617,7 +617,8 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
               select: {
                 aiDeclaration: true, scoreBonus: true, declarationMismatch: true,
                 question1: true, question2: true, answer1: true, answer2: true,
-                claudeFeedback: true,
+                claudeFeedback: true, employerSummary: true,
+                verbalScore: true, verbalNote: true,
               },
             },
           },
@@ -685,6 +686,18 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
         // Recommended is gated on NOT flagged — a flagged candidate is never
         // auto-recommended, but is never auto-hidden either.
         recommended: !flagged && total >= Math.max(top20Threshold, 70),
+        // Score story — shows how the final score was derived
+        scorePrBase: c.submission?.scorePrBase ?? null,
+        scoreGap: c.submission?.scorePrBase != null ? c.submission.scorePrBase - total : null,
+        verbalPenalty: c.submission?.verbalPenalty ?? 0,
+        hiddenTestPenalty: c.submission?.hiddenTestPenalty ?? 0,
+        // Literacy signals surfaced inline so employer doesn't need to click in
+        verbalScore: c.submission?.followUp?.verbalScore ?? null,
+        verbalNote: c.submission?.followUp?.verbalNote ?? null,
+        diagnosisPct: c.submission?.scoreDiagnosis != null
+          ? Math.round((c.submission.scoreDiagnosis / 40) * 100)
+          : null,
+        employerSummary: c.submission?.followUp?.employerSummary ?? null,
       };
     });
 
@@ -882,27 +895,82 @@ router.get("/:id/export", async (req: Request, res: Response): Promise<void> => 
       include: {
         user: { select: { githubUsername: true, email: true } },
         submission: {
-          include: { followUp: { select: { aiDeclaration: true, scoreBonus: true } } },
+          include: {
+            followUp: {
+              select: {
+                aiDeclaration: true, scoreBonus: true,
+                declarationMismatch: true, employerSummary: true,
+                verbalScore: true, verbalNote: true,
+              },
+            },
+          },
         },
       },
       orderBy: { submission: { scoreTotal: "desc" } },
     });
 
+    // Fetch assignment timestamps for time-on-task column
+    const timingMap = new Map<string, number>();
+    for (const c of candidates) {
+      if (!c.submission) continue;
+      const assignment = await prisma.ticketAssignment.findFirst({
+        where: { userId: c.userId, ticketId: c.submission.ticketId },
+        select: { assignedAt: true },
+      });
+      if (assignment) {
+        timingMap.set(
+          c.submission.id,
+          Math.max(0, Math.round((c.submission.submittedAt.getTime() - assignment.assignedAt.getTime()) / 60000))
+        );
+      }
+    }
+
     const rows = [
-      ["Rank", "GitHub", "Email", "Total", "Diagnosis", "Design", "Communication", "Execution", "AI Declaration", "Status", "Submitted At"],
-      ...candidates.map((c, i) => [
-        i + 1,
-        c.user.githubUsername,
-        c.user.email ?? "",
-        c.submission?.scoreTotal ?? "",
-        c.submission?.scoreDiagnosis ?? "",
-        c.submission?.scoreDesign ?? "",
-        c.submission?.scoreCommunication ?? "",
-        c.submission?.scoreExecution ?? "",
-        c.submission?.followUp?.aiDeclaration ?? "",
-        c.status,
-        c.submission?.submittedAt ? new Date(c.submission.submittedAt).toISOString() : "",
-      ]),
+      [
+        "Rank", "GitHub", "Email",
+        "Final Score", "PR Base Score", "Score Gap",
+        "Verbal Penalty", "Hidden Test Penalty",
+        "Diagnosis", "Diagnosis %", "Design", "Communication", "Execution",
+        "Verbal Score", "Declaration Mismatch", "AI Declaration",
+        "Paste Attempts", "Minutes Taken", "Verdict", "Flagged",
+        "Employer Summary", "Status", "Submitted At",
+      ],
+      ...candidates.map((c, i) => {
+        const total = c.submission?.scoreTotal ?? 0;
+        const base = c.submission?.scorePrBase ?? null;
+        const gap = base != null ? base - total : "";
+        const auth = toAuthScore(c.submission?.riskScore ?? 0);
+        const mismatch = c.submission?.followUp?.declarationMismatch ?? false;
+        const pastes = c.submission?.pasteAttempts ?? 0;
+        const fast = false; // timing-based flag omitted in export for simplicity
+        const flaggedVal = isFlagged(auth, mismatch, pastes, fast);
+        const diag = c.submission?.scoreDiagnosis ?? null;
+        return [
+          i + 1,
+          c.user.githubUsername ?? "",
+          c.user.email ?? "",
+          total,
+          base ?? "",
+          gap,
+          c.submission?.verbalPenalty ?? 0,
+          c.submission?.hiddenTestPenalty ?? 0,
+          diag ?? "",
+          diag != null ? `${Math.round((diag / 40) * 100)}%` : "",
+          c.submission?.scoreDesign ?? "",
+          c.submission?.scoreCommunication ?? "",
+          c.submission?.scoreExecution ?? "",
+          c.submission?.followUp?.verbalScore ?? "",
+          mismatch ? "YES" : "NO",
+          c.submission?.followUp?.aiDeclaration ?? "",
+          pastes,
+          c.submission ? (timingMap.get(c.submission.id) ?? "") : "",
+          verdict(total),
+          flaggedVal ? "YES" : "NO",
+          `"${(c.submission?.followUp?.employerSummary ?? "").replace(/"/g, '""')}"`,
+          c.status,
+          c.submission?.submittedAt ? new Date(c.submission.submittedAt).toISOString() : "",
+        ];
+      }),
     ];
 
     const csv = rows.map((r) => r.join(",")).join("\n");
