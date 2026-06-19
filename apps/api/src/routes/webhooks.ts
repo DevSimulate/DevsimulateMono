@@ -4,6 +4,7 @@ import { reviewQueue } from "../lib/queue";
 import { GitHubPullRequestPayload, ReviewJobData } from "../types/index";
 import { calculateRiskScore } from "../services/score.service";
 import prisma from "../lib/prisma";
+import octokit from "../lib/github";
 
 const router = Router();
 
@@ -144,6 +145,34 @@ router.post(
       console.log(
         `[webhook] Queued review job for submission ${submission.id} (PR #${prNumber})`
       );
+
+      // Close the PR immediately so the candidate's code is never merged into
+      // the upstream codebase. Fire-and-forget — never block the 200 response.
+      void (async () => {
+        try {
+          await octokit.issues.createComment({
+            owner: repoOwner,
+            repo: repoName,
+            issue_number: prNumber,
+            body: [
+              "**DevSimulate — Submission Received ✓**",
+              "",
+              "Your code has been captured and is queued for review. This PR is being closed automatically to protect the shared codebase — your submission is safe and nothing is lost.",
+              "",
+              "You'll see your score and feedback in the VS Code sidebar once the review completes.",
+            ].join("\n"),
+          });
+          await octokit.pulls.update({
+            owner: repoOwner,
+            repo: repoName,
+            pull_number: prNumber,
+            state: "closed",
+          });
+          console.log(`[webhook] Closed PR #${prNumber} after capturing submission`);
+        } catch (err) {
+          console.warn(`[webhook] Could not close PR #${prNumber}:`, err instanceof Error ? err.message : err);
+        }
+      })();
 
       res.status(200).json({ message: "Webhook received, review queued" });
     } catch (err) {
