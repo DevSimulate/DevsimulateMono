@@ -367,3 +367,39 @@ export async function getRemoteUrl(): Promise<string | undefined> {
     return origin?.refs.fetch;
   } catch { return undefined; }
 }
+
+/**
+ * Schedules deletion of the candidate's local clone so no assessment code
+ * remains on their machine after they've pushed and opened a PR. The work is
+ * already safely on GitHub (fork + PR) at this point.
+ *
+ * Deleting the *currently open* workspace in-process fails on Windows because
+ * VS Code holds handles on `.git`, so we spawn a DETACHED OS process that waits
+ * a couple of seconds (for the caller to close the folder and release handles)
+ * and then force-removes the directory. As a safety guard it ONLY ever targets
+ * a path under ~/DevSimulate — the location cloneAndOpenCodebase clones into.
+ */
+export function scheduleLocalCloneWipe(): { scheduled: boolean; dir?: string } {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) return { scheduled: false };
+
+  const dir = path.resolve(folders[0].uri.fsPath);
+  const root = path.resolve(path.join(os.homedir(), "DevSimulate")) + path.sep;
+  if (!dir.startsWith(root)) return { scheduled: false, dir };
+
+  try {
+    const { spawn } = require("child_process") as typeof import("child_process");
+    if (process.platform === "win32") {
+      spawn("cmd.exe", ["/c", `timeout /t 2 /nobreak >nul & rmdir /s /q "${dir}"`], {
+        detached: true, stdio: "ignore", windowsHide: true,
+      }).unref();
+    } else {
+      spawn("/bin/sh", ["-c", `sleep 2; rm -rf "${dir}"`], {
+        detached: true, stdio: "ignore",
+      }).unref();
+    }
+    return { scheduled: true, dir };
+  } catch {
+    return { scheduled: false, dir };
+  }
+}

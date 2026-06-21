@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import axios from "axios";
 import { getToken, getApiUrl } from "../services/auth.service";
 import { getAssignedTickets } from "../services/ticket.service";
-import { getCurrentBranch, getRemoteUrl } from "../services/git.service";
+import { getCurrentBranch, getRemoteUrl, scheduleLocalCloneWipe } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
 
 const WEB_URL = "https://www.devsimulate.com";
@@ -29,6 +29,23 @@ async function findOpenPRs(
     }
   );
   return response.data.data ?? [];
+}
+
+/**
+ * After a successful submission (PR exists, code is pushed to the fork), remove
+ * the local copy of the codebase so no assessment code remains on the
+ * candidate's machine. Closing the folder lets the detached wipe process clean
+ * up the now-released directory.
+ */
+async function wipeLocalCodebaseAfterSubmit(): Promise<void> {
+  const res = scheduleLocalCloneWipe();
+  if (!res.scheduled) return;
+  await vscode.window.showInformationMessage(
+    "DevSimulate: Submitted. Your code is safely on GitHub — the local copy of the codebase will now be removed from this machine.",
+    "OK"
+  );
+  // Reloads the window and releases the folder; the detached process then deletes it.
+  await vscode.commands.executeCommand("workbench.action.closeFolder");
 }
 
 export async function submitCommand(
@@ -138,6 +155,7 @@ export async function submitCommand(
       const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}`;
       await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
       vscode.window.showInformationMessage("DevSimulate: Submission form opened in your browser.");
+      await wipeLocalCodebaseAfterSubmit();
       return;
     }
 
@@ -159,6 +177,7 @@ export async function submitCommand(
     vscode.window.showInformationMessage(
       `DevSimulate: Opening submission form for PR — describe your fix and get your score.`
     );
+    await wipeLocalCodebaseAfterSubmit();
   } catch (err) {
     const message = err instanceof Error ? err.message : "Submission failed";
     if (message === "Not authenticated") {
