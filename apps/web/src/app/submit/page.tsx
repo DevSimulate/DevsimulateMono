@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getToken, clearToken } from "@/lib/auth";
+import { getToken, storeToken, clearToken } from "@/lib/auth";
 import Logo from "@/components/Logo";
 import clsx from "clsx";
 
@@ -140,6 +140,11 @@ function SubmitPageInner() {
   const ticketId   = params.get("ticketId")   ?? "";
   const prUrl      = params.get("prUrl")      ?? "";
   const branchName = params.get("branchName") ?? "";
+
+  // When the extension opens this page it appends ?token=JWT so the session
+  // works regardless of which browser the OS picks as the default.
+  const urlToken = params.get("token");
+  if (urlToken) storeToken(urlToken);
 
   const [stage,        setStage]        = useState<Stage>("loading");
   const [ticket,       setTicket]       = useState<Ticket | null>(null);

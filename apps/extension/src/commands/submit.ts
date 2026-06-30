@@ -152,7 +152,7 @@ export async function submitCommand(
 
       if (!prUrl) return;
 
-      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}`;
+      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}&token=${encodeURIComponent(token)}`;
       await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
       vscode.window.showInformationMessage("DevSimulate: Submission form opened in your browser.");
       await wipeLocalCodebaseAfterSubmit();
@@ -170,7 +170,7 @@ export async function submitCommand(
       prUrl = choice.url;
     }
 
-    const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}`;
+    const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}&token=${encodeURIComponent(token)}`;
 
     await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
 
