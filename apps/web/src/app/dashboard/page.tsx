@@ -240,7 +240,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const token = getToken();
-    if (!token) { router.push("/"); return; }
+    if (!token) { router.push("/login"); return; }
 
     Promise.all([getMe(token), getSubmissions(token), getAssignments(token), getScoreHistory(token)])
       .then(([me, subs, assigns, hist]) => {
