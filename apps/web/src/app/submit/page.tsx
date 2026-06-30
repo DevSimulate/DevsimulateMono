@@ -160,7 +160,6 @@ function SubmitPageInner() {
   const [elapsed,      setElapsed]      = useState(0);
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
-  const [copyWarn,     setCopyWarn]     = useState(false);
   const [blurCount,    setBlurCount]    = useState(0);
   const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
@@ -191,13 +190,6 @@ function SubmitPageInner() {
     // setTimeout(() => setPasteWarn(false), 4000);
   }
 
-  // Blocks copying the question / problem text so candidates can't lift it into
-  // an external AI tool. Shows a warning when they try.
-  function handleQuestionCopy(e: React.ClipboardEvent<HTMLElement>) {
-    e.preventDefault();
-    setCopyWarn(true);
-    setTimeout(() => setCopyWarn(false), 4000);
-  }
 
   // Auth check + ticket fetch
   useEffect(() => {
@@ -781,19 +773,12 @@ function SubmitPageInner() {
               </span>
             </div>
 
-            {copyWarn && (
-              <div className="rounded-lg px-3 py-2 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Copying the problem is disabled. Read it here — copying it elsewhere is recorded and affects your score.
-              </div>
-            )}
 
             <div className="card p-6 relative overflow-hidden">
               <Watermark text={username} />
               <div className="relative" style={{ zIndex: 1 }}>
                 <div className="section-label mb-1">The Problem</div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap select-none"
-                  onCopy={handleQuestionCopy} style={{ color: "#6B6B6B" }}>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#6B6B6B" }}>
                   {ticket.description}
                 </div>
               </div>
@@ -890,14 +875,8 @@ function SubmitPageInner() {
 
             <div className="rounded-xl p-4 mb-2 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
               <Watermark text={username} />
-              <p className="text-sm font-semibold leading-relaxed select-none relative" style={{ color: "#1A1A1A", zIndex: 1 }} onCopy={handleQuestionCopy}>{question1}</p>
+              <p className="text-sm font-semibold leading-relaxed relative" style={{ color: "#1A1A1A", zIndex: 1 }}>{question1}</p>
             </div>
-            {copyWarn && (
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Copying the question is disabled — it affects your integrity score.
-              </div>
-            )}
             <div className="mb-3" />
 
             <textarea
@@ -955,14 +934,8 @@ function SubmitPageInner() {
 
             <div className="rounded-xl p-4 mb-5 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
               <Watermark text={username} />
-              <p className="text-sm font-semibold leading-relaxed select-none relative" style={{ color: "#1A1A1A", zIndex: 1 }} onCopy={handleQuestionCopy}>{question2}</p>
+              <p className="text-sm font-semibold leading-relaxed relative" style={{ color: "#1A1A1A", zIndex: 1 }}>{question2}</p>
             </div>
-            {copyWarn && (
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Copying the question is disabled — it affects your integrity score.
-              </div>
-            )}
 
             <textarea
               value={answer2}
