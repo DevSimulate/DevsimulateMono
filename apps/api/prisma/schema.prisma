@@ -188,16 +188,20 @@ model FollowUpQuestion {
 }
 
 model Organisation {
-  id        String      @id @default(uuid())
-  name      String
-  domain    String?
-  plan      OrgPlan     @default(HIRING)
-  stripeId  String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  members   OrgMember[]
-  jobPosts  JobPost[]
-  campaigns Campaign[]
+  id           String      @id @default(uuid())
+  name         String
+  domain       String?
+  plan         OrgPlan     @default(HIRING)
+  stripeId     String?
+  logoUrl      String?
+  primaryColor String?
+  accentColor  String?
+  brandName    String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  members      OrgMember[]
+  jobPosts     JobPost[]
+  campaigns    Campaign[]
 }
 
 model OrgMember {

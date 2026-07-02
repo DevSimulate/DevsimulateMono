@@ -98,7 +98,10 @@ router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> =>
   try {
     const campaign = await prisma.campaign.findUnique({
       where: { shareableSlug: req.params.slug },
-      include: { codebase: { select: { name: true, description: true } } },
+      include: {
+        codebase: { select: { name: true, description: true } },
+        org: { select: { logoUrl: true, primaryColor: true, accentColor: true, brandName: true } },
+      },
     });
     if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
       res.status(404).json({ error: "Campaign not found or closed" });
@@ -112,6 +115,12 @@ router.get("/apply/:slug", async (req: Request, res: Response): Promise<void> =>
         difficulty: campaign.difficulty,
         type: campaign.type,
         codebase: campaign.codebase,
+        branding: {
+          logoUrl:      campaign.org.logoUrl      ?? null,
+          primaryColor: campaign.org.primaryColor ?? "#5B5BD6",
+          accentColor:  campaign.org.accentColor  ?? "#5B5BD6",
+          brandName:    campaign.org.brandName    ?? campaign.companyName,
+        },
       },
     });
   } catch (err) {
@@ -128,7 +137,10 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
   try {
     const campaign = await prisma.campaign.findUnique({
       where: { shareableSlug: req.params.slug },
-      include: { codebase: { select: { name: true } } },
+      include: {
+        codebase: { select: { name: true } },
+        org: { select: { logoUrl: true, primaryColor: true, accentColor: true, brandName: true } },
+      },
     });
     if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
 
@@ -157,6 +169,12 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
         status: campaign.status,
         participants: scored.map((s, i) => ({ rank: i + 1, ...s })),
         totalJoined: rows.length,
+        branding: {
+          logoUrl:      campaign.org.logoUrl      ?? null,
+          primaryColor: campaign.org.primaryColor ?? "#5B5BD6",
+          accentColor:  campaign.org.accentColor  ?? "#5B5BD6",
+          brandName:    campaign.org.brandName    ?? campaign.companyName,
+        },
       },
     });
   } catch {

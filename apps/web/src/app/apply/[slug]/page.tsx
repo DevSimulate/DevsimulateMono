@@ -16,6 +16,13 @@ const GITHUB_AUTH_URL =
     (process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com") + "/auth/callback"
   )}`;
 
+interface Branding {
+  logoUrl:      string | null;
+  primaryColor: string;
+  accentColor:  string;
+  brandName:    string;
+}
+
 interface CampaignInfo {
   id: string;
   roleName: string;
@@ -23,6 +30,7 @@ interface CampaignInfo {
   difficulty: string;
   type?: "HIRING" | "CONTEST";
   codebase: { name: string; description: string };
+  branding: Branding;
 }
 
 interface AssignedTicket {
@@ -32,14 +40,23 @@ interface AssignedTicket {
   expectedMinutes: number;
 }
 
+const DEFAULT_BRANDING: Branding = {
+  logoUrl: null,
+  primaryColor: "#5B5BD6",
+  accentColor: "#5B5BD6",
+  brandName: "DevSimulate",
+};
+
 export default function ApplyPage() {
   const { slug } = useParams<{ slug: string }>();
   const [campaign, setCampaign] = useState<CampaignInfo | null>(null);
-  const [ticket, setTicket] = useState<AssignedTicket | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [authed, setAuthed] = useState(false);
+  const [ticket, setTicket]     = useState<AssignedTicket | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [joining, setJoining]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [authed, setAuthed]     = useState(false);
+
+  const branding: Branding = campaign?.branding ?? DEFAULT_BRANDING;
 
   useEffect(() => {
     setAuthed(!!getToken());
@@ -108,7 +125,7 @@ export default function ApplyPage() {
           </div>
           <a href="/dashboard"
             className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white"
-            style={{ background: "linear-gradient(135deg,#6366f1,#4f46e5)" }}>
+            style={{ background: branding.primaryColor }}>
             Go to Dashboard <ArrowRight size={15} />
           </a>
         </div>
@@ -121,12 +138,16 @@ export default function ApplyPage() {
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
       <div className="max-w-md w-full">
         <div className="rounded-2xl p-8" style={{ background: "#111111", border: "1px solid #222222" }}>
-          {/* Company logo placeholder + accepting badge */}
+          {/* Logo + status badge */}
           <div className="flex items-center justify-between mb-6">
-            <div className="w-16 h-16 rounded-xl flex items-center justify-center text-lg font-black"
-              style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
-              {campaign?.companyName?.slice(0, 4).toUpperCase()}
-            </div>
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.brandName} className="h-14 w-14 rounded-xl object-contain" style={{ background: "#1a1a1a" }} />
+            ) : (
+              <div className="w-16 h-16 rounded-xl flex items-center justify-center text-lg font-black"
+                style={{ background: branding.primaryColor + "22", border: `1px solid ${branding.primaryColor}44`, color: branding.primaryColor }}>
+                {campaign?.companyName?.slice(0, 4).toUpperCase()}
+              </div>
+            )}
             <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
               style={{ background: "#052e16", color: "#4ade80", border: "1px solid #166534" }}>
               <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#4ade80" }} />
@@ -135,7 +156,7 @@ export default function ApplyPage() {
           </div>
 
           <div className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-3"
-            style={{ background: "#1e1b4b", color: "#818cf8" }}>
+            style={{ background: branding.primaryColor + "22", color: branding.primaryColor }}>
             {campaign?.type === "CONTEST" ? `${campaign?.companyName} DevFest` : `${campaign?.companyName} is hiring`}
           </div>
 
@@ -144,7 +165,7 @@ export default function ApplyPage() {
             {campaign?.type === "CONTEST" ? (
               <>Solve a real coding challenge, get AI-scored, and climb the live leaderboard. Top of your stack wins.</>
             ) : (
-              <>Complete a real coding ticket. Claude AI scores your work and {campaign?.companyName} reviews top performers for interviews.</>
+              <>Complete a real coding ticket. An AI model scores your work and {campaign?.companyName} reviews top performers for interviews.</>
             )}
           </p>
 
@@ -171,7 +192,7 @@ export default function ApplyPage() {
           {authed ? (
             <button onClick={join} disabled={joining}
               className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#6366f1,#4f46e5)" }}>
+              style={{ background: branding.primaryColor }}>
               {joining ? "Assigning your ticket…" : <>Join Campaign <ArrowRight size={15} /></>}
             </button>
           ) : (

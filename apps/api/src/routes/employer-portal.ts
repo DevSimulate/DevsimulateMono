@@ -274,10 +274,14 @@ router.get("/settings", async (req: Request, res: Response): Promise<void> => {
     ]);
     res.json({
       data: {
-        orgName: org?.name ?? "",
-        domain: org?.domain ?? "",
-        plan: org?.plan ?? "HIRING",
-        tier: user?.subscriptionTier ?? "FREE",
+        orgName:      org?.name         ?? "",
+        domain:       org?.domain       ?? "",
+        logoUrl:      org?.logoUrl      ?? "",
+        primaryColor: org?.primaryColor ?? "",
+        accentColor:  org?.accentColor  ?? "",
+        brandName:    org?.brandName    ?? "",
+        plan:         org?.plan         ?? "HIRING",
+        tier:         user?.subscriptionTier ?? "FREE",
         memberCount,
         campaignCount,
         myRole: await getRole(userId, orgId),
@@ -290,7 +294,10 @@ router.get("/settings", async (req: Request, res: Response): Promise<void> => {
 
 router.patch("/settings", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { orgName, domain } = req.body as { orgName?: string; domain?: string };
+  const { orgName, domain, logoUrl, primaryColor, accentColor, brandName } = req.body as {
+    orgName?: string; domain?: string;
+    logoUrl?: string; primaryColor?: string; accentColor?: string; brandName?: string;
+  };
   try {
     const orgId = await getOrgId(userId);
     if (!orgId || (await getRole(userId, orgId)) !== OrgRole.ADMIN) {
@@ -299,7 +306,14 @@ router.patch("/settings", async (req: Request, res: Response): Promise<void> => 
     }
     await prisma.organisation.update({
       where: { id: orgId },
-      data: { ...(orgName ? { name: orgName } : {}), ...(domain !== undefined ? { domain } : {}) },
+      data: {
+        ...(orgName        ? { name: orgName }              : {}),
+        ...(domain         !== undefined ? { domain }       : {}),
+        ...(logoUrl        !== undefined ? { logoUrl }      : {}),
+        ...(primaryColor   !== undefined ? { primaryColor } : {}),
+        ...(accentColor    !== undefined ? { accentColor }  : {}),
+        ...(brandName      !== undefined ? { brandName }    : {}),
+      },
     });
     res.json({ data: { ok: true } });
   } catch {
