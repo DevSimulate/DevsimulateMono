@@ -4,7 +4,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
-import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer } from "../services/review.service";
+import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer, generateVerbalQuestionForDesign, scoreVerbalAnswerForDesign } from "../services/review.service";
 import { recomputeUserSkillScore } from "../services/score.service";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
@@ -560,10 +560,19 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
       include: { ticket: { include: { codebase: true } } },
     });
     if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
-    const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
-    if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
-    const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
-    const { question } = await generateVerbalQuestion(sub.ticket as never, diff);
+
+    let question: string;
+    if (sub.designDoc) {
+      const result = await generateVerbalQuestionForDesign(sub.ticket as never, sub.designDoc);
+      question = result.question;
+    } else {
+      const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+      if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+      const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+      const result = await generateVerbalQuestion(sub.ticket as never, diff);
+      question = result.question;
+    }
+
     res.json({ data: { question } });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to generate verbal question" });
@@ -586,8 +595,6 @@ async function processVerbal(
   });
   if (!sub || sub.userId !== userId) return { status: 404, body: { error: "Submission not found" } };
   if (!sub.followUp) return { status: 400, body: { error: "Complete the follow-up first" } };
-  const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
-  if (!m) return { status: 400, body: { error: "No valid PR on this submission" } };
 
   // ONLY a genuinely empty transcript (mic denied / silence / STT failure) is "not
   // captured" — don't penalise a technical issue. A real short answer like "I don't
@@ -605,10 +612,19 @@ async function processVerbal(
     return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
   }
 
-  const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
-  const scored = await scoreVerbalAnswer(
-    question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", diff
-  );
+  let scored: Awaited<ReturnType<typeof scoreVerbalAnswer>>;
+  if (sub.designDoc) {
+    scored = await scoreVerbalAnswerForDesign(
+      question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", sub.designDoc
+    );
+  } else {
+    const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+    if (!m) return { status: 400, body: { error: "No valid PR on this submission" } };
+    const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+    scored = await scoreVerbalAnswer(
+      question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", diff
+    );
+  }
 
   // Graduated penalty — fuzzier than the objective hidden test, so it deducts
   // rather than hard-caps. >=7: no change. Can't defend it aloud / inconsistent: -20.

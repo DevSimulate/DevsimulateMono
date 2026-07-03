@@ -622,3 +622,70 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   return JSON.parse(clean) as VerbalScoreResult;
 }
+
+/** System-design variant — uses the submitted design doc instead of a PR diff. */
+export async function generateVerbalQuestionForDesign(
+  ticket: TicketWithCodebase,
+  designDoc: string
+): Promise<{ question: string }> {
+  const prompt = `You are a senior engineering interviewer. The candidate will answer your question OUT LOUD on camera, in their own words, in 90 seconds — they cannot prepare or paste it.
+
+Ticket: ${ticket.title}
+Their submitted system design document:
+${designDoc.slice(0, 3000)}
+
+Generate ONE question that:
+- References a SPECIFIC architectural decision, trade-off, or component choice from THEIR design.
+- Asks WHY they chose it, "what would break if…", or "what did you consider before deciding" — never "what does it do".
+- Someone who genuinely authored the design can answer fluently in 1-2 sentences; someone who relayed AI output will be vague or contradict their written document.
+
+Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact design>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 256,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(clean) as { question: string };
+}
+
+/** System-design variant of scoreVerbalAnswer — uses design doc as context. */
+export async function scoreVerbalAnswerForDesign(
+  question: string,
+  transcript: string,
+  answer1: string,
+  answer2: string,
+  designDoc: string
+): Promise<VerbalScoreResult> {
+  const prompt = `Compare a candidate's SPOKEN answer (auto-transcribed — judge the CONTENT, ignore grammar/transcription errors) to their WRITTEN follow-up answers and their system design document. You are checking whether they genuinely understand their own design or relayed AI output they can't defend out loud.
+
+Question asked aloud: ${question}
+Spoken answer (transcribed): ${transcript || "(no speech captured)"}
+
+Their written answer 1: ${answer1}
+Their written answer 2: ${answer2}
+
+Their system design document:
+${designDoc.slice(0, 2500)}
+
+Score 0-10:
+- HIGH: the spoken explanation is specific to THIS design, first-person, consistent with their written answers and the actual document, and fluent.
+- LOW: vague, generic, contradicts their written answers or the design, or sounds read/scripted rather than understood.
+
+Set "consistent" to false if the spoken answer contradicts the written answers or the design document, or if no real explanation was given.
+
+Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 400,
+    messages: [{ role: "user", content: prompt }],
+  });
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  return JSON.parse(clean) as VerbalScoreResult;
+}
