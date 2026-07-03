@@ -35,6 +35,18 @@ function ScoreBar({ label, value, max }: { label: string; value: number | null; 
   );
 }
 
+interface CertSummary {
+  id:           string;
+  campaignName: string;
+  companyName:  string;
+  brandName:    string;
+  logoUrl:      string | null;
+  primaryColor: string;
+  score:        number;
+  rank:         number | null;
+  issuedAt:     string;
+}
+
 interface FollowUp {
   claudeFeedback: string | null;
   answeredAt: string | null;
@@ -226,11 +238,12 @@ function ProgressChart({ history }: { history: ScoreHistoryPoint[] }) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user,        setUser]        = useState<User | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [assignments, setAssignments] = useState<TicketAssignment[]>([]);
-  const [history, setHistory] = useState<ScoreHistoryPoint[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [history,     setHistory]     = useState<ScoreHistoryPoint[]>([]);
+  const [certs,       setCerts]       = useState<CertSummary[]>([]);
+  const [loading,     setLoading]     = useState(true);
   const [ticketsHref, setTicketsHref] = useState("/tickets");
 
   useEffect(() => {
@@ -242,12 +255,17 @@ export default function DashboardPage() {
     const token = getToken();
     if (!token) { router.push("/login"); return; }
 
-    Promise.all([getMe(token), getSubmissions(token), getAssignments(token), getScoreHistory(token)])
-      .then(([me, subs, assigns, hist]) => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    const certsPromise = fetch(`${API_URL}/certificates/mine`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then((j) => j.data ?? []).catch(() => []);
+
+    Promise.all([getMe(token), getSubmissions(token), getAssignments(token), getScoreHistory(token), certsPromise])
+      .then(([me, subs, assigns, hist, certList]) => {
         setUser(me);
         setSubmissions(subs);
         setAssignments(assigns);
         setHistory(hist);
+        setCerts(certList);
       })
       .catch(() => { clearToken(); router.push("/"); })
       .finally(() => setLoading(false));
@@ -444,6 +462,46 @@ export default function DashboardPage() {
             )}
           </div>
         </section>
+
+        {/* ── Certificates ── */}
+        {certs.length > 0 && (
+          <section className="mb-10">
+            <div className="section-label">My Certificates</div>
+            <div className="space-y-3">
+              {certs.map((cert) => (
+                <div key={cert.id} className="card p-4 flex items-center gap-4">
+                  {cert.logoUrl ? (
+                    <img src={cert.logoUrl} alt={cert.brandName} className="h-10 w-10 rounded-lg object-contain shrink-0"
+                      style={{ background: "#f3f4f6", padding: "4px" }} />
+                  ) : (
+                    <div className="h-10 w-10 rounded-lg flex items-center justify-center text-xs font-black shrink-0"
+                      style={{ background: cert.primaryColor + "22", color: cert.primaryColor }}>
+                      {cert.brandName.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate" style={{ color: "#1A1A1A" }}>
+                      {cert.brandName} — {cert.campaignName}
+                    </div>
+                    <div className="text-xs" style={{ color: "#6B6B6B" }}>
+                      Score: <span className="font-bold" style={{ color: cert.primaryColor }}>{cert.score}</span>
+                      {cert.rank ? ` · Rank #${cert.rank}` : ""}
+                      {" · "}{format(new Date(cert.issuedAt), "MMM yyyy")}
+                    </div>
+                  </div>
+                  <Link
+                    href={`/certificate/${cert.id}`}
+                    target="_blank"
+                    className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors"
+                    style={{ background: cert.primaryColor, color: "white" }}
+                  >
+                    View Certificate
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Submission History ── */}
         <section>

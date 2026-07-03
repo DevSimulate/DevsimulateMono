@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import {
-  ArrowLeft, Download, Mail, Check, X, ExternalLink, Star, CheckCircle2,
+  ArrowLeft, Download, Mail, Check, X, ExternalLink, Star, CheckCircle2, Award,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -76,8 +76,10 @@ export default function ResultsPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteResult, setInviteResult] = useState<string | null>(null);
+  const [showInvite,    setShowInvite]    = useState(false);
+  const [inviteResult,  setInviteResult]  = useState<string | null>(null);
+  const [certIssuing,   setCertIssuing]   = useState(false);
+  const [certResult,    setCertResult]    = useState<string | null>(null);
 
   // Filters
   const [minScore, setMinScore] = useState(0);
@@ -176,6 +178,23 @@ export default function ResultsPage() {
     setTimeout(() => setInviteResult(null), 6000);
   }
 
+  async function issueCertificates() {
+    setCertIssuing(true);
+    const token = getToken();
+    try {
+      const r = await fetch(`${API}/certificates/employer/campaigns/${campaignId}/certificates`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ minScore: 0 }),
+      });
+      const j = await r.json();
+      setCertResult(`${j.data?.issued ?? 0} certificates issued`);
+      setTimeout(() => setCertResult(null), 5000);
+    } finally {
+      setCertIssuing(false);
+    }
+  }
+
   function exportCsv() {
     const token = getToken();
     fetch(`${API}/employer/campaigns/${campaignId}/export`, { headers: { Authorization: `Bearer ${token}` } })
@@ -207,12 +226,25 @@ export default function ResultsPage() {
           title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
           <Star size={14} /> Select Top Picks
         </button>
+        <button onClick={issueCertificates} disabled={certIssuing}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: "#b45309" }}
+          title="Issue e-certificates to all reviewed candidates">
+          <Award size={14} /> {certIssuing ? "Issuing…" : "Issue Certificates"}
+        </button>
         <button onClick={exportCsv}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
           style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
           <Download size={14} /> Export CSV
         </button>
       </header>
+
+      {certResult && (
+        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
+          style={{ background: "#451a03", color: "#fbbf24", borderBottom: "1px solid #92400e" }}>
+          <Award size={15} /> {certResult} — candidates can now view and share their certificates
+        </div>
+      )}
 
       {inviteResult && (
         <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"

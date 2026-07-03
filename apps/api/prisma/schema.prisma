@@ -62,6 +62,7 @@ model User {
   orgMemberships      OrgMember[]
   applications        Application[]
   campaignCandidates  CampaignCandidate[]
+  certificates        Certificate[]
 }
 
 model Codebase {
@@ -290,6 +291,7 @@ model Campaign {
   org            Organisation        @relation(fields: [orgId], references: [id])
   codebase       Codebase            @relation(fields: [codebaseId], references: [id])
   candidates     CampaignCandidate[]
+  certificates   Certificate[]
 }
 
 model CampaignCandidate {
@@ -311,6 +313,19 @@ model CampaignCandidate {
 // Append-only audit trail of employer decisions. Proves human-in-the-loop:
 // every status change records who made it, when, and whether the candidate
 // was integrity-flagged at the moment of the decision.
+model Certificate {
+  id         String       @id @default(cuid())
+  userId     String
+  campaignId String
+  score      Int
+  rank       Int?
+  issuedAt   DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id])
+  campaign   Campaign     @relation(fields: [campaignId], references: [id])
+
+  @@unique([userId, campaignId])
+}
+
 model CandidateDecision {
   id          String            @id @default(cuid())
   candidateId String
