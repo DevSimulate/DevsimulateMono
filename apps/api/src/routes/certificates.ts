@@ -64,7 +64,7 @@ router.post(
     try {
       const campaign = await prisma.campaign.findUnique({
         where: { id: campaignId },
-        select: { orgId: true },
+        select: { orgId: true, codebaseId: true },
       });
       if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
 
@@ -73,20 +73,37 @@ router.post(
 
       const candidates = await prisma.campaignCandidate.findMany({
         where: { campaignId },
-        include: { submission: { select: { scoreTotal: true, status: true } } },
+        select: { userId: true },
       });
 
-      const eligible = candidates
-        .filter((c) => c.submission?.status === "REVIEWED" && (c.submission.scoreTotal ?? 0) >= minScore)
-        .sort((a, b) => (b.submission?.scoreTotal ?? 0) - (a.submission?.scoreTotal ?? 0));
+      // CampaignCandidate.submissionId is not always set (submissions are linked by
+      // userId + codebase, not by a FK). Mirror the same lookup the results page uses.
+      const withScores = await Promise.all(
+        candidates.map(async (c) => {
+          const sub = await prisma.submission.findFirst({
+            where: {
+              userId: c.userId,
+              status: "REVIEWED",
+              ticket: { codebaseId: campaign.codebaseId },
+            },
+            orderBy: { scoreTotal: "desc" },
+            select: { scoreTotal: true },
+          });
+          return { userId: c.userId, scoreTotal: sub?.scoreTotal ?? null };
+        })
+      );
+
+      const eligible = withScores
+        .filter((c) => c.scoreTotal != null && (c.scoreTotal ?? 0) >= minScore)
+        .sort((a, b) => (b.scoreTotal ?? 0) - (a.scoreTotal ?? 0));
 
       let issued = 0;
       for (let i = 0; i < eligible.length; i++) {
         const c = eligible[i];
         await prisma.certificate.upsert({
           where: { userId_campaignId: { userId: c.userId, campaignId } },
-          create: { userId: c.userId, campaignId, score: c.submission?.scoreTotal ?? 0, rank: i + 1 },
-          update: { score: c.submission?.scoreTotal ?? 0, rank: i + 1 },
+          create: { userId: c.userId, campaignId, score: c.scoreTotal ?? 0, rank: i + 1 },
+          update: { score: c.scoreTotal ?? 0, rank: i + 1 },
         });
         issued++;
       }

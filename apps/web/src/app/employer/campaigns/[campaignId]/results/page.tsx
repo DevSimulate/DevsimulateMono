@@ -339,7 +339,7 @@ export default function ResultsPage() {
                           <div className="flex items-center gap-2">
                             <div>
                               <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                                {c.user.githubUsername}
+                                {c.user.githubUsername || c.user.email || "—"}
                                 {c.recommended && (
                                   <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full"
                                     style={{ background: "#052e16", color: "#4ade80" }}>
@@ -347,7 +347,6 @@ export default function ResultsPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="text-xs" style={{ color: "#555555" }}>{c.user.email ?? "—"}</div>
                             </div>
                           </div>
                         </td>
