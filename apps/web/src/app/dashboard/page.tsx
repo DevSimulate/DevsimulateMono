@@ -493,10 +493,15 @@ export default function DashboardPage() {
                     href={`/certificate/${cert.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors"
-                    style={{ background: cert.primaryColor, color: "white" }}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "6px",
+                      flexShrink: 0, padding: "8px 16px", borderRadius: "8px",
+                      fontSize: "12px", fontWeight: 700, textDecoration: "none",
+                      background: cert.primaryColor || "#5B5BD6", color: "white",
+                      whiteSpace: "nowrap",
+                    }}
                   >
-                    View Certificate
+                    🏅 View Certificate
                   </a>
                 </div>
               ))}
