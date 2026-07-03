@@ -489,14 +489,15 @@ export default function DashboardPage() {
                       {" · "}{format(new Date(cert.issuedAt), "MMM yyyy")}
                     </div>
                   </div>
-                  <Link
+                  <a
                     href={`/certificate/${cert.id}`}
                     target="_blank"
+                    rel="noopener noreferrer"
                     className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-colors"
                     style={{ background: cert.primaryColor, color: "white" }}
                   >
                     View Certificate
-                  </Link>
+                  </a>
                 </div>
               ))}
             </div>

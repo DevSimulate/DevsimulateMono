@@ -25,15 +25,22 @@ interface CertData {
 
 export default function CertificatePage() {
   const { id }              = useParams<{ id: string }>();
-  const [cert, setCert]     = useState<CertData | null>(null);
+  const [cert, setCert]       = useState<CertData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
   const [copied,  setCopied]  = useState(false);
 
   useEffect(() => {
     fetch(`${API}/certificates/${id}`)
       .then((r) => r.json())
-      .then((j) => { if (j.data) setCert(j.data); })
-      .catch(() => null)
+      .then((j) => {
+        if (j.data) {
+          setCert(j.data);
+        } else {
+          setError(j.error ?? "Certificate not found");
+        }
+      })
+      .catch((err) => setError(err?.message ?? "Failed to load certificate"))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -47,8 +54,9 @@ export default function CertificatePage() {
 
   if (!cert) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f0e8", fontFamily: "Georgia, serif", color: "#888" }}>
-        Certificate not found.
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", background: "#f5f0e8", fontFamily: "Georgia, serif", color: "#888" }}>
+        <div>{error ?? "Certificate not found."}</div>
+        {error && <div style={{ fontSize: "12px", color: "#bbb" }}>ID: {id}</div>}
       </div>
     );
   }
