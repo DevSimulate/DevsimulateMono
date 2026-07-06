@@ -19,7 +19,7 @@ interface CertData {
     logoUrl:      string | null;
     primaryColor: string;
     accentColor:  string;
-    brandName:    string;
+    brandName:    string | null;
   };
 }
 
@@ -61,7 +61,10 @@ export default function CertificatePage() {
     );
   }
 
-  const { branding } = cert;
+  const branding = {
+    ...cert.branding,
+    brandName: cert.branding.brandName || cert.companyName || "DevSimulate",
+  };
   const navy    = "#1B2A4A";
   const gold    = "#C5963A";
   const certUrl = `${APP_URL}/certificate/${cert.id}`;

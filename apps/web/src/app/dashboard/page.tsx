@@ -481,7 +481,7 @@ export default function DashboardPage() {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-bold text-sm truncate" style={{ color: "#1A1A1A" }}>
-                      {cert.brandName} — {cert.campaignName}
+                      {cert.brandName || cert.companyName} — {cert.campaignName}
                     </div>
                     <div className="text-xs" style={{ color: "#6B6B6B" }}>
                       Score: <span className="font-bold" style={{ color: cert.primaryColor }}>{cert.score}</span>

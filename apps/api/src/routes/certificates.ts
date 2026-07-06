@@ -34,7 +34,7 @@ router.get(
           id:           c.id,
           campaignName: c.campaign.roleName,
           companyName:  c.campaign.companyName,
-          brandName:    c.campaign.org.brandName ?? c.campaign.companyName,
+          brandName:    c.campaign.org.brandName || c.campaign.companyName,
           logoUrl:      c.campaign.org.logoUrl ?? null,
           primaryColor: c.campaign.org.primaryColor ?? "#5B5BD6",
           score:        c.score,
@@ -146,10 +146,10 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         rank:           cert.rank,
         issuedAt:       cert.issuedAt,
         branding: {
-          logoUrl:      cert.campaign.org.logoUrl      ?? null,
-          primaryColor: cert.campaign.org.primaryColor ?? "#5B5BD6",
-          accentColor:  cert.campaign.org.accentColor  ?? "#E8762B",
-          brandName:    cert.campaign.org.brandName    ?? cert.campaign.companyName,
+          logoUrl:      cert.campaign.org.logoUrl      || null,
+          primaryColor: cert.campaign.org.primaryColor || "#5B5BD6",
+          accentColor:  cert.campaign.org.accentColor  || "#E8762B",
+          brandName:    cert.campaign.org.brandName    || cert.campaign.companyName,
         },
       },
     });
