@@ -59,6 +59,7 @@ interface Candidate {
     scoreDesign: number | null;
     scoreCommunication: number | null;
     scoreExecution: number | null;
+    verbalPenalty: number | null;
     followUp: { aiDeclaration: AIDeclaration | null } | null;
   } | null;
 }
@@ -312,7 +313,7 @@ export default function ResultsPage() {
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
                         onChange={toggleAll} style={{ accentColor: "#6366f1" }} />
                     </th>
-                    {["#", "Candidate", "Total", "Diag", "Design", "Comms", "Exec", "Authenticity", "Verdict", "AI", "Status", ""].map((h) => (
+                    {["#", "Candidate", "Total", "Diag", "Design", "Comms", "Exec", "Verbal", "Authenticity", "Verdict", "AI", "Status", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider"
                         style={{ color: "#444444" }}>{h}</th>
                     ))}
@@ -359,6 +360,13 @@ export default function ResultsPage() {
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreDesign ?? "—"}</td>
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreCommunication ?? "—"}</td>
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreExecution ?? "—"}</td>
+                        <td className="px-3 py-3 text-xs font-bold">
+                          {(s?.verbalPenalty ?? 0) > 0
+                            ? <span style={{ color: "#f87171" }}>−{s?.verbalPenalty}</span>
+                            : s?.scoreTotal != null
+                              ? <span style={{ color: "#4ade80" }}>✓</span>
+                              : <span style={{ color: "#444" }}>—</span>}
+                        </td>
                         {/* Authenticity — advisory chip, never changes rank */}
                         <td className="px-3 py-3">
                           <span className="inline-flex items-center gap-1 text-xs font-semibold">

@@ -149,14 +149,29 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
       include: { user: { select: { githubUsername: true } } },
     });
 
-    const scored: Array<{ githubUsername: string; score: number }> = [];
+    const scored: Array<{
+      githubUsername: string; score: number;
+      diag: number | null; design: number | null; comms: number | null; exec: number | null;
+      verbalPenalty: number;
+    }> = [];
     for (const c of rows) {
       const sub = await prisma.submission.findFirst({
         where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
         orderBy: { scoreTotal: "desc" },
-        select: { scoreTotal: true },
+        select: {
+          scoreTotal: true, scoreDiagnosis: true, scoreDesign: true,
+          scoreCommunication: true, scoreExecution: true, verbalPenalty: true,
+        },
       });
-      if (sub) scored.push({ githubUsername: c.user.githubUsername ?? "unknown", score: sub.scoreTotal ?? 0 });
+      if (sub) scored.push({
+        githubUsername: c.user.githubUsername ?? "unknown",
+        score:         sub.scoreTotal      ?? 0,
+        diag:          sub.scoreDiagnosis  ?? null,
+        design:        sub.scoreDesign     ?? null,
+        comms:         sub.scoreCommunication ?? null,
+        exec:          sub.scoreExecution  ?? null,
+        verbalPenalty: sub.verbalPenalty   ?? 0,
+      });
     }
     scored.sort((a, b) => b.score - a.score);
 

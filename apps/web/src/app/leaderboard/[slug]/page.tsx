@@ -13,13 +13,24 @@ interface Branding {
   brandName:    string;
 }
 
+interface Participant {
+  rank:          number;
+  githubUsername: string;
+  score:         number;
+  diag:          number | null;
+  design:        number | null;
+  comms:         number | null;
+  exec:          number | null;
+  verbalPenalty: number;
+}
+
 interface Board {
   campaignName: string;
   companyName:  string;
   codebase:     string;
   type:         "HIRING" | "CONTEST";
   status:       string;
-  participants: Array<{ rank: number; githubUsername: string; score: number }>;
+  participants: Participant[];
   totalJoined:  number;
   branding:     Branding;
 }
@@ -88,7 +99,7 @@ export default function CampaignLeaderboardPage() {
       </header>
 
       {/* Board */}
-      <main className="max-w-2xl mx-auto px-6 py-10">
+      <main className="max-w-5xl mx-auto px-6 py-10">
         {board.participants.length === 0 ? (
           <div className="text-center py-20" style={{ color: "#555" }}>
             <div className="text-4xl mb-3">⏳</div>
@@ -96,23 +107,59 @@ export default function CampaignLeaderboardPage() {
             <div className="text-sm">Be the first to solve your ticket and top the board.</div>
           </div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1a1a1a" }}>
+            {/* Table header */}
+            <div className="grid text-xs font-bold uppercase tracking-widest px-5 py-3"
+              style={{ background: "#111111", color: "#444", gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px 72px" }}>
+              <div />
+              <div />
+              <div>Candidate</div>
+              <div className="text-center">Diag<br/><span style={{color:"#333",fontSize:9}}>/40</span></div>
+              <div className="text-center">Design<br/><span style={{color:"#333",fontSize:9}}>/30</span></div>
+              <div className="text-center">Comms<br/><span style={{color:"#333",fontSize:9}}>/20</span></div>
+              <div className="text-center">Exec<br/><span style={{color:"#333",fontSize:9}}>/10</span></div>
+              <div className="text-center">Verbal<br/><span style={{color:"#333",fontSize:9}}>penalty</span></div>
+              <div className="text-center">Final</div>
+            </div>
+
             {board.participants.map((p) => (
               <div key={p.githubUsername}
-                className="flex items-center gap-4 rounded-xl px-5 py-3.5 transition-colors"
+                className="grid items-center px-5 py-3.5 transition-colors"
                 style={{
-                  background: p.rank <= 3 ? "#111827" : "#0d0d0d",
-                  border: `1px solid ${p.rank === 1 ? accent : p.rank <= 3 ? primary + "66" : "#1a1a1a"}`,
+                  gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px 72px",
+                  background: p.rank <= 3 ? "#0d1117" : "transparent",
+                  borderTop: "1px solid #161616",
+                  borderLeft: `3px solid ${p.rank === 1 ? accent : p.rank <= 3 ? primary + "88" : "transparent"}`,
                 }}>
-                <div className="w-10 text-center shrink-0">
+                {/* Medal / rank */}
+                <div className="text-center">
                   {p.rank <= 3
-                    ? <span className="text-2xl">{MEDAL[p.rank]}</span>
-                    : <span className="text-sm font-black" style={{ color: "#555" }}>#{p.rank}</span>}
+                    ? <span className="text-xl">{MEDAL[p.rank]}</span>
+                    : <span className="text-xs font-black" style={{ color: "#555" }}>#{p.rank}</span>}
                 </div>
-                <img src={`https://github.com/${p.githubUsername}.png?size=40`} alt={p.githubUsername}
-                  className="w-9 h-9 rounded-full shrink-0" style={{ border: `2px solid ${primary}44` }} />
-                <div className="flex-1 min-w-0 font-bold text-sm text-white truncate">{p.githubUsername}</div>
-                <div className="text-2xl font-black shrink-0" style={{ color: scoreColor(p.score) }}>{p.score}</div>
+                {/* Avatar */}
+                <div>
+                  <img src={`https://github.com/${p.githubUsername}.png?size=40`} alt={p.githubUsername}
+                    className="w-8 h-8 rounded-full" style={{ border: `2px solid ${primary}44` }} />
+                </div>
+                {/* Username */}
+                <div className="font-bold text-sm text-white truncate">{p.githubUsername}</div>
+                {/* Diag */}
+                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.diag ?? "—"}</div>
+                {/* Design */}
+                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.design ?? "—"}</div>
+                {/* Comms */}
+                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.comms ?? "—"}</div>
+                {/* Exec */}
+                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.exec ?? "—"}</div>
+                {/* Verbal penalty */}
+                <div className="text-center text-sm font-bold">
+                  {p.verbalPenalty > 0
+                    ? <span style={{ color: "#f87171" }}>−{p.verbalPenalty}</span>
+                    : <span style={{ color: "#4ade80" }}>✓</span>}
+                </div>
+                {/* Final score */}
+                <div className="text-center text-xl font-black" style={{ color: scoreColor(p.score) }}>{p.score}</div>
               </div>
             ))}
           </div>
