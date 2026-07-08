@@ -106,8 +106,12 @@ export async function activate(
 
         if (uri.path === "/clone") {
           const assignmentId = params.get("assignmentId");
+          // A handoff code (when present) authenticates the extension as the exact
+          // account that clicked "Open in VS Code" — so the assignment is always
+          // found and there's no separate "connect first" step.
+          const code = params.get("code");
           if (assignmentId) {
-            await handleCloneFromDeepLink(assignmentId, context, sidebar);
+            await handleCloneFromDeepLink(assignmentId, context, sidebar, code ?? undefined);
           }
         }
       },
@@ -151,8 +155,31 @@ async function hydrateInitialState(
 async function handleCloneFromDeepLink(
   assignmentId: string,
   context: vscode.ExtensionContext,
-  sidebar: SidebarProvider
+  sidebar: SidebarProvider,
+  handoffCode?: string
 ): Promise<void> {
+  const apiUrl = getApiUrl();
+
+  // If the deep link carried a handoff code, exchange it for a session so the
+  // extension is authenticated as the exact account that clicked "Open in VS
+  // Code". This makes the assignment always resolvable and skips the manual
+  // "connect first" step on a fresh install.
+  if (handoffCode) {
+    try {
+      const ex = await axios.post<{ data: { token: string; user: unknown } }>(
+        `${apiUrl}/auth/handoff/exchange`,
+        { code: handoffCode }
+      );
+      const sessionToken = ex.data?.data?.token;
+      if (sessionToken) {
+        await storeToken(context, sessionToken);
+        await hydrateInitialState(context, sidebar);
+      }
+    } catch {
+      // Code expired or invalid — fall back to the existing session (if any).
+    }
+  }
+
   const token = await getToken(context);
   if (!token) {
     // Save the intent so it runs automatically after the user connects
@@ -168,8 +195,6 @@ async function handleCloneFromDeepLink(
   }
 
   try {
-    const apiUrl = getApiUrl();
-
     // Use /tickets/assigned (already deployed) and filter by ID
     const res = await axios.get<{ data: FullAssignment[] }>(
       `${apiUrl}/tickets/assigned`,
@@ -177,7 +202,14 @@ async function handleCloneFromDeepLink(
     );
     const assignment = res.data.data.find((a) => a.id === assignmentId);
     if (!assignment) {
-      vscode.window.showErrorMessage("DevSimulate: Assignment not found. Make sure you are logged in with the correct account.");
+      const connectedAs = (await getCurrentUser(context))?.githubUsername ?? "unknown";
+      const choice = await vscode.window.showErrorMessage(
+        `DevSimulate: This ticket isn't assigned to the account connected here (@${connectedAs}). Reconnect with the account you used on the website.`,
+        "Reconnect account"
+      );
+      if (choice === "Reconnect account") {
+        void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
+      }
       return;
     }
     const creds = await getGitHubToken(context);

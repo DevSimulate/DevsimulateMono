@@ -19,6 +19,10 @@ export interface GitHubTokenResponse {
   access_token: string;
   token_type: string;
   scope: string;
+  // GitHub returns HTTP 200 even on failure, with these fields instead of a token.
+  error?: string;
+  error_description?: string;
+  error_uri?: string;
 }
 
 export interface GitHubUser {

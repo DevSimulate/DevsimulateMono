@@ -15,6 +15,13 @@ export async function exchangeGitHubCode(code: string): Promise<{
   const appUrl =
     process.env.APP_URL ?? "https://www.devsimulate.com";
 
+  // Fail fast with a clear message if the server is missing OAuth credentials.
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    throw new Error(
+      "Server misconfiguration: GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET is not set on the API. Set them in the deployment environment."
+    );
+  }
+
   const tokenRes = await axios.post<GitHubTokenResponse>(
     "https://github.com/login/oauth/access_token",
     {
@@ -29,7 +36,21 @@ export async function exchangeGitHubCode(code: string): Promise<{
   const accessToken = tokenRes.data.access_token;
 
   if (!accessToken) {
-    throw new Error("GitHub did not return an access token. Check client credentials or code validity.");
+    // GitHub returns 200 with an `error`/`error_description` when the exchange
+    // fails. Surface that exact reason so the real cause is visible in logs.
+    const ghError = tokenRes.data.error;
+    const ghDesc = tokenRes.data.error_description;
+    console.error(
+      "[auth] GitHub token exchange failed:",
+      ghError ?? "unknown",
+      "-",
+      ghDesc ?? "no description",
+      `(client_id ${process.env.GITHUB_CLIENT_ID?.slice(0, 6)}…, redirect_uri ${appUrl}/auth/callback)`
+    );
+    const detail = ghError
+      ? `${ghError}${ghDesc ? `: ${ghDesc}` : ""}`
+      : "no access_token returned";
+    throw new Error(`GitHub OAuth failed (${detail}). Check client credentials, redirect_uri, and that the code is fresh/unused.`);
   }
 
   const userRes = await axios.get<GitHubUser>("https://api.github.com/user", {

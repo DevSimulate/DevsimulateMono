@@ -1,10 +1,34 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { getToken } from "@/lib/auth";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const EXT_ID = "devsimulate-app.devsimulate";
-const DEEP_LINK = (assignmentId: string) =>
-  `vscode://${EXT_ID}/clone?assignmentId=${encodeURIComponent(assignmentId)}`;
+const DEEP_LINK = (assignmentId: string, code?: string) =>
+  `vscode://${EXT_ID}/clone?assignmentId=${encodeURIComponent(assignmentId)}` +
+  (code ? `&code=${encodeURIComponent(code)}` : "");
+
+/**
+ * Trades the current session for a short-lived handoff code so the extension
+ * can authenticate as THIS exact account — guaranteeing the assignment resolves.
+ * Returns undefined on failure (the deep link still works if the extension is
+ * already connected to the right account).
+ */
+async function fetchHandoffCode(): Promise<string | undefined> {
+  const token = getToken();
+  if (!token) return undefined;
+  try {
+    const res = await fetch(`${API_URL}/auth/handoff`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    });
+    const j = await res.json();
+    return j.data?.code as string | undefined;
+  } catch {
+    return undefined;
+  }
+}
 // Opens the extension's page inside VS Code (Extensions view) so the user can
 // click Install. Falls back to the web marketplace listing if VS Code isn't
 // installed at all.
@@ -27,7 +51,10 @@ interface Props {
 export function OpenInVsCode({ assignmentId, className, style }: Props) {
   const [showInstall, setShowInstall] = useState(false);
 
-  const open = useCallback(() => {
+  const open = useCallback(async () => {
+    // Include a handoff code so the extension logs in as this exact account.
+    const code = await fetchHandoffCode();
+
     let switchedAway = false;
     const onHide = () => {
       if (document.hidden) switchedAway = true;
@@ -35,7 +62,7 @@ export function OpenInVsCode({ assignmentId, className, style }: Props) {
     document.addEventListener("visibilitychange", onHide);
 
     // Fire the deep link.
-    window.location.href = DEEP_LINK(assignmentId);
+    window.location.href = DEEP_LINK(assignmentId, code);
 
     // If focus never left the browser after a moment, nothing handled the link
     // (VS Code not installed) — offer to install.
