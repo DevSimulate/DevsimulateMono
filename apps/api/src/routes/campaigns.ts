@@ -1015,4 +1015,32 @@ router.get("/:id/export", async (req: Request, res: Response): Promise<void> => 
   }
 });
 
+/**
+ * PATCH /campaigns/:id/devfest-tag
+ * Set or clear the DevFest tag on a campaign.
+ * Body: { devFestTag: string | null }
+ */
+router.patch("/:id/devfest-tag", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { devFestTag } = req.body as { devFestTag: string | null };
+
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updated = await (prisma.campaign.update as any)({
+      where: { id: req.params.id },
+      data:  { devFestTag: devFestTag ?? null },
+      select: { id: true, devFestTag: true },
+    });
+
+    res.json({ data: updated });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update DevFest tag" });
+  }
+});
+
 export default router;

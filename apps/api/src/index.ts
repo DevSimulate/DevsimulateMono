@@ -18,6 +18,7 @@ import waitlistRouter from "./routes/waitlist";
 import feedbackRouter from "./routes/feedback";
 import graderRouter from "./routes/grader";
 import certificatesRouter from "./routes/certificates";
+import devfestRouter from "./routes/devfest";
 import { startReviewWorker } from "./lib/queue";
 
 const app = express();
@@ -85,6 +86,7 @@ app.use("/feedback", feedbackRouter);
 app.use("/grader", graderRouter);
 app.use("/employer/campaigns", campaignsRouter);
 app.use("/certificates", certificatesRouter);
+app.use("/devfest", devfestRouter);
 app.use("/employer", employerPortalRouter);
 app.use("/", employerDemoRouter);
 app.use("/", employerRouter);

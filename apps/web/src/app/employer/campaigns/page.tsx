@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
-import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check, Pause, Play, Trash2, Trophy } from "lucide-react";
+import { Plus, Users, Calendar, ChevronRight, Megaphone, Copy, Check, Pause, Play, Trash2, Trophy, Tag } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
@@ -17,6 +17,7 @@ interface Campaign {
   deadline: string | null;
   status: "DRAFT" | "ACTIVE" | "CLOSED";
   shareableSlug: string;
+  devFestTag: string | null;
   codebase: { name: string; stack: string };
   _count: { candidates: number };
 }
@@ -34,6 +35,8 @@ export default function CampaignsListPage() {
   const [copiedBoard, setCopiedBoard] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [tagPanel, setTagPanel]   = useState<string | null>(null);
+  const [tagInput, setTagInput]   = useState("");
 
   function load() {
     const token = getToken();
@@ -71,6 +74,19 @@ export default function CampaignsListPage() {
       body: JSON.stringify({ status: next }),
     });
     setBusyId(null);
+    load();
+  }
+
+  async function saveDevFestTag(id: string) {
+    setBusyId(id);
+    const token = getToken();
+    await fetch(`${API}/employer/campaigns/${id}/devfest-tag`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ devFestTag: tagInput.trim() || null }),
+    });
+    setBusyId(null);
+    setTagPanel(null);
     load();
   }
 
@@ -188,6 +204,17 @@ export default function CampaignsListPage() {
                         ? <Pause size={14} style={{ color: "#fbbf24" }} />
                         : <Play size={14} style={{ color: "#4ade80" }} />}
                     </button>
+                    {/* DevFest tag */}
+                    <button
+                      onClick={() => { setTagPanel(tagPanel === c.id ? null : c.id); setTagInput(c.devFestTag ?? ""); }}
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{
+                        background: c.devFestTag ? "#0c1a0c" : "#1a1a1a",
+                        border: c.devFestTag ? "1px solid #2d5a2d" : "1px solid #2a2a2a",
+                      }}
+                      title={c.devFestTag ? `DevFest: ${c.devFestTag}` : "Tag for DevFest leaderboard"}>
+                      <Tag size={14} style={{ color: c.devFestTag ? "#4ade80" : "#888888" }} />
+                    </button>
                     {/* Delete */}
                     <button onClick={() => setConfirmDelete(c.id)} disabled={busyId === c.id}
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50"
@@ -196,6 +223,46 @@ export default function CampaignsListPage() {
                       <Trash2 size={14} style={{ color: "#f87171" }} />
                     </button>
                   </div>
+
+                  {/* DevFest tag panel */}
+                  {tagPanel === c.id && (
+                    <div className="mt-3 rounded-lg p-3" style={{ background: "#0c1a0c", border: "1px solid #2d5a2d" }}>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#4ade80" }}>
+                        DevFest tag
+                      </p>
+                      <p className="text-[10px] mb-2" style={{ color: "#666" }}>
+                        Use the same tag on all campaigns in a DevFest. The public leaderboard is at{" "}
+                        <span style={{ color: "#888" }}>/devfest/[tag]</span>.
+                      </p>
+                      <input
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        placeholder="e.g. lmkr-devfest-2025"
+                        className="w-full px-3 py-1.5 rounded-lg text-xs mb-2"
+                        style={{ background: "#0a140a", border: "1px solid #2d5a2d", color: "#e5e7eb", outline: "none" }}
+                        onKeyDown={(e) => e.key === "Enter" && saveDevFestTag(c.id)}
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={() => saveDevFestTag(c.id)} disabled={busyId === c.id}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                          style={{ background: "#166534" }}>
+                          {busyId === c.id ? "Saving…" : "Save"}
+                        </button>
+                        {c.devFestTag && (
+                          <button onClick={() => { setTagInput(""); saveDevFestTag(c.id); }} disabled={busyId === c.id}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
+                            style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#f87171" }}>
+                            Remove
+                          </button>
+                        )}
+                        <button onClick={() => setTagPanel(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                          style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Delete confirmation */}
                   {confirmDelete === c.id && (
