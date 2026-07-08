@@ -371,6 +371,9 @@ export async function stageAndCommit(repoDir: string, message: string): Promise<
 /**
  * Pushes the current branch to origin using a short-lived authenticated remote URL
  * so the user is never prompted for credentials. The public URL is restored after.
+ * Handles two GitHub-specific failure modes gracefully:
+ *  - Repository moved: detects the new URL from the error and retries automatically.
+ *  - Push Protection (secret detected): surfaces a clear, actionable message.
  */
 export async function pushBranch(
   repoDir: string,
@@ -384,16 +387,69 @@ export async function pushBranch(
   if (!origin?.refs?.fetch) {
     throw new FriendlyError("No git remote found in this folder. Re-clone the codebase from your ticket.");
   }
-  const { owner, repo } = parseOwnerRepo(origin.refs.fetch);
-  const publicUrl  = `https://github.com/${owner}/${repo}.git`;
-  const authedUrl  = authUrl(creds.token, owner, repo);
 
-  await git.remote(["set-url", "origin", authedUrl]);
+  let { owner, repo } = parseOwnerRepo(origin.refs.fetch);
+  let currentPublicUrl = `https://github.com/${owner}/${repo}.git`;
+
+  function isSecretViolation(msg: string): boolean {
+    return (
+      msg.includes("GITHUB PUSH PROTECTION") ||
+      msg.includes("push declined due to repository rule violations") ||
+      msg.includes("Push cannot contain secrets")
+    );
+  }
+
+  function extractMovedUrl(msg: string): string | null {
+    const m = /Please use the new location:\s*\n?\s*(https:\/\/github\.com\/[^\s]+)/i.exec(msg);
+    if (!m) return null;
+    return m[1].endsWith(".git") ? m[1] : m[1] + ".git";
+  }
+
+  const restorePublicUrl = async () => {
+    try { await git.remote(["set-url", "origin", currentPublicUrl]); } catch { /* ignore */ }
+  };
+
+  await git.remote(["set-url", "origin", authUrl(creds.token, owner, repo)]);
+
   try {
     await git.push(["--set-upstream", "origin", branchName]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (isSecretViolation(msg)) {
+      await restorePublicUrl();
+      throw new FriendlyError(
+        "GitHub blocked this push because a secret (API key or token) was detected in your code.\n" +
+        "Remove the secret from your files, then commit and push again."
+      );
+    }
+
+    // Repository moved — update remote and retry automatically
+    const newPublicUrl = extractMovedUrl(msg);
+    if (newPublicUrl) {
+      const newParsed = parseOwnerRepo(newPublicUrl);
+      owner = newParsed.owner;
+      repo  = newParsed.repo;
+      currentPublicUrl = newPublicUrl;
+
+      await git.remote(["set-url", "origin", authUrl(creds.token, owner, repo)]);
+      try {
+        await git.push(["--set-upstream", "origin", branchName]);
+      } catch (retryErr) {
+        const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        if (isSecretViolation(retryMsg)) {
+          throw new FriendlyError(
+            "GitHub blocked this push because a secret (API key or token) was detected in your code.\n" +
+            "Remove the secret from your files, then commit and push again."
+          );
+        }
+        throw retryErr;
+      }
+    } else {
+      throw err;
+    }
   } finally {
-    // Always restore public URL so the token isn't left in .git/config
-    await git.remote(["set-url", "origin", publicUrl]);
+    await restorePublicUrl();
   }
 }
 
