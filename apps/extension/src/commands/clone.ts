@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { getAssignedTickets } from "../services/ticket.service";
 import { cloneAndOpenCodebase } from "../services/git.service";
 import { getGitHubToken } from "../services/auth.service";
+import { openInBrowser } from "../services/browser.service";
 import { Ticket, Codebase, TicketAssignment } from "../types";
 
 type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
@@ -23,7 +24,7 @@ export async function cloneCommand(
         "Open Dashboard"
       );
       if (choice === "Open Dashboard") {
-        await vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/dashboard"));
+        await openInBrowser("https://www.devsimulate.com/dashboard");
       }
       return;
     }
@@ -51,7 +52,7 @@ export async function cloneCommand(
         "Connect"
       );
       if (choice === "Connect") {
-        vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+        void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
       }
     } else {
       vscode.window.showErrorMessage(`DevSimulate: ${message}`);

@@ -9,12 +9,21 @@ export function requireAuth(
 ): void {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  // Accept the JWT from the Authorization header (Bearer) OR from the httpOnly
+  // `ds_session` cookie set at handoff-exchange time. The header takes priority
+  // so existing clients keep working unchanged.
+  let token: string | undefined;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    token = (req as { cookies?: Record<string, string> }).cookies?.ds_session;
+  }
+
+  if (!token) {
     res.status(401).json({ error: "Missing or malformed Authorization header" });
     return;
   }
 
-  const token = authHeader.slice(7);
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {

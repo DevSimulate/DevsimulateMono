@@ -126,13 +126,36 @@ function parseOwnerRepo(url: string): { owner: string; repo: string } {
  * if needed and waiting until GitHub finishes provisioning it.
  * Returns the fork's owner login.
  */
+/**
+ * Syncs a fork's branch with its upstream using GitHub's "merge-upstream" API.
+ * Best-effort: a fast-forward succeeds; a diverged fork (409) is left untouched
+ * so the candidate's own work is never overwritten.
+ */
+async function syncForkWithUpstream(
+  headers: Record<string, string>,
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<void> {
+  try {
+    await axios.post(`${GH_API}/repos/${owner}/${repo}/merge-upstream`, { branch }, { headers });
+  } catch { /* diverged or already up to date — proceed with what's there */ }
+}
+
 async function ensureFork(token: string, owner: string, repo: string, username: string): Promise<string> {
   const headers = { Authorization: `token ${token}`, Accept: "application/vnd.github+json" };
 
   // 1. Already forked? (check the user's namespace, not the source)
   try {
     const existing = await axios.get(`${GH_API}/repos/${username}/${repo}`, { headers });
-    if (existing.data?.fork || existing.data?.name) return username;
+    if (existing.data?.fork || existing.data?.name) {
+      // A pre-existing fork may be stale (created before the source moved or was
+      // updated). Sync its default branch with upstream so the candidate always
+      // starts from current code. Best-effort — a diverged fork just stays as-is.
+      const defaultBranch = (existing.data?.default_branch as string) || "main";
+      await syncForkWithUpstream(headers, username, repo, defaultBranch);
+      return username;
+    }
   } catch { /* no fork yet — create one */ }
 
   // 2. Create the fork
@@ -185,14 +208,40 @@ export async function createPullRequest(
   if (!origin?.refs?.fetch) throw new FriendlyError("No git remote found in this folder. Re-clone the codebase from your ticket.");
 
   const fork = parseOwnerRepo(origin.refs.fetch);
-  const base = parseOwnerRepo(originalRepoUrl);
+
+  // Resolve the TRUE base repo and its default branch. The fork itself knows its
+  // real parent on GitHub, which stays correct even if the source repo was
+  // transferred/renamed or the stored URL is stale. Fall back to the provided
+  // URL (and any local `upstream` remote) only if the lookup fails.
+  let base = parseOwnerRepo(originalRepoUrl);
+  let baseBranch = "main";
+  try {
+    const info = await axios.get(`${GH_API}/repos/${fork.owner}/${fork.repo}`, { headers });
+    const parent = info.data?.source ?? info.data?.parent;
+    if (parent?.full_name) {
+      const [o, r] = String(parent.full_name).split("/");
+      if (o && r) base = { owner: o, repo: r };
+      if (parent.default_branch) baseBranch = parent.default_branch as string;
+    } else {
+      // Not a fork — the candidate cloned the source repo directly, so it is the base.
+      base = { owner: fork.owner, repo: fork.repo };
+      if (info.data?.default_branch) baseBranch = info.data.default_branch as string;
+    }
+  } catch {
+    // Fork lookup failed — try a local `upstream` remote captured at clone time.
+    const upstream = remotes.find((r) => r.name === "upstream");
+    if (upstream?.refs?.fetch) {
+      try { base = parseOwnerRepo(upstream.refs.fetch); } catch { /* keep URL-derived base */ }
+    }
+  }
+
   const sameOwner = fork.owner.toLowerCase() === base.owner.toLowerCase();
   const head = sameOwner ? branchName : `${fork.owner}:${branchName}`;
 
   try {
     const res = await axios.post(
       `${GH_API}/repos/${base.owner}/${base.repo}/pulls`,
-      { title: ticketTitle, head, base: "main", body: "Submitted via DevSimulate." },
+      { title: ticketTitle, head, base: baseBranch, body: "Submitted via DevSimulate." },
       { headers }
     );
     return res.data.html_url as string;
@@ -206,7 +255,18 @@ export async function createPullRequest(
         );
         if (list.data?.[0]?.html_url) return list.data[0].html_url as string;
       } catch { /* fall through */ }
-      throw new FriendlyError("Push your branch first, then submit. (No commits found to open a PR from.)");
+      // Surface the real reason from GitHub when it isn't an already-open PR.
+      const ghMsg = axios.isAxiosError(err)
+        ? (err.response?.data?.errors?.[0]?.message || err.response?.data?.message || "")
+        : "";
+      if (/no commits between/i.test(ghMsg)) {
+        throw new FriendlyError(
+          "GitHub found no commits to open a PR from. Commit your changes and push again, then submit."
+        );
+      }
+      throw new FriendlyError(
+        `GitHub couldn't open the pull request${ghMsg ? `: ${ghMsg}` : "."} Make sure your branch is pushed, then try again.`
+      );
     }
     if (axios.isAxiosError(err) && (err.response?.status === 403 || err.response?.status === 401)) {
       throw new FriendlyError("GitHub denied creating the PR. Reconnect your web session and approve repo access.");
@@ -290,6 +350,9 @@ export async function cloneAndOpenCodebase(
         await ensureBranch(repoGit, branchName);
         // Restore the clean URL afterward so the token isn't left in git config
         await repoGit.remote(["set-url", "origin", publicUrl]);
+        // Record the original source repo as `upstream` so PR creation can find
+        // the correct base later even if the stored URL becomes stale.
+        try { await repoGit.remote(["add", "upstream", ticket.codebase.repoUrl]); } catch { /* already exists */ }
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         throw new FriendlyError(
@@ -366,6 +429,19 @@ export async function stageAndCommit(repoDir: string, message: string): Promise<
   const git = makeGit(repoDir);
   await git.add("-A");
   await git.commit(message);
+}
+
+/**
+ * Checks out an existing branch, or creates it if it doesn't exist yet.
+ */
+export async function checkoutBranch(repoDir: string, branchName: string): Promise<void> {
+  const git = makeGit(repoDir);
+  const branches = await git.branch();
+  if (branches.all.includes(branchName)) {
+    await git.checkout(branchName);
+  } else {
+    await git.checkoutLocalBranch(branchName);
+  }
 }
 
 /**

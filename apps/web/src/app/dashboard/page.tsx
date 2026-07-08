@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getToken, clearToken } from "@/lib/auth";
 import Logo from "@/components/Logo";
+import { OpenInVsCode } from "@/components/OpenInVsCode";
 import { getMe, getSubmissions, getAssignments, getScoreHistory, ScoreHistoryPoint } from "@/lib/api";
 import { User, Submission, TicketAssignment, ClaudeReview, Difficulty } from "@devsimulate/shared";
 import clsx from "clsx";
@@ -510,15 +511,11 @@ export default function DashboardPage() {
                           Write System Design
                         </Link>
                       ) : (
-                        <a
-                          href={`vscode://devsimulate-app.devsimulate/clone?assignmentId=${a.id}`}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors"
-                          style={{ background: "#5B5BD6", color: "white" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "#4747C2")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "#5B5BD6")}
-                        >
-                          ⚡ Open in VS Code
-                        </a>
+                        <OpenInVsCode
+                          assignmentId={a.id}
+                          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
+                          style={{ background: "#5B5BD6", color: "white", border: "none" }}
+                        />
                       )}
                     </div>
                   </div>

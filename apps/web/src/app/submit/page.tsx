@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, storeToken, clearToken } from "@/lib/auth";
 import Logo from "@/components/Logo";
+import { EdgeBanner } from "@/components/EdgeBanner";
 import clsx from "clsx";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -141,10 +142,9 @@ function SubmitPageInner() {
   const prUrl      = params.get("prUrl")      ?? "";
   const branchName = params.get("branchName") ?? "";
 
-  // When the extension opens this page it appends ?token=JWT so the session
-  // works regardless of which browser the OS picks as the default.
-  const urlToken = params.get("token");
-  if (urlToken) storeToken(urlToken);
+  // Session is established from the URL in an effect below (handoff code → cookie
+  // + token). `sessionReady` gates the auth-dependent effects until that's done.
+  const [sessionReady, setSessionReady] = useState(false);
 
   const [stage,        setStage]        = useState<Stage>("loading");
   const [ticket,       setTicket]       = useState<Ticket | null>(null);
@@ -196,8 +196,45 @@ function SubmitPageInner() {
   }
 
 
+  // Establish the session from the URL before anything else. Prefer a one-time
+  // handoff code (?code=) — exchanged server-side for a session (httpOnly cookie
+  // + token) so the raw JWT never travels in the URL and the link works in any
+  // browser. Falls back to a legacy ?token= for older extension builds.
+  useEffect(() => {
+    const code = params.get("code");
+    const legacyToken = params.get("token");
+    (async () => {
+      if (code) {
+        try {
+          const res = await fetch(`${API_URL}/auth/handoff/exchange`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ code }),
+          });
+          const j = await res.json();
+          if (j.data?.token) storeToken(j.data.token);
+        } catch {
+          /* fall through — the user may already have a stored session */
+        }
+      } else if (legacyToken) {
+        storeToken(legacyToken);
+      }
+      // Strip auth params so they don't linger in browser history.
+      if (code || legacyToken) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("code");
+        url.searchParams.delete("token");
+        window.history.replaceState({}, "", url.toString());
+      }
+      setSessionReady(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auth check + ticket fetch
   useEffect(() => {
+    if (!sessionReady) return;
     const token = getToken();
     if (!token) {
       localStorage.setItem("ds_submit_return", window.location.href);
@@ -222,17 +259,18 @@ function SubmitPageInner() {
         }
       })
       .catch(() => setStage("describe"));
-  }, [ticketId, router]);
+  }, [ticketId, router, sessionReady]);
 
   // Fetch the candidate's GitHub username for the integrity watermark
   useEffect(() => {
+    if (!sessionReady) return;
     const token = getToken();
     if (!token) return;
     fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => { if (j.data?.githubUsername) setUsername(j.data.githubUsername); })
       .catch(() => null);
-  }, []);
+  }, [sessionReady]);
 
   // Tab-switch / focus-loss counter — active while writing or answering.
   // Leaving the tab during a timed assessment is recorded as an integrity signal
@@ -1250,6 +1288,7 @@ export default function SubmitPage() {
         Loading…
       </div>
     }>
+      <EdgeBanner />
       <SubmitPageInner />
     </Suspense>
   );

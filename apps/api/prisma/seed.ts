@@ -8,12 +8,12 @@ async function main(): Promise<void> {
   // Create the NovaTech CRM codebase
   const codebase = await prisma.codebase.upsert({
     where: { id: "novatech-crm-seed-id-001" },
-    update: {},
+    update: { repoUrl: "https://github.com/DevSimulate/novatech-crm" },
     create: {
       id: "novatech-crm-seed-id-001",
       name: "NovaTech CRM",
       stack: Stack.DOTNET,
-      repoUrl: "https://github.com/OSSAMA-prog-droid/novatech-crm",
+      repoUrl: "https://github.com/DevSimulate/novatech-crm",
       description:
         "A mid-market CRM system serving 2,000+ enterprise clients. Built in .NET 6 with a SQL Server backend and Angular frontend.",
       companyLore: `NovaTech Solutions was founded in 2014 by two ex-Salesforce engineers who believed the SMB market was underserved by bloated enterprise CRM tools.

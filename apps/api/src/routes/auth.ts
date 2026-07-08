@@ -153,6 +153,71 @@ router.get(
   }
 );
 
+/**
+ * POST /auth/handoff
+ * Authorization: Bearer <jwt>
+ *
+ * Issues a short-lived (5 min), single-purpose handoff code that can be placed
+ * in a URL instead of the full session JWT. Whatever browser opens that URL
+ * exchanges the code for a real session — so the session is never exposed in
+ * the URL and works regardless of which browser opens the link.
+ */
+router.post(
+  "/handoff",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  (req: Request, res: Response): void => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const secret = process.env.JWT_SECRET!;
+    const code = jwt.sign({ userId, type: "handoff" }, secret, { expiresIn: "5m" });
+    res.json({ data: { code } });
+  }
+);
+
+/**
+ * POST /auth/handoff/exchange
+ * Body: { code: string }
+ *
+ * Verifies the short-lived handoff code, sets the session as an httpOnly cookie
+ * (so it's never readable by JavaScript), and also returns the JWT for clients
+ * that still authenticate via the Authorization header.
+ */
+router.post("/handoff/exchange", async (req: Request, res: Response): Promise<void> => {
+  const { code } = req.body as { code?: string };
+  if (!code) {
+    res.status(400).json({ error: "Missing handoff code" });
+    return;
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET!;
+    const payload = jwt.verify(code, secret) as { userId: string; type: string };
+    if (payload.type !== "handoff") {
+      res.status(401).json({ error: "Invalid code type" });
+      return;
+    }
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: payload.userId } });
+    const sessionToken = signJwt(user);
+
+    // httpOnly + Secure so JS can't read it and it only travels over HTTPS.
+    // SameSite=None is required for cross-site use (API and web on different
+    // domains); once the API is served from a devsimulate.com subdomain this
+    // becomes a first-party cookie and can be the sole auth mechanism.
+    const isProd = process.env.NODE_ENV === "production";
+    res.cookie("ds_session", sessionToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: "/",
+    });
+
+    res.json({ data: { token: sessionToken, user } });
+  } catch {
+    res.status(401).json({ error: "This link has expired. Please reopen it from VS Code or your dashboard." });
+  }
+});
+
 // ─── Employer auth (email magic link — no GitHub) ───────────────────────────────
 
 const APP = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";

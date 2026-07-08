@@ -3,6 +3,7 @@ import express, { Request, Response, NextFunction } from "express";
 import { runSeed } from "./seed";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import authRouter from "./routes/auth";
 import ticketsRouter from "./routes/tickets";
 import submissionsRouter from "./routes/submissions";
@@ -63,6 +64,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
 // ---------------------------------------------------------------------------
 // Health check

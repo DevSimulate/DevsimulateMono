@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
+import { EdgeBanner } from "@/components/EdgeBanner";
 import { Check, ArrowRight } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -139,6 +140,7 @@ export default function ApplyPage() {
   // Campaign landing
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
+      <EdgeBanner />
       <div className="max-w-md w-full">
         <div className="rounded-2xl p-8" style={{ background: "#111111", border: "1px solid #222222" }}>
           {/* Logo + status badge */}

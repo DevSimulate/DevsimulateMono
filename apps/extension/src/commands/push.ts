@@ -6,11 +6,13 @@ import {
   getRemoteUrl,
   hasUncommittedChanges,
   stageAndCommit,
+  checkoutBranch,
   pushBranch,
   createPullRequest,
   FriendlyError,
 } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
+import { openInBrowser } from "../services/browser.service";
 import { TicketAssignment, Ticket, Codebase } from "../types";
 
 type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
@@ -62,6 +64,33 @@ export async function pushAndCreatePRCommand(
       }
     }
 
+    // Make sure we're on the ticket branch before committing/pushing, so commits
+    // don't accidentally land on the wrong branch.
+    const currentBranch = await getCurrentBranch();
+    if (currentBranch && currentBranch !== assignment.branchName) {
+      const proceed = await vscode.window.showWarningMessage(
+        `You're on branch '${currentBranch}', but this ticket's branch is '${assignment.branchName}'. Your work should be on the ticket branch.`,
+        "Switch to ticket branch",
+        "Push current branch anyway",
+        "Cancel"
+      );
+      if (proceed === "Cancel" || !proceed) return;
+      if (proceed === "Switch to ticket branch") {
+        try {
+          await checkoutBranch(repoDir, assignment.branchName);
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : String(e);
+          vscode.window.showErrorMessage(
+            `DevSimulate: Couldn't switch to '${assignment.branchName}'. Commit or stash your changes first. (${detail})`
+          );
+          return;
+        }
+      } else {
+        // Push the branch they're actually on.
+        assignment = { ...assignment, branchName: currentBranch } as FullAssignment;
+      }
+    }
+
     // If there are uncommitted changes, prompt for a commit message
     const dirty = await hasUncommittedChanges(repoDir);
     if (dirty) {
@@ -108,7 +137,7 @@ export async function pushAndCreatePRCommand(
       "View PR on GitHub"
     );
     if (choice === "View PR on GitHub") {
-      await vscode.env.openExternal(vscode.Uri.parse(prUrl));
+      await openInBrowser(prUrl);
     }
   } catch (err) {
     const message =

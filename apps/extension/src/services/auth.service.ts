@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import axios from "axios";
 import { User, LoginResponse } from "../types";
+import { openInBrowser } from "./browser.service";
 
 const SECRET_KEY = "devsimulate.jwt";
 
@@ -55,7 +56,7 @@ export async function loginWithGitHub(
     `&redirect_uri=${encodeURIComponent("https://www.devsimulate.com/auth/callback")}` +
     `&state=vscode`;
 
-  await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+  await openInBrowser(authUrl);
 
   const code = await vscode.window.showInputBox({
     prompt:
@@ -143,4 +144,27 @@ export async function getGitHubToken(
 export function getApiUrl(): string {
   const config = vscode.workspace.getConfiguration("devsimulate");
   return config.get<string>("apiUrl") ?? "https://devsimulateapi-production.up.railway.app";
+}
+
+/**
+ * Exchanges the stored session JWT for a short-lived, single-purpose handoff
+ * code. This code — not the raw JWT — is what we place in assessment URLs, so
+ * the full session is never exposed in a URL and the link works in whatever
+ * browser opens it. Returns null if not authenticated or the request fails.
+ */
+export async function getHandoffCode(
+  context: vscode.ExtensionContext
+): Promise<string | null> {
+  const token = await getToken(context);
+  if (!token) return null;
+  try {
+    const res = await axios.post<{ data: { code: string } }>(
+      `${getApiUrl()}/auth/handoff`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return res.data?.data?.code ?? null;
+  } catch {
+    return null;
+  }
 }

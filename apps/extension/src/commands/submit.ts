@@ -1,8 +1,9 @@
 import * as vscode from "vscode";
 import axios from "axios";
-import { getToken, getApiUrl } from "../services/auth.service";
+import { getToken, getApiUrl, getHandoffCode } from "../services/auth.service";
 import { getAssignedTickets } from "../services/ticket.service";
 import { getCurrentBranch, getRemoteUrl, scheduleLocalCloneWipe } from "../services/git.service";
+import { openInBrowser } from "../services/browser.service";
 import { SidebarProvider } from "../views/sidebar";
 
 const WEB_URL = "https://www.devsimulate.com";
@@ -60,6 +61,13 @@ export async function submitCommand(
     );
     return;
   }
+
+  // Prefer a short-lived handoff code in the URL over the raw JWT. Falls back to
+  // the token only if the code request fails, so submission always works.
+  const handoff = await getHandoffCode(context);
+  const authParam = handoff
+    ? `&code=${encodeURIComponent(handoff)}`
+    : `&token=${encodeURIComponent(token)}`;
 
   try {
     const assignments = await getAssignedTickets(context);
@@ -132,10 +140,8 @@ export async function submitCommand(
 
       // main...branch?expand=1 opens the PR form directly with base already set
       const compareBranch = assignment.branchName.replace(/#/g, "%23");
-      await vscode.env.openExternal(
-        vscode.Uri.parse(
-          `https://github.com/${parsed.owner}/${parsed.repo}/compare/main...${compareBranch}?expand=1`
-        )
+      await openInBrowser(
+        `https://github.com/${parsed.owner}/${parsed.repo}/compare/main...${compareBranch}?expand=1`
       );
 
       const prUrl = await vscode.window.showInputBox({
@@ -152,8 +158,8 @@ export async function submitCommand(
 
       if (!prUrl) return;
 
-      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}&token=${encodeURIComponent(token)}`;
-      await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
+      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}${authParam}`;
+      await openInBrowser(submitUrl);
       vscode.window.showInformationMessage("DevSimulate: Submission form opened in your browser.");
       await wipeLocalCodebaseAfterSubmit();
       return;
@@ -172,7 +178,7 @@ export async function submitCommand(
 
     const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}&token=${encodeURIComponent(token)}`;
 
-    await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
+    await openInBrowser(submitUrl);
 
     vscode.window.showInformationMessage(
       `DevSimulate: Opening submission form for PR — describe your fix and get your score.`
@@ -186,7 +192,7 @@ export async function submitCommand(
         "Connect"
       );
       if (choice === "Connect") {
-        vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+        void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
       }
     } else {
       vscode.window.showErrorMessage(`DevSimulate: ${message}`);

@@ -5,10 +5,11 @@ import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
 import { pushAndCreatePRCommand } from "./commands/push";
-import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken } from "./services/auth.service";
+import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken, getHandoffCode } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
 import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest } from "./services/git.service";
+import { openInBrowser } from "./services/browser.service";
 import { LoginResponse, TicketAssignment, Ticket, Codebase } from "./types";
 
 type FullAssignment = TicketAssignment & { ticket: Ticket & { codebase: Codebase } };
@@ -161,7 +162,7 @@ async function handleCloneFromDeepLink(
       "Connect"
     );
     if (choice === "Connect") {
-      vscode.env.openExternal(vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link"));
+      void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
     }
     return;
   }
@@ -197,12 +198,16 @@ async function handleCloneFromDeepLink(
             assignment.ticket.codebase.repoUrl,
             creds
           );
+          // Attach a short-lived handoff code so the assessment opens signed-in
+          // in whatever browser launches — no reliance on an existing session.
+          const handoff = await getHandoffCode(context);
           const submitUrl =
             `https://www.devsimulate.com/submit` +
             `?ticketId=${encodeURIComponent(assignment.ticketId)}` +
             `&prUrl=${encodeURIComponent(prUrl)}` +
-            `&branchName=${encodeURIComponent(assignment.branchName)}`;
-          await vscode.env.openExternal(vscode.Uri.parse(submitUrl));
+            `&branchName=${encodeURIComponent(assignment.branchName)}` +
+            (handoff ? `&code=${encodeURIComponent(handoff)}` : "");
+          await openInBrowser(submitUrl);
           vscode.window.showInformationMessage("DevSimulate: PR created! Submit form opened — describe your fix.");
         } catch (prErr) {
           // Auto-PR failed — tell them why, then offer the manual path

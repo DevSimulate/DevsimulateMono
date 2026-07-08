@@ -14,7 +14,7 @@ export async function runSeed(): Promise<void> {
 
   const codebase = await prisma.codebase.upsert({
     where: { id: "novatech-crm-seed-id-001" },
-    update: {},
+    update: { repoUrl: "https://github.com/DevSimulate/novatech-crm" },
     create: {
       id: "novatech-crm-seed-id-001",
       name: "NovaTech CRM",

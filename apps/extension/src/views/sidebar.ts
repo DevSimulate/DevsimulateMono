@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { User, TicketAssignment, Submission } from "../types";
+import { openInBrowser } from "../services/browser.service";
 
 export interface SidebarState {
   user: User | null;
@@ -46,9 +47,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
           this._pushState();
           break;
         case "login":
-          vscode.env.openExternal(
-            vscode.Uri.parse("https://www.devsimulate.com/auth/vscode-link")
-          );
+          void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
           break;
         case "cloneCodebase":
           vscode.commands.executeCommand("devsimulate.cloneCodebase");
