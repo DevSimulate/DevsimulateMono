@@ -53,6 +53,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         case "cloneCodebase":
           vscode.commands.executeCommand("devsimulate.cloneCodebase");
           break;
+        case "pushAndCreatePR":
+          vscode.commands.executeCommand("devsimulate.pushAndCreatePR");
+          break;
         case "submitPR":
           vscode.commands.executeCommand("devsimulate.submitPR");
           break;

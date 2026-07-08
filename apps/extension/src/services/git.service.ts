@@ -347,6 +347,56 @@ export function watchForPush(
   return watcher;
 }
 
+/**
+ * Returns true if there are any uncommitted changes (staged or unstaged) in the repo.
+ */
+export async function hasUncommittedChanges(repoDir: string): Promise<boolean> {
+  try {
+    const status = await makeGit(repoDir).status();
+    return !status.isClean();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stages all changes and commits with the given message.
+ */
+export async function stageAndCommit(repoDir: string, message: string): Promise<void> {
+  const git = makeGit(repoDir);
+  await git.add("-A");
+  await git.commit(message);
+}
+
+/**
+ * Pushes the current branch to origin using a short-lived authenticated remote URL
+ * so the user is never prompted for credentials. The public URL is restored after.
+ */
+export async function pushBranch(
+  repoDir: string,
+  branchName: string,
+  creds: GitHubCreds | null
+): Promise<void> {
+  if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
+  const git = makeGit(repoDir);
+  const remotes = await git.getRemotes(true);
+  const origin = remotes.find((r) => r.name === "origin");
+  if (!origin?.refs?.fetch) {
+    throw new FriendlyError("No git remote found in this folder. Re-clone the codebase from your ticket.");
+  }
+  const { owner, repo } = parseOwnerRepo(origin.refs.fetch);
+  const publicUrl  = `https://github.com/${owner}/${repo}.git`;
+  const authedUrl  = authUrl(creds.token, owner, repo);
+
+  await git.remote(["set-url", "origin", authedUrl]);
+  try {
+    await git.push(["--set-upstream", "origin", branchName]);
+  } finally {
+    // Always restore public URL so the token isn't left in .git/config
+    await git.remote(["set-url", "origin", publicUrl]);
+  }
+}
+
 export async function getCurrentBranch(): Promise<string | undefined> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) return undefined;

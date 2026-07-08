@@ -140,6 +140,7 @@
       button:active { opacity: 0.7; }
       .btn-primary   { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
       .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+      .btn-push      { background: #166534; color: #bbf7d0; }
       .btn-login     { background: #24292e; color: #fff; padding: 9px 12px; }
 
       /* ── Score bars ── */
@@ -313,10 +314,12 @@
 
           // Wire up per-ticket buttons
           assignments.forEach((a, i) => {
-            const cloneBtn = document.getElementById('btn-clone-' + i);
+            const cloneBtn  = document.getElementById('btn-clone-' + i);
+            const pushBtn   = document.getElementById('btn-push-' + i);
             const submitBtn = document.getElementById('btn-submit-' + i);
-            if (cloneBtn) cloneBtn.addEventListener('click', () => vscode.postMessage({ command: 'cloneCodebase', assignmentId: a.id }));
-            if (submitBtn) submitBtn.addEventListener('click', () => vscode.postMessage({ command: 'submitPR', assignmentId: a.id }));
+            if (cloneBtn)  cloneBtn.addEventListener('click',  () => vscode.postMessage({ command: 'cloneCodebase',    assignmentId: a.id }));
+            if (pushBtn)   pushBtn.addEventListener('click',   () => vscode.postMessage({ command: 'pushAndCreatePR', assignmentId: a.id }));
+            if (submitBtn) submitBtn.addEventListener('click', () => vscode.postMessage({ command: 'submitPR',         assignmentId: a.id }));
           });
         }
 
@@ -351,8 +354,9 @@
             <div class="files-label">Files to investigate</div>
             <ul class="file-list">${files}</ul>
             <div class="ticket-actions">
-              <button class="btn-primary" id="btn-clone-${i}">Fork &amp; Clone</button>
-              <button class="btn-secondary" id="btn-submit-${i}">Submit PR for Review</button>
+              <button class="btn-primary" id="btn-clone-${i}">⬇ Fork &amp; Clone</button>
+              <button class="btn-push" id="btn-push-${i}">⬆ Push &amp; Create PR</button>
+              <button class="btn-secondary" id="btn-submit-${i}">✦ Submit PR for Review</button>
             </div>
           </div>`;
       }

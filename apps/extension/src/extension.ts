@@ -4,6 +4,7 @@ import { SidebarProvider } from "./views/sidebar";
 import { loginCommand } from "./commands/login";
 import { cloneCommand } from "./commands/clone";
 import { submitCommand } from "./commands/submit";
+import { pushAndCreatePRCommand } from "./commands/push";
 import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
@@ -38,6 +39,12 @@ export async function activate(
   context.subscriptions.push(
     vscode.commands.registerCommand("devsimulate.cloneCodebase", () =>
       cloneCommand(context)
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("devsimulate.pushAndCreatePR", () =>
+      pushAndCreatePRCommand(context, sidebar)
     )
   );
 

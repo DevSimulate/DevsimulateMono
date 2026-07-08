@@ -58,6 +58,10 @@
         "title": "DevSimulate: Clone Codebase"
       },
       {
+        "command": "devsimulate.pushAndCreatePR",
+        "title": "DevSimulate: Push & Create PR"
+      },
+      {
         "command": "devsimulate.submitPR",
         "title": "DevSimulate: Submit PR for Review"
       },
