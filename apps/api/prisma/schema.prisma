@@ -49,6 +49,7 @@ model User {
   id                  String              @id @default(uuid())
   githubId            String?             @unique
   githubUsername      String?             @unique
+  fullName            String?
   email               String?
   primaryStack        Stack               @default(NODE)
   subscriptionTier    SubscriptionTier    @default(FREE)

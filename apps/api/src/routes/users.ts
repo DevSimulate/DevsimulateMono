@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { requireAuth } from "../middleware/auth.middleware";
+import { AuthenticatedRequest } from "../types/index";
 
 const router = Router();
 
@@ -141,6 +143,29 @@ router.get(
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch profile";
       res.status(500).json({ error: message });
+    }
+  }
+);
+
+/**
+ * PATCH /users/me  (AUTH)
+ * Update the current user's profile — currently only fullName.
+ */
+router.patch(
+  "/me",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const { fullName } = req.body as { fullName?: string };
+    try {
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: { ...(fullName !== undefined ? { fullName: fullName.trim() || null } : {}) },
+        select: { id: true, fullName: true, githubUsername: true },
+      });
+      res.json({ data: updated });
+    } catch {
+      res.status(500).json({ error: "Failed to update profile" });
     }
   }
 );

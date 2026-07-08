@@ -125,7 +125,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     const cert = await prisma.certificate.findUnique({
       where: { id: req.params.id },
       include: {
-        user: { select: { githubUsername: true } },
+        user: { select: { githubUsername: true, fullName: true } },
         campaign: {
           include: {
             org: { select: { logoUrl: true, primaryColor: true, accentColor: true, brandName: true } },
@@ -139,6 +139,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     res.json({
       data: {
         id:             cert.id,
+        recipientName:  cert.user.fullName || cert.user.githubUsername || "Participant",
         githubUsername: cert.user.githubUsername ?? "Participant",
         campaignName:   cert.campaign.roleName,
         companyName:    cert.campaign.companyName,

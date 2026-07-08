@@ -13,6 +13,7 @@ export interface User {
   id: string;
   githubId: string;
   githubUsername: string;
+  fullName: string | null;
   email: string | null;
   primaryStack: Stack;
   subscriptionTier: SubscriptionTier;

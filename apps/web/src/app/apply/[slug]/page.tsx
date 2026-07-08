@@ -55,6 +55,7 @@ export default function ApplyPage() {
   const [joining, setJoining]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [authed, setAuthed]     = useState(false);
+  const [fullName, setFullName] = useState("");
 
   const branding: Branding = campaign?.branding ?? DEFAULT_BRANDING;
 
@@ -73,6 +74,7 @@ export default function ApplyPage() {
   }
 
   async function join() {
+    if (!fullName.trim()) { setError("Please enter your full name before joining."); return; }
     setJoining(true);
     setError(null);
     const token = getToken();
@@ -80,6 +82,7 @@ export default function ApplyPage() {
       const res = await fetch(`${API}/employer/campaigns/apply/${slug}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: fullName.trim() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to join");
@@ -190,11 +193,28 @@ export default function ApplyPage() {
           )}
 
           {authed ? (
-            <button onClick={join} disabled={joining}
-              className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-              style={{ background: branding.primaryColor }}>
-              {joining ? "Assigning your ticket…" : <>Join Campaign <ArrowRight size={15} /></>}
-            </button>
+            <>
+              <div className="mb-3">
+                <label className="block text-xs font-bold mb-1.5" style={{ color: "#888" }}>
+                  Your full name <span style={{ color: "#f87171" }}>*</span>
+                  <span className="font-normal ml-1" style={{ color: "#555" }}>(appears on your certificate)</span>
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Sarah Ahmed"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm"
+                  style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb", outline: "none" }}
+                  onKeyDown={(e) => e.key === "Enter" && join()}
+                />
+              </div>
+              <button onClick={join} disabled={joining}
+                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: branding.primaryColor }}>
+                {joining ? "Assigning your ticket…" : <>Join Campaign <ArrowRight size={15} /></>}
+              </button>
+            </>
           ) : (
             <button onClick={signIn}
               className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white"

@@ -9,6 +9,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com"
 
 interface CertData {
   id:             string;
+  recipientName:  string;
   githubUsername: string;
   campaignName:   string;
   companyName:    string;
@@ -453,7 +454,7 @@ export default function CertificatePage() {
                 <div className="cert-presents">This is to certify that</div>
 
                 {/* Recipient */}
-                <div className="cert-name">{cert.githubUsername}</div>
+                <div className="cert-name">{cert.recipientName}</div>
 
                 <div className="cert-body-text">
                   has successfully demonstrated excellence in

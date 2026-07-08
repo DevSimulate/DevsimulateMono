@@ -244,6 +244,9 @@ export default function DashboardPage() {
   const [history,     setHistory]     = useState<ScoreHistoryPoint[]>([]);
   const [certs,       setCerts]       = useState<CertSummary[]>([]);
   const [loading,     setLoading]     = useState(true);
+  const [nameEdit,    setNameEdit]    = useState(false);
+  const [nameInput,   setNameInput]   = useState("");
+  const [nameSaving,  setNameSaving]  = useState(false);
   const [ticketsHref, setTicketsHref] = useState("/tickets");
 
   useEffect(() => {
@@ -274,6 +277,24 @@ export default function DashboardPage() {
   function handleLogout() {
     clearToken();
     router.push("/");
+  }
+
+  async function saveName() {
+    setNameSaving(true);
+    const token = getToken();
+    const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    try {
+      const res = await fetch(`${API_URL}/users/me`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: nameInput.trim() }),
+      });
+      const j = await res.json();
+      if (j.data && user) setUser({ ...user, fullName: j.data.fullName });
+      setNameEdit(false);
+    } finally {
+      setNameSaving(false);
+    }
   }
 
   if (loading) {
@@ -324,6 +345,63 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
+
+        {/* ── Certificate name banner (if not set) ── */}
+        {!user.fullName && !nameEdit && (
+          <div className="rounded-xl px-5 py-4 mb-6 flex items-center justify-between gap-4"
+            style={{ background: "#1a1200", border: "1px solid #3d2e00" }}>
+            <div>
+              <p className="text-sm font-bold" style={{ color: "#fbbf24" }}>Set your real name for certificates</p>
+              <p className="text-xs mt-0.5" style={{ color: "#78600a" }}>Your GitHub username appears on certificates right now. Add your real name.</p>
+            </div>
+            <button onClick={() => { setNameInput(""); setNameEdit(true); }}
+              className="shrink-0 px-4 py-2 rounded-lg text-xs font-bold"
+              style={{ background: "#fbbf24", color: "#000" }}>
+              Set Name
+            </button>
+          </div>
+        )}
+        {nameEdit && (
+          <div className="rounded-xl px-5 py-4 mb-6" style={{ background: "#111", border: "1px solid #2a2a2a" }}>
+            <p className="text-xs font-bold mb-3" style={{ color: "#888" }}>Your name on certificates</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="e.g. Sarah Ahmed"
+                autoFocus
+                className="flex-1 px-3 py-2 rounded-lg text-sm"
+                style={{ background: "#0a0a0a", border: "1px solid #2a2a2a", color: "#e5e7eb", outline: "none" }}
+                onKeyDown={(e) => e.key === "Enter" && saveName()}
+              />
+              <button onClick={saveName} disabled={nameSaving || !nameInput.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: "#5B5BD6" }}>
+                {nameSaving ? "Saving…" : "Save"}
+              </button>
+              <button onClick={() => setNameEdit(false)}
+                className="px-3 py-2 rounded-lg text-sm"
+                style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {user.fullName && !nameEdit && (
+          <div className="rounded-xl px-5 py-3 mb-6 flex items-center justify-between"
+            style={{ background: "#0a110a", border: "1px solid #1a3a1a" }}>
+            <div>
+              <p className="text-xs" style={{ color: "#555" }}>Certificate name</p>
+              <p className="text-sm font-bold text-white">{user.fullName}</p>
+            </div>
+            <button onClick={() => { setNameInput(user.fullName ?? ""); setNameEdit(true); }}
+              className="text-xs px-3 py-1.5 rounded-lg"
+              style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
+              Edit
+            </button>
+          </div>
+        )}
 
         {/* ── Stats ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">

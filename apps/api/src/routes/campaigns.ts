@@ -276,7 +276,12 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
  */
 router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
+  const { fullName } = req.body as { fullName?: string };
   try {
+    if (fullName?.trim()) {
+      await prisma.user.update({ where: { id: userId }, data: { fullName: fullName.trim() } });
+    }
+
     const campaign = await prisma.campaign.findUnique({
       where: { shareableSlug: req.params.slug },
     });
