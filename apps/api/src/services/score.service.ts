@@ -67,7 +67,7 @@ export async function updateUserSkillScore(
  */
 export async function recomputeUserSkillScore(userId: string): Promise<void> {
   const subs = await prisma.submission.findMany({
-    where: { userId, status: "REVIEWED" },
+    where: { userId, status: "REVIEWED", finalized: true },
     select: { scoreTotal: true },
     orderBy: { submittedAt: "asc" },
   });

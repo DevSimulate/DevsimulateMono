@@ -83,7 +83,7 @@ router.post(
           const sub = await prisma.submission.findFirst({
             where: {
               userId: c.userId,
-              status: "REVIEWED",
+              status: "REVIEWED", finalized: true,
               ticket: { codebaseId: campaign.codebaseId },
             },
             orderBy: { scoreTotal: "desc" },

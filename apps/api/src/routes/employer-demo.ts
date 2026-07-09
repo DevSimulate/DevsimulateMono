@@ -76,7 +76,7 @@ router.get(
   async (_req: Request, res: Response): Promise<void> => {
     try {
       const submissions = await prisma.submission.findMany({
-        where: { status: "REVIEWED", scoreTotal: { not: null } },
+        where: { status: "REVIEWED", finalized: true, scoreTotal: { not: null } },
         include: { user: true, ticket: true, followUp: true },
         orderBy: { submittedAt: "desc" },
       });
@@ -156,7 +156,7 @@ router.get(
       }
 
       const sub = await prisma.submission.findFirst({
-        where: { userId, status: "REVIEWED" },
+        where: { userId, status: "REVIEWED", finalized: true },
         include: { ticket: true, followUp: true },
         orderBy: { submittedAt: "desc" },
       });
@@ -188,6 +188,7 @@ router.get(
         where: {
           ticketId: sub.ticketId,
           status: "REVIEWED",
+          finalized: true,
           scoreTotal: { not: null },
         },
         select: { scoreTotal: true },
@@ -402,8 +403,8 @@ router.post(
     try {
       const where =
         candidateIds && candidateIds.length > 0
-          ? { userId: { in: candidateIds }, status: "REVIEWED" as const }
-          : { status: "REVIEWED" as const };
+          ? { userId: { in: candidateIds }, status: "REVIEWED" as const, finalized: true }
+          : { status: "REVIEWED" as const, finalized: true };
 
       const submissions = await prisma.submission.findMany({
         where,

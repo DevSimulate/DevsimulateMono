@@ -79,7 +79,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
 
     for (const c of candidates) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: c.campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: c.campaign.codebaseId } },
         orderBy: { scoreTotal: "desc" },
         include: { followUp: { select: { declarationMismatch: true } } },
       });
@@ -145,7 +145,7 @@ router.get("/candidates", async (req: Request, res: Response): Promise<void> => 
     const out = [];
     for (const c of rows) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: c.campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: c.campaign.codebaseId } },
         orderBy: { scoreTotal: "desc" },
         include: { followUp: { select: { declarationMismatch: true, aiDeclaration: true } } },
       });

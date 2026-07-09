@@ -156,7 +156,7 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
     }> = [];
     for (const c of rows) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
         orderBy: { scoreTotal: "desc" },
         select: {
           scoreTotal: true, scoreDiagnosis: true, scoreDesign: true,
@@ -645,7 +645,7 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
         const submission = await prisma.submission.findFirst({
           where: {
             userId: c.userId,
-            status: "REVIEWED",
+            status: "REVIEWED", finalized: true,
             ticket: { codebaseId: campaign.codebaseId },
           },
           orderBy: { scoreTotal: "desc" },
@@ -773,7 +773,7 @@ router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): 
     const submission = await prisma.submission.findFirst({
       where: {
         userId: rawCandidate.userId,
-        status: "REVIEWED",
+        status: "REVIEWED", finalized: true,
         ticket: { codebaseId: campaignCb.codebaseId },
       },
       orderBy: { scoreTotal: "desc" },
@@ -830,7 +830,7 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
 
     // Was this candidate integrity-flagged at decision time? (for the audit record)
     const sub = await prisma.submission.findFirst({
-      where: { userId: current.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+      where: { userId: current.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
       orderBy: { scoreTotal: "desc" },
       include: { followUp: { select: { declarationMismatch: true } } },
     });
@@ -895,7 +895,7 @@ router.post("/:id/invite", async (req: Request, res: Response): Promise<void> =>
     for (const c of candidates) {
       if (!c.user.email) { missingEmail++; continue; }
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", ticket: { codebaseId: campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
         orderBy: { scoreTotal: "desc" },
         select: { scoreTotal: true },
       });

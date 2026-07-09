@@ -567,7 +567,13 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
       question = result.question;
     } else {
       const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
-      if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+      if (!m) {
+        // No PR to ask about → verbal doesn't apply. Finalize now so the score
+        // isn't stuck hidden waiting for a verbal step that can't happen.
+        await prisma.submission.update({ where: { id: sub.id }, data: { finalized: true } });
+        res.status(400).json({ error: "No valid PR on this submission" });
+        return;
+      }
       const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
       const result = await generateVerbalQuestion(sub.ticket as never, diff);
       question = result.question;
@@ -633,7 +639,8 @@ async function processVerbal(
   else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
   const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
 
-  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal, verbalPenalty } });
+  // Verbal is scored — the assessment is now complete, so publish it.
+  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal, verbalPenalty, finalized: true } });
   await prisma.followUpQuestion.update({
     where: { id: sub.followUp.id },
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },

@@ -367,7 +367,7 @@ router.get(
           user: {
             include: {
               submissions: {
-                where: { status: "REVIEWED" },
+                where: { status: "REVIEWED", finalized: true },
                 orderBy: { submittedAt: "desc" },
                 take: 10,
                 select: {

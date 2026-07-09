@@ -1047,14 +1047,16 @@ function SubmitPageInner() {
             {!verbalReady ? (
               <>
                 <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-                  <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>You'll answer aloud</div>
-                  <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
+                  <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>On-the-spot question</div>
+                  <p className="text-sm leading-relaxed" style={{ color: "#4B4B4B" }}>
+                    The question stays hidden until you start. Once you click Start, it appears and the <span className="font-semibold">2-minute timer begins</span> — so answer it aloud straight away, in your own words.
+                  </p>
                 </div>
                 <div className="rounded-xl px-4 py-3 mb-4 text-xs" style={{ background: "#EEF2FF", color: "#4F46E5" }}>
-                  When you click Start, your browser will ask for <span className="font-semibold">camera &amp; microphone</span>. Allow both. The <span className="font-semibold">2-minute timer begins only after</span> you start — so take your time here, then speak.
+                  When you click Start, your browser will ask for <span className="font-semibold">camera &amp; microphone</span>. Allow both — the question and timer appear right after.
                 </div>
                 <button onClick={beginVerbal} className="btn-primary w-full">
-                  Start — allow camera &amp; mic →
+                  Start — reveal question &amp; allow camera &amp; mic →
                 </button>
               </>
             ) : (

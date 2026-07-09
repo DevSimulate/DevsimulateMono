@@ -19,6 +19,7 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
     const submissions = await prisma.submission.findMany({
       where: {
         status: "REVIEWED",
+        finalized: true,
         ...(stackFilter ? { ticket: { stack: stackFilter as never } } : {}),
       },
       select: {
@@ -80,7 +81,7 @@ router.get(
       }
 
       const reviewed = await prisma.submission.findMany({
-        where: { userId: user.id, status: "REVIEWED" },
+        where: { userId: user.id, status: "REVIEWED", finalized: true },
         orderBy: { submittedAt: "desc" },
         include: { ticket: true },
       });

@@ -65,6 +65,7 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
           where: {
             userId: candidate.userId,
             status: "REVIEWED",
+            finalized: true,
             ticket: { codebaseId: campaign.codebaseId },
           },
           orderBy: { scoreTotal: "desc" },

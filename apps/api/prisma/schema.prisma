@@ -159,6 +159,10 @@ model Submission {
   verbalPenalty      Int                 @default(0)
   hiddenTestPenalty  Int                 @default(0)
   riskScore          Int                 @default(0)
+  // True only once the FULL assessment is complete (verbal scored, or verbal not
+  // applicable). Leaderboards/certificates show a submission only when finalized,
+  // so a pre-verbal score never appears.
+  finalized          Boolean             @default(false)
   pasteAttempts      Int                 @default(0)
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
