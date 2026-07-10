@@ -65,6 +65,31 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    // Enforce the campaign deadline — once a contest/campaign has closed, it
+    // accepts no further submissions.
+    const ticketMeta = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { codebaseId: true },
+    });
+    if (ticketMeta) {
+      const closed = await prisma.campaignCandidate.findFirst({
+        where: {
+          userId,
+          campaign: {
+            codebaseId: ticketMeta.codebaseId,
+            deadline: { not: null, lt: new Date() },
+          },
+        },
+        select: { campaign: { select: { roleName: true } } },
+      });
+      if (closed) {
+        res.status(403).json({
+          error: `This competition has closed — the deadline for “${closed.campaign.roleName}” has passed, so no more submissions are accepted.`,
+        });
+        return;
+      }
+    }
+
     let jobData: ReviewJobData;
 
     if (isDesign) {

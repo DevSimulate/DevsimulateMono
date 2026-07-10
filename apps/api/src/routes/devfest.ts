@@ -51,6 +51,13 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
 
     const { org, companyName } = campaigns[0];
 
+    // A DevFest shares one deadline across its campaigns; take the latest as the
+    // official close time (the leaderboard shows a countdown to it).
+    const deadline: Date | null = campaigns
+      .map((c) => c.deadline as Date | null)
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+
     const allParticipants: ParticipantEntry[] = [];
 
     for (const campaign of campaigns) {
@@ -117,6 +124,7 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
     res.json({
       data: {
         tag,
+        deadline: deadline ? deadline.toISOString() : null,
         companyName: org.brandName || companyName,
         branding: {
           logoUrl:      org.logoUrl      ?? null,

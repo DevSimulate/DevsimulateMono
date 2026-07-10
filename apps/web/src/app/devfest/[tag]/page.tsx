@@ -34,10 +34,21 @@ interface Category {
 
 interface DevFest {
   tag:              string;
+  deadline:         string | null;
   companyName:      string;
   branding:         Branding;
   categories:       Category[];
   overallChampion:  (Participant & { category: string }) | null;
+}
+
+function formatCountdown(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return d > 0 ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
 
 const MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
@@ -57,6 +68,13 @@ export default function DevFestPage() {
   const [fest, setFest]     = useState<DevFest | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
+  const [now, setNow]       = useState(() => Date.now());
+
+  // Tick every second so the countdown stays live.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const load = useCallback(() => {
     fetch(`${API}/devfest/${tag}`)
@@ -98,6 +116,10 @@ export default function DevFestPage() {
   const primary = branding.primaryColor;
   const accent  = branding.accentColor;
 
+  const deadlineMs = fest.deadline ? new Date(fest.deadline).getTime() : null;
+  const closed     = deadlineMs != null && now >= deadlineMs;
+  const festYear   = fest.deadline ? new Date(fest.deadline).getFullYear() : new Date().getFullYear();
+
   return (
     <div className="min-h-screen" style={{ background: "#07070a", color: "#e5e7eb" }}>
 
@@ -123,17 +145,40 @@ export default function DevFestPage() {
             )}
           </div>
 
-          <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full mb-5"
-            style={{ background: "#0c0c0c", color: "#4ade80", border: "1px solid #1a3a1a" }}>
-            <span className="w-1.5 h-1.5 rounded-full inline-block animate-pulse" style={{ background: "#4ade80" }} />
-            LIVE LEADERBOARD
-          </div>
+          {closed ? (
+            <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full mb-5"
+              style={{ background: "#1a0c0c", color: "#f87171", border: "1px solid #3a1a1a" }}>
+              ⏹ COMPETITION CLOSED
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full mb-5"
+              style={{ background: "#0c0c0c", color: "#4ade80", border: "1px solid #1a3a1a" }}>
+              <span className="w-1.5 h-1.5 rounded-full inline-block animate-pulse" style={{ background: "#4ade80" }} />
+              LIVE LEADERBOARD
+            </div>
+          )}
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight mb-2">
-            DevFest <span style={{ color: accent }}>2025</span>
+            DevFest <span style={{ color: accent }}>{festYear}</span>
           </h1>
+
+          {deadlineMs != null && (
+            <div className="mb-3">
+              {closed ? (
+                <span className="text-sm font-semibold" style={{ color: "#f87171" }}>
+                  Closed {new Date(fest.deadline!).toLocaleString()} — submissions are no longer accepted
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-sm font-mono font-bold px-4 py-2 rounded-lg"
+                  style={{ background: "#0c0c0c", border: `1px solid ${accent}55`, color: accent }}>
+                  ⏱ Closes in {formatCountdown(deadlineMs - now)}
+                </span>
+              )}
+            </div>
+          )}
+
           <p className="text-sm" style={{ color: "#555" }}>
-            Hosted by {fest.companyName} · {categories.reduce((n, c) => n + c.participants.length, 0)} scored participants · Updates every 30s
+            Hosted by {fest.companyName} · {categories.reduce((n, c) => n + c.participants.length, 0)} scored participants · {closed ? "Final results" : "Updates every 30s"}
           </p>
         </div>
       </header>

@@ -49,7 +49,20 @@ export default function NewCampaignPage() {
         if (j.data?.[0]) setForm((f) => ({ ...f, codebaseId: j.data[0].id }));
       })
       .catch(() => null);
+
+    // Pre-fill the company name with the employer's organisation (e.g. LMKR).
+    fetch(`${API}/employer/campaigns/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.data?.orgName) setForm((f) => (f.companyName ? f : { ...f, companyName: j.data.orgName }));
+      })
+      .catch(() => null);
   }, []);
+
+  // Minimum selectable deadline = now, in the local-time format datetime-local expects.
+  const minDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 
   // Load the ticket library whenever codebase/difficulty changes
   useEffect(() => {
@@ -255,9 +268,16 @@ export default function NewCampaignPage() {
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
             </Field>
 
-            <Field label="Deadline">
-              <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
+            <Field label={form.type === "CONTEST" ? "Deadline (competition closes)" : "Deadline"}>
+              <input
+                type="datetime-local"
+                value={form.deadline}
+                min={minDateTime}
+                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none cursor-pointer"
+                style={{ ...inputStyle, colorScheme: "dark" }}
+              />
             </Field>
           </div>
 
