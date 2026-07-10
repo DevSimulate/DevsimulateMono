@@ -172,10 +172,10 @@ function SubmitPageInner() {
   // record→Whisper as a fallback when Web Speech isn't available)
   const [verbalQuestion, setVerbalQuestion] = useState("");
   const [verbalReady,    setVerbalReady]    = useState(false); // true after camera+mic granted
-  const [verbalTimeLeft, setVerbalTimeLeft] = useState(120);
+  const [verbalTimeLeft, setVerbalTimeLeft] = useState(300);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
-  const VERBAL_SECONDS = 120;
+  const VERBAL_SECONDS = 300;
   const videoRef       = useRef<HTMLVideoElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
   const recorderRef    = useRef<MediaRecorder | null>(null);
@@ -1053,7 +1053,7 @@ function SubmitPageInner() {
                 <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
                   <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>On-the-spot question</div>
                   <p className="text-sm leading-relaxed" style={{ color: "#4B4B4B" }}>
-                    The question stays hidden until you start. Once you click Start, it appears and the <span className="font-semibold">2-minute timer begins</span> — so answer it aloud straight away, in your own words.
+                    The question stays hidden until you start. Once you click Start, it appears and the <span className="font-semibold">5-minute timer begins</span> — so answer it aloud straight away, in your own words.
                   </p>
                 </div>
                 <div className="rounded-xl px-4 py-3 mb-4 text-xs" style={{ background: "#EEF2FF", color: "#4F46E5" }}>
@@ -1158,7 +1158,7 @@ function SubmitPageInner() {
                 const bg = penalised ? "#FEE2E2" : notCaptured ? "#FEF3C7" : "#CCFBF1";
                 const fg = penalised ? "#DC2626" : notCaptured ? "#D97706" : "#0D9488";
                 const msg = penalised
-                  ? `couldn't back your written answer aloud (−${result.verbalPenalty} pts).`
+                  ? "couldn't fully back your written answer aloud — this is reflected in your Diagnosis & Design scores above."
                   : notCaptured
                     ? "no spoken answer captured — flagged for review."
                     : "matched your written answer — understanding confirmed.";

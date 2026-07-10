@@ -362,7 +362,7 @@ export default function ResultsPage() {
                         <td className="px-3 py-3 text-xs" style={{ color: "#aaaaaa" }}>{s?.scoreExecution ?? "—"}</td>
                         <td className="px-3 py-3 text-xs font-bold">
                           {(s?.verbalPenalty ?? 0) > 0
-                            ? <span style={{ color: "#f87171" }}>−{s?.verbalPenalty}</span>
+                            ? <span style={{ color: "#f87171" }} title="Weak spoken defence — already reflected in Diagnosis & Design">⚠</span>
                             : s?.scoreTotal != null
                               ? <span style={{ color: "#4ade80" }}>✓</span>
                               : <span style={{ color: "#444" }}>—</span>}
