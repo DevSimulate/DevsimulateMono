@@ -98,6 +98,10 @@ export default function NewCampaignPage() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          // Convert the local datetime-local value to an unambiguous UTC ISO
+          // string so the stored deadline matches the wall-clock time picked,
+          // regardless of the server's timezone.
+          deadline: form.deadline ? new Date(form.deadline).toISOString() : "",
           ticketIds: pickMode ? [...selectedTickets] : [],
         }),
       });

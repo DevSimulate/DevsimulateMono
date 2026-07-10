@@ -15,6 +15,7 @@ interface CertData {
   companyName:    string;
   score:          number;
   rank:           number | null;
+  category:       string | null;
   issuedAt:       string;
   branding: {
     logoUrl:      string | null;
@@ -461,6 +462,23 @@ export default function CertificatePage() {
                 </div>
 
                 <div className="cert-campaign">{cert.campaignName}</div>
+                {cert.category && (
+                  <div style={{
+                    display: "inline-block",
+                    fontFamily: "'Cinzel', serif",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    color: gold,
+                    border: `1px solid ${gold}66`,
+                    borderRadius: 4,
+                    padding: "3px 12px",
+                    margin: "4px 0 2px",
+                  }}>
+                    {cert.category} Category
+                  </div>
+                )}
                 <div className="cert-org-name">conducted by {branding.brandName}</div>
 
                 <div className="divider" style={{ marginBottom: 24 }}>
@@ -478,7 +496,7 @@ export default function CertificatePage() {
                   {cert.rank && (
                     <div className="cert-score-block">
                       <div className="cert-score-value">#{cert.rank}</div>
-                      <div className="cert-score-label">Final Rank</div>
+                      <div className="cert-score-label">{cert.category ? `${cert.category} Rank` : "Final Rank"}</div>
                     </div>
                   )}
                 </div>

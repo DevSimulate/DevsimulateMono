@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
+import { categoryForStack } from "../lib/devfest-categories";
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.get(
           primaryColor: c.campaign.org.primaryColor ?? "#5B5BD6",
           score:        c.score,
           rank:         c.rank,
+          category:     c.category,
           issuedAt:     c.issuedAt,
         })),
       });
@@ -117,6 +119,90 @@ router.post(
 );
 
 /**
+ * POST /certificates/devfest/:tag/certificates  (AUTH — employer)
+ * Issues certificates for a whole DevFest, ranked by LEADERBOARD CATEGORY
+ * (Frontend / Backend / DevOps · Infra / System Design) rather than per stack or
+ * per campaign. Candidates across every campaign sharing the tag are pooled into
+ * their category and ranked together — matching the DevFest leaderboard.
+ * Idempotent (upserts).
+ */
+router.post(
+  "/devfest/:tag/certificates",
+  requireAuth as (req: Request, res: Response, next: () => void) => void,
+  async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
+    const { tag } = req.params;
+    const { minScore = 0 } = req.body as { minScore?: number };
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const campaigns: any[] = await (prisma.campaign.findMany as any)({
+        where: { devFestTag: tag },
+        include: { candidates: { select: { userId: true } } },
+      });
+      if (campaigns.length === 0) { res.status(404).json({ error: "DevFest not found" }); return; }
+
+      // The caller must belong to the org running this DevFest.
+      const member = await prisma.orgMember.findFirst({ where: { orgId: campaigns[0].orgId, userId } });
+      if (!member) { res.status(403).json({ error: "Not authorised" }); return; }
+
+      // Pool every candidate into their leaderboard category with their score.
+      type Entry = { userId: string; campaignId: string; score: number };
+      const byCategory: Record<string, Entry[]> = {};
+
+      for (const campaign of campaigns) {
+        const firstTicket = await prisma.ticket.findFirst({
+          where: { codebaseId: campaign.codebaseId },
+          select: { stack: true },
+        });
+        const category = categoryForStack(firstTicket?.stack).name;
+
+        for (const c of campaign.candidates) {
+          const sub = await prisma.submission.findFirst({
+            where: {
+              userId: c.userId,
+              status: "REVIEWED", finalized: true,
+              ticket: { codebaseId: campaign.codebaseId },
+            },
+            orderBy: { scoreTotal: "desc" },
+            select: { scoreTotal: true },
+          });
+          if (sub?.scoreTotal != null && sub.scoreTotal >= minScore) {
+            (byCategory[category] ??= []).push({
+              userId: c.userId,
+              campaignId: campaign.id,
+              score: sub.scoreTotal,
+            });
+          }
+        }
+      }
+
+      // Rank within each category and issue.
+      let issued = 0;
+      const perCategory: Record<string, number> = {};
+      for (const [category, entries] of Object.entries(byCategory)) {
+        entries.sort((a, b) => b.score - a.score);
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          await prisma.certificate.upsert({
+            where: { userId_campaignId: { userId: e.userId, campaignId: e.campaignId } },
+            create: { userId: e.userId, campaignId: e.campaignId, score: e.score, rank: i + 1, category },
+            update: { score: e.score, rank: i + 1, category },
+          });
+          issued++;
+        }
+        perCategory[category] = entries.length;
+      }
+
+      res.json({ data: { issued, byCategory: perCategory } });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to issue DevFest certificates";
+      res.status(500).json({ error: message });
+    }
+  }
+);
+
+/**
  * GET /certificates/:id  (PUBLIC)
  * Declared LAST — catches any id that didn't match a specific route above.
  */
@@ -145,6 +231,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         companyName:    cert.campaign.companyName,
         score:          cert.score,
         rank:           cert.rank,
+        category:       cert.category,
         issuedAt:       cert.issuedAt,
         branding: {
           logoUrl:      cert.campaign.org.logoUrl      || null,

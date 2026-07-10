@@ -37,6 +37,7 @@ export default function CampaignsListPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tagPanel, setTagPanel]   = useState<string | null>(null);
   const [tagInput, setTagInput]   = useState("");
+  const [certMsg, setCertMsg]     = useState<string | null>(null);
 
   function load() {
     const token = getToken();
@@ -88,6 +89,27 @@ export default function CampaignsListPage() {
     setBusyId(null);
     setTagPanel(null);
     load();
+  }
+
+  async function issueDevFestCerts(tag: string, campaignId: string) {
+    setBusyId(campaignId);
+    setCertMsg(null);
+    try {
+      const token = getToken();
+      const r = await fetch(`${API}/certificates/devfest/${encodeURIComponent(tag)}/certificates`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ minScore: 0 }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Failed to issue certificates");
+      const parts = Object.entries(j.data?.byCategory ?? {}).map(([cat, n]) => `${cat}: ${n}`);
+      setCertMsg(`Issued ${j.data?.issued ?? 0} certificate(s) by category${parts.length ? ` — ${parts.join(", ")}` : ""}.`);
+    } catch (e) {
+      setCertMsg(e instanceof Error ? e.message : "Failed to issue certificates");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function deleteCampaign(id: string) {
@@ -261,6 +283,22 @@ export default function CampaignsListPage() {
                           Cancel
                         </button>
                       </div>
+
+                      {c.devFestTag && (
+                        <div className="mt-3 pt-3" style={{ borderTop: "1px solid #1e3a1e" }}>
+                          <p className="text-[10px] mb-2" style={{ color: "#666" }}>
+                            Issue e-certificates ranked by leaderboard category (Frontend / Backend / DevOps · Infra / System Design) across the whole DevFest.
+                          </p>
+                          <button onClick={() => issueDevFestCerts(c.devFestTag!, c.id)} disabled={busyId === c.id}
+                            className="w-full py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
+                            style={{ background: "#7c3aed" }}>
+                            {busyId === c.id ? "Issuing…" : "🏅 Issue DevFest Certificates (by category)"}
+                          </button>
+                          {certMsg && (
+                            <p className="text-[10px] mt-2" style={{ color: "#a5b4fc" }}>{certMsg}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

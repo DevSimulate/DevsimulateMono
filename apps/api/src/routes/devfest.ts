@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
+import { CATEGORY_MAP, CategoryMeta, OTHER_CATEGORY } from "../lib/devfest-categories";
 
 const router = Router();
 
@@ -15,19 +16,6 @@ interface ParticipantEntry {
   campaignName: string;
 }
 
-type CategoryMeta = { name: string; icon: string; order: number };
-
-const CATEGORY_MAP: Record<string, CategoryMeta> = {
-  REACT:         { name: "Frontend",       icon: "🖥️",  order: 1 },
-  ANGULAR:       { name: "Frontend",       icon: "🖥️",  order: 1 },
-  JAVA:          { name: "Backend",        icon: "⚙️",  order: 2 },
-  CPP:           { name: "Backend",        icon: "⚙️",  order: 2 },
-  DOTNET:        { name: "Backend",        icon: "⚙️",  order: 2 },
-  PYTHON:        { name: "Backend",        icon: "⚙️",  order: 2 },
-  NODE:          { name: "Backend",        icon: "⚙️",  order: 2 },
-  DEVOPS:        { name: "DevOps / Infra", icon: "🚀",  order: 3 },
-  SYSTEM_DESIGN: { name: "System Design",  icon: "🏗️", order: 4 },
-};
 
 // GET /devfest/:tag — public leaderboard aggregated across all campaigns for a DevFest event
 router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
@@ -102,7 +90,7 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
     const groups: Record<string, CategoryMeta & { participants: ParticipantEntry[] }> = {};
 
     for (const p of allParticipants) {
-      const cat = CATEGORY_MAP[p.stack] ?? { name: "Other", icon: "💻", order: 5 };
+      const cat = CATEGORY_MAP[p.stack] ?? OTHER_CATEGORY;
       if (!groups[cat.name]) groups[cat.name] = { ...cat, participants: [] };
       groups[cat.name].participants.push(p);
     }

@@ -325,6 +325,7 @@ model Certificate {
   campaignId String
   score      Int
   rank       Int?
+  category   String?      // DevFest category the rank is within (Frontend/Backend/DevOps · Infra/System Design)
   issuedAt   DateTime     @default(now())
   user       User         @relation(fields: [userId], references: [id])
   campaign   Campaign     @relation(fields: [campaignId], references: [id])
