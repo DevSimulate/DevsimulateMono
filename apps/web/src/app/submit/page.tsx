@@ -646,10 +646,14 @@ function SubmitPageInner() {
       }
       setResult((prev) => prev ? {
         ...prev,
-        scoreTotal:    d.data.newScoreTotal ?? prev.scoreTotal,
-        verbalNote:    d.data.note,
-        verbalScore:   d.data.score,
-        verbalPenalty: d.data.penalty ?? 0,
+        scoreTotal:     d.data.newScoreTotal ?? prev.scoreTotal,
+        // The verbal penalty is taken out of Diagnosis + Design, so reflect the
+        // reduced dimension scores here too (keeps the breakdown coherent).
+        scoreDiagnosis: d.data.scoreDiagnosis ?? prev.scoreDiagnosis,
+        scoreDesign:    d.data.scoreDesign ?? prev.scoreDesign,
+        verbalNote:     d.data.note,
+        verbalScore:    d.data.score,
+        verbalPenalty:  d.data.penalty ?? 0,
       } : prev);
     } catch {
       setVerbalBusy(false);

@@ -110,7 +110,7 @@ export default function CampaignLeaderboardPage() {
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1a1a1a" }}>
             {/* Table header */}
             <div className="grid text-xs font-bold uppercase tracking-widest px-5 py-3"
-              style={{ background: "#111111", color: "#444", gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px 72px" }}>
+              style={{ background: "#111111", color: "#444", gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px" }}>
               <div />
               <div />
               <div>Candidate</div>
@@ -118,7 +118,6 @@ export default function CampaignLeaderboardPage() {
               <div className="text-center">Design<br/><span style={{color:"#333",fontSize:9}}>/30</span></div>
               <div className="text-center">Comms<br/><span style={{color:"#333",fontSize:9}}>/20</span></div>
               <div className="text-center">Exec<br/><span style={{color:"#333",fontSize:9}}>/10</span></div>
-              <div className="text-center">Verbal<br/><span style={{color:"#333",fontSize:9}}>penalty</span></div>
               <div className="text-center">Final</div>
             </div>
 
@@ -126,7 +125,7 @@ export default function CampaignLeaderboardPage() {
               <div key={p.githubUsername}
                 className="grid items-center px-5 py-3.5 transition-colors"
                 style={{
-                  gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px 72px",
+                  gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px",
                   background: p.rank <= 3 ? "#0d1117" : "transparent",
                   borderTop: "1px solid #161616",
                   borderLeft: `3px solid ${p.rank === 1 ? accent : p.rank <= 3 ? primary + "88" : "transparent"}`,
@@ -152,12 +151,6 @@ export default function CampaignLeaderboardPage() {
                 <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.comms ?? "—"}</div>
                 {/* Exec */}
                 <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.exec ?? "—"}</div>
-                {/* Verbal penalty */}
-                <div className="text-center text-sm font-bold">
-                  {p.verbalPenalty > 0
-                    ? <span style={{ color: "#f87171" }}>−{p.verbalPenalty}</span>
-                    : <span style={{ color: "#4ade80" }}>✓</span>}
-                </div>
                 {/* Final score */}
                 <div className="text-center text-xl font-black" style={{ color: scoreColor(p.score) }}>{p.score}</div>
               </div>

@@ -219,9 +219,6 @@ export default function DevFestPage() {
                         <th className="px-3 py-3 text-center">
                           Exec<br /><span className="text-[9px]" style={{ color: "#252525" }}>/10</span>
                         </th>
-                        <th className="px-3 py-3 text-center">
-                          Verbal<br /><span className="text-[9px]" style={{ color: "#252525" }}>penalty</span>
-                        </th>
                         <th className="px-4 py-3 text-center">Final</th>
                       </tr>
                     </thead>
@@ -258,11 +255,6 @@ export default function DevFestPage() {
                           <td className="px-3 py-3 text-center text-sm" style={{ color: "#aaa" }}>{p.design ?? "—"}</td>
                           <td className="px-3 py-3 text-center text-sm" style={{ color: "#aaa" }}>{p.comms ?? "—"}</td>
                           <td className="px-3 py-3 text-center text-sm" style={{ color: "#aaa" }}>{p.exec ?? "—"}</td>
-                          <td className="px-3 py-3 text-center text-sm font-bold">
-                            {p.verbalPenalty > 0
-                              ? <span style={{ color: "#f87171" }}>−{p.verbalPenalty}</span>
-                              : <span style={{ color: "#4ade80" }}>✓</span>}
-                          </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-xl font-black" style={{ color: scoreColor(p.score) }}>
                               {p.score}

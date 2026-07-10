@@ -632,22 +632,57 @@ async function processVerbal(
     );
   }
 
-  // Graduated penalty — fuzzier than the objective hidden test, so it deducts
-  // rather than hard-caps. >=7: no change. Can't defend it aloud / inconsistent: -20.
+  // Graduated penalty — >=7: no change. Can't defend it aloud / inconsistent: full -20.
   let verbalPenalty = 0;
   if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
   else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
-  const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - verbalPenalty);
+
+  // Attribute the deduction to the two "understanding" dimensions the verbal
+  // actually tests — Diagnosis (40) and Design (30) — instead of a flat hit on
+  // the total. Split 40:30, take from Diagnosis first, and never drive a
+  // dimension below 0. This keeps the breakdown coherent: a weak spoken defence
+  // lowers the very scores (root-cause understanding + design judgement) it
+  // calls into question. The original per-dimension scores are preserved in the
+  // stored claudeReview JSON for audit.
+  const curDiag = sub.scoreDiagnosis ?? 0;
+  const curDesign = sub.scoreDesign ?? 0;
+  const actualPenalty = Math.min(verbalPenalty, curDiag + curDesign);
+  let diagCut = Math.min(curDiag, Math.round(actualPenalty * (40 / 70)));
+  let designCut = Math.min(curDesign, actualPenalty - diagCut);
+  diagCut = Math.min(curDiag, diagCut + (actualPenalty - diagCut - designCut)); // rounding spill → diagnosis
+  const newDiag = curDiag - diagCut;
+  const newDesign = curDesign - designCut;
+  const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - actualPenalty);
 
   // Verbal is scored — the assessment is now complete, so publish it.
-  await prisma.submission.update({ where: { id: sub.id }, data: { scoreTotal: newScoreTotal, verbalPenalty, finalized: true } });
+  await prisma.submission.update({
+    where: { id: sub.id },
+    data: {
+      scoreTotal: newScoreTotal,
+      scoreDiagnosis: newDiag,
+      scoreDesign: newDesign,
+      verbalPenalty: actualPenalty,
+      finalized: true,
+    },
+  });
   await prisma.followUpQuestion.update({
     where: { id: sub.followUp.id },
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
   });
   await recomputeUserSkillScore(sub.userId); // reflect the verbal deduction in Skill Score
 
-  return { status: 200, body: { data: { ...scored, penalty: verbalPenalty, newScoreTotal } } };
+  return {
+    status: 200,
+    body: {
+      data: {
+        ...scored,
+        penalty: actualPenalty,
+        newScoreTotal,
+        scoreDiagnosis: newDiag,
+        scoreDesign: newDesign,
+      },
+    },
+  };
 }
 
 /** POST /submissions/:id/verbal — body { question, transcript } (browser STT). */
