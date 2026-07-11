@@ -164,11 +164,26 @@ Please score this pull request now. Return ONLY the JSON object.`,
  * variables, functions, or line decisions from the developer's actual change.
  * Cannot be answered generically without having read the specific code.
  */
+// ─── Webinar demo ticket ────────────────────────────────────────────────────
+// A single isolated ticket used for live demos. Its follow-up and verbal
+// questions are FIXED (not AI-generated) so the presenter can rehearse exact
+// answers. This only affects the demo ticket id below — every real candidate's
+// ticket has a different id, so their flow is completely unchanged.
+// REMOVE this ticket (and these constants are harmless to leave) before DevFest.
+export const DEMO_TICKET_ID = "ticket-nova-demo-webinar-001";
+const DEMO_Q1 =
+  "The discount math returns a negative total for a normal input like 20%. Walk me through exactly why the original line produced a negative number, and what your change does differently.";
+const DEMO_Q2 =
+  "Your fix divides the percent by 100. How do the existing guard clause (the 0–100 check) and the Money constructor's rounding keep this calculation safe for every valid input?";
+const DEMO_VERBAL =
+  "In your own words: what was the root cause of the negative-total bug, and why is adding “/ 100” the correct minimal fix rather than changing anything else in the method?";
+
 export async function generateFirstQuestion(
   ticket: TicketWithCodebase,
   prDiff: string,
   review: ClaudeReviewResult
 ): Promise<{ question1: string }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question1: DEMO_Q1 };
   const prompt = `You are a senior engineering interviewer. A developer fixed a bug and you need to ask them ONE targeted follow-up question.
 
 Ticket: ${ticket.title}
@@ -220,6 +235,7 @@ export async function generateQ2FromA1(
   question1: string,
   answer1: string
 ): Promise<{ question2: string }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question2: DEMO_Q2 };
   const prompt = `You are a senior engineering interviewer conducting a technical debrief.
 
 Ticket: ${ticket.title}
@@ -546,6 +562,7 @@ export async function generateVerbalQuestion(
   ticket: TicketWithCodebase,
   prDiff: string
 ): Promise<{ question: string }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question: DEMO_VERBAL };
   const prompt = `You are a senior engineering interviewer. The candidate will answer your question OUT LOUD on camera, in their own words, in 90 seconds — they cannot prepare or paste it.
 
 Ticket: ${ticket.title}
