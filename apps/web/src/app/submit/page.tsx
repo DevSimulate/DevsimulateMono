@@ -182,6 +182,7 @@ function SubmitPageInner() {
   const [verbalRetries,    setVerbalRetries]    = useState(2);    // re-records allowed
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const captionsActiveRef = useRef(false); // true while captions should keep running
   const VERBAL_SECONDS = 300;
   const videoRef       = useRef<HTMLVideoElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
@@ -563,6 +564,7 @@ function SubmitPageInner() {
     if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
     try { if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop(); } catch { /* ignore */ }
     recorderRef.current = null;
+    captionsActiveRef.current = false; // stop before .stop() so onend doesn't restart it
     try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     recognitionRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -595,6 +597,15 @@ function SubmitPageInner() {
         setLiveCaption((finalText + interim).trim());
       };
       rec.onerror = () => { /* ignore — captions are best-effort */ };
+      // Web Speech frequently ends on its own (the first session right after the
+      // mic prompt, or after a pause). Restart it while we're still recording so
+      // captions appear reliably from the first attempt.
+      rec.onend = () => {
+        if (captionsActiveRef.current) {
+          try { rec.start(); } catch { /* already running */ }
+        }
+      };
+      captionsActiveRef.current = true;
       rec.start();
       recognitionRef.current = rec;
     } catch { /* ignore */ }
