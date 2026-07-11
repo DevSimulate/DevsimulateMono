@@ -77,6 +77,7 @@ type Stage =
   | "loading_q2"
   | "q2"
   | "verbal"
+  | "verbal_review"
   | "scoring"
   | "score"
   | "upgrade";
@@ -94,6 +95,7 @@ function stepIndex(stage: Stage): number {
     loading_q2: 3,
     q2:         3,
     verbal:     4,
+    verbal_review: 4,
     scoring:    5,
     score:      5,
     upgrade:    0,
@@ -175,6 +177,11 @@ function SubmitPageInner() {
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(300);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
+  const [liveCaption,      setLiveCaption]      = useState("");   // real-time captions while speaking
+  const [reviewTranscript, setReviewTranscript] = useState("");   // Whisper text shown for confirmation
+  const [verbalRetries,    setVerbalRetries]    = useState(2);    // re-records allowed
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null);
   const VERBAL_SECONDS = 300;
   const videoRef       = useRef<HTMLVideoElement | null>(null);
   const streamRef      = useRef<MediaStream | null>(null);
@@ -556,9 +563,41 @@ function SubmitPageInner() {
     if (verbalTimerRef.current) { clearInterval(verbalTimerRef.current); verbalTimerRef.current = null; }
     try { if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop(); } catch { /* ignore */ }
     recorderRef.current = null;
+    try { recognitionRef.current?.stop(); } catch { /* ignore */ }
+    recognitionRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+  }
+
+  // Best-effort live captions via the browser's Web Speech API — shows the
+  // candidate what's being heard in real time. Purely a confidence aid; the
+  // Whisper transcript they confirm afterwards is what actually gets scored.
+  function startLiveCaptions() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const W = window as unknown as { SpeechRecognition?: any; webkitSpeechRecognition?: any };
+    const SR = W.SpeechRecognition || W.webkitSpeechRecognition;
+    if (!SR) return; // unsupported — Whisper review still guarantees accuracy
+    try {
+      const rec = new SR();
+      rec.lang = "en-US";
+      rec.continuous = true;
+      rec.interimResults = true;
+      let finalText = "";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (e: any) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalText += t + " ";
+          else interim += t;
+        }
+        setLiveCaption((finalText + interim).trim());
+      };
+      rec.onerror = () => { /* ignore — captions are best-effort */ };
+      rec.start();
+      recognitionRef.current = rec;
+    } catch { /* ignore */ }
   }
 
   // Triggered by the "Start" button. Requests camera+mic permission FIRST (one
@@ -591,6 +630,10 @@ function SubmitPageInner() {
     rec.start();
     recorderRef.current = rec;
 
+    // Show live captions so the candidate sees what's being heard as they speak.
+    setLiveCaption("");
+    startLiveCaptions();
+
     setVerbalReady(true);
     setVerbalTimeLeft(VERBAL_SECONDS);
     verbalTimerRef.current = setInterval(() => {
@@ -611,59 +654,109 @@ function SubmitPageInner() {
     });
   }
 
-  async function handleVerbalSubmit() {
+  // Step 1: stop recording, transcribe with Whisper, and show the text for
+  // review — the candidate confirms exactly what will be scored.
+  async function stopAndReview() {
     if (verbalBusy) return;
     setVerbalBusy(true);
 
     const audio = await stopAndGetAudio();
+    const fallback = liveCaption.trim(); // live captions, used if Whisper is unavailable
     stopVerbalMedia();
     setScoringMsg("Transcribing your explanation…");
-    setStage("scoring"); // score is only finalised AFTER the spoken explanation
+    setStage("scoring");
 
     const token = getToken();
     try {
-      const url = `${API_URL}/submissions/${submissionId}/verbal-audio?question=${encodeURIComponent(verbalQuestion)}`;
+      const url = `${API_URL}/submissions/${submissionId}/verbal-transcribe`;
       const r = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": audio.type || "audio/webm" },
         body: audio,
       });
       const d = await r.json().catch(() => ({}));
+      const transcript = ((r.ok && d.data?.transcript) ? d.data.transcript : fallback).trim();
 
-      // The verbal step is REQUIRED. A failure (server/config error, or no speech
-      // captured) must NOT silently award the score — send them back to explain again.
+      if (!transcript) {
+        setVerbalBusy(false);
+        setError("We couldn't capture your spoken answer — check your microphone and try again.");
+        setStage("verbal");
+        return;
+      }
+      setReviewTranscript(transcript);
+      setVerbalBusy(false);
+      setError(null);
+      setStage("verbal_review");
+    } catch {
+      // Whisper unreachable — fall back to the live captions if we have them.
+      if (fallback) {
+        setReviewTranscript(fallback);
+        setVerbalBusy(false);
+        setStage("verbal_review");
+      } else {
+        setVerbalBusy(false);
+        setError("Couldn't process your explanation — please try again.");
+        setStage("verbal");
+      }
+    }
+  }
+
+  // Step 2: score the transcript the candidate reviewed and approved.
+  async function confirmVerbal() {
+    if (verbalBusy) return;
+    setVerbalBusy(true);
+    setScoringMsg("Scoring your explanation…");
+    setStage("scoring");
+
+    const token = getToken();
+    try {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/verbal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ question: verbalQuestion, transcript: reviewTranscript }),
+      });
+      const d = await r.json().catch(() => ({}));
+
       if (!r.ok || !d.data) {
         setVerbalBusy(false);
-        setError("Couldn't process your explanation — check your microphone and try again. Your score is finalised only after the spoken explanation.");
-        setStage("verbal");
+        setError("Couldn't score your explanation — please try again.");
+        setStage("verbal_review");
         return;
       }
       if (d.data.score === null || d.data.score === undefined) {
         setVerbalBusy(false);
-        setError("We couldn't hear your spoken answer — check your microphone and explain again.");
-        setStage("verbal");
+        setError("Your answer was too short to score — please re-record a fuller explanation.");
+        setStage("verbal_review");
         return;
       }
       setResult((prev) => prev ? {
         ...prev,
         scoreTotal:     d.data.newScoreTotal ?? prev.scoreTotal,
-        // The verbal penalty is taken out of Diagnosis + Design, so reflect the
-        // reduced dimension scores here too (keeps the breakdown coherent).
         scoreDiagnosis: d.data.scoreDiagnosis ?? prev.scoreDiagnosis,
         scoreDesign:    d.data.scoreDesign ?? prev.scoreDesign,
         verbalNote:     d.data.note,
         verbalScore:    d.data.score,
         verbalPenalty:  d.data.penalty ?? 0,
       } : prev);
+      setVerbalBusy(false);
+      setError(null);
+      setStage("score");
     } catch {
       setVerbalBusy(false);
-      setError("Couldn't reach the server to process your explanation — please try again.");
-      setStage("verbal");
-      return;
+      setError("Couldn't reach the server — please try again.");
+      setStage("verbal_review");
     }
-    setVerbalBusy(false);
+  }
+
+  // Re-record — limited so it can't be gamed by retrying endlessly.
+  function reRecordVerbal() {
+    if (verbalRetries <= 0) return;
+    setVerbalRetries((n) => n - 1);
+    setReviewTranscript("");
+    setLiveCaption("");
+    setVerbalReady(false);
     setError(null);
-    setStage("score");
+    setStage("verbal");
   }
 
   // On entering the verbal stage, wait for the candidate to click Start (which asks
@@ -675,9 +768,10 @@ function SubmitPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
-  // Auto-submit when the timer runs out (only once recording has started).
+  // When the timer runs out, stop and take them to the transcript review
+  // (they still confirm before it's scored).
   useEffect(() => {
-    if (stage === "verbal" && verbalReady && verbalTimeLeft === 0 && !verbalBusy) handleVerbalSubmit();
+    if (stage === "verbal" && verbalReady && verbalTimeLeft === 0 && !verbalBusy) stopAndReview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verbalTimeLeft, stage, verbalReady]);
 
@@ -1074,18 +1168,56 @@ function SubmitPageInner() {
                   </div>
                 </div>
 
-                <div className="rounded-xl px-4 py-3 mb-4 flex items-center gap-2 text-sm"
+                <div className="rounded-xl px-4 py-3 mb-3 flex items-center gap-2 text-sm"
                   style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
                   <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
-                  Recording — speak your answer now. Click <span className="font-semibold">Submit</span> when done (it transcribes after you submit).
+                  Recording — speak your answer now. You&apos;ll <span className="font-semibold">review the transcript</span> before it&apos;s scored.
                 </div>
 
-                <button onClick={handleVerbalSubmit} disabled={verbalBusy}
+                {/* Live captions — what we're hearing, in real time */}
+                <div className="rounded-xl px-4 py-3 mb-4 min-h-[64px]" style={{ background: "#F7F6F3", border: "1px dashed #C4C2DB" }}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Live captions</div>
+                  <p className="text-sm leading-relaxed" style={{ color: liveCaption ? "#1A1A1A" : "#9A9A9A" }}>
+                    {liveCaption || "Your words will appear here as you speak…"}
+                  </p>
+                </div>
+
+                <button onClick={stopAndReview} disabled={verbalBusy}
                   className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed">
-                  {verbalBusy ? "Submitting…" : "Submit explanation →"}
+                  {verbalBusy ? "Transcribing…" : "Stop & review my answer →"}
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Stage: Verbal transcript review ── */}
+        {stage === "verbal_review" && (
+          <div className="card rounded-2xl p-6 fade-in-up">
+            <h2 className="text-lg font-bold mb-1" style={{ color: "#1A1A1A" }}>Review what we heard</h2>
+            <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
+              This is the transcript of your spoken answer — <span className="font-semibold">exactly what will be scored</span>. If it captured you correctly, submit it. If a word came out wrong, you can re-record.
+            </p>
+            {error && (
+              <div className="text-xs mb-4 rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#D97706" }}>{error}</div>
+            )}
+
+            <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+              <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#5B5BD6" }}>Your explanation (transcribed)</div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#1A1A1A" }}>{reviewTranscript}</p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button onClick={confirmVerbal} disabled={verbalBusy}
+                className="btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
+                {verbalBusy ? "Scoring…" : "Looks right — submit for scoring →"}
+              </button>
+              <button onClick={reRecordVerbal} disabled={verbalBusy || verbalRetries <= 0}
+                className="flex-1 rounded-lg font-semibold px-4 py-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#4F46E5" }}>
+                {verbalRetries > 0 ? `Re-record (${verbalRetries} left)` : "No re-records left"}
+              </button>
+            </div>
           </div>
         )}
 

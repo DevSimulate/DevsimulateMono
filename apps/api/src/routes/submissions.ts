@@ -723,6 +723,27 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
 });
 
 /**
+ * POST /submissions/:id/verbal-transcribe — raw audio body (audio/webm).
+ * Transcribes with Whisper and returns the text ONLY (no scoring), so the
+ * candidate can review exactly what was captured before it's scored.
+ */
+router.post(
+  "/:id/verbal-transcribe",
+  raw({ type: () => true, limit: "25mb" }),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const audio = req.body as Buffer;
+      if (!audio || !audio.length) { res.status(400).json({ error: "No audio received" }); return; }
+      const mime = (req.headers["content-type"] as string) || "audio/webm";
+      const transcript = await transcribeAudio(audio, mime);
+      res.json({ data: { transcript } });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to transcribe audio" });
+    }
+  }
+);
+
+/**
  * POST /submissions/:id/verbal-audio?question=... — raw audio body (audio/webm).
  * Transcribes with Whisper, then runs the same scoring. Used when OPENAI_API_KEY is set.
  */
