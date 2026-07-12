@@ -147,35 +147,76 @@ router.post(
       const member = await prisma.orgMember.findFirst({ where: { orgId: campaigns[0].orgId, userId } });
       if (!member) { res.status(403).json({ error: "Not authorised" }); return; }
 
-      // Pool every candidate into their leaderboard category with their score.
-      type Entry = { userId: string; campaignId: string; score: number };
-      const byCategory: Record<string, Entry[]> = {};
+      // Resolve stacks and submissions in batch (mirrors the leaderboard so
+      // certificates and the public board never disagree).
+      const codebaseIds = [...new Set(campaigns.map((c) => c.codebaseId as string))];
+      const stackTickets = await prisma.ticket.findMany({
+        where: { codebaseId: { in: codebaseIds } },
+        select: { codebaseId: true, stack: true },
+      });
+      const stackByCodebase = new Map<string, string>();
+      for (const t of stackTickets) {
+        if (!stackByCodebase.has(t.codebaseId)) stackByCodebase.set(t.codebaseId, t.stack.toString());
+      }
+
+      const allUserIds = [
+        ...new Set(campaigns.flatMap((c) => c.candidates.map((cd: { userId: string }) => cd.userId))),
+      ];
+      const allSubs = allUserIds.length
+        ? await prisma.submission.findMany({
+            where: { userId: { in: allUserIds }, status: "REVIEWED", finalized: true },
+            select: {
+              userId: true, ticketId: true, submittedAt: true, scoreTotal: true,
+              ticket: { select: { codebaseId: true } },
+            },
+          })
+        : [];
+      const subsByUser = new Map<string, typeof allSubs>();
+      for (const s of allSubs) {
+        const list = subsByUser.get(s.userId) ?? [];
+        list.push(s);
+        subsByUser.set(s.userId, list);
+      }
+
+      // One best entry per user across the event — deadline-respecting and
+      // de-duplicated so nobody gets two certificates.
+      type Entry = { userId: string; campaignId: string; score: number; category: string };
+      const bestByUser = new Map<string, Entry>();
 
       for (const campaign of campaigns) {
-        const firstTicket = await prisma.ticket.findFirst({
-          where: { codebaseId: campaign.codebaseId },
-          select: { stack: true },
-        });
-        const category = categoryForStack(firstTicket?.stack).name;
+        const category = categoryForStack(stackByCodebase.get(campaign.codebaseId)).name;
+        const ticketIds: string[] = campaign.ticketIds ?? [];
+        const campDeadline = campaign.deadline as Date | null;
 
         for (const c of campaign.candidates) {
-          const sub = await prisma.submission.findFirst({
-            where: {
-              userId: c.userId,
-              status: "REVIEWED", finalized: true,
-              ...campaignSubmissionScope(campaign),
-            },
-            orderBy: { scoreTotal: "desc" },
-            select: { scoreTotal: true },
+          const subs = subsByUser.get(c.userId) ?? [];
+          const eligible = subs.filter((s) => {
+            if (s.scoreTotal == null) return false;
+            const inScope = ticketIds.length
+              ? ticketIds.includes(s.ticketId)
+              : s.ticket?.codebaseId === campaign.codebaseId;
+            if (!inScope) return false;
+            if (campDeadline && s.submittedAt > campDeadline) return false; // late submissions don't rank
+            return true;
           });
-          if (sub?.scoreTotal != null && sub.scoreTotal >= minScore) {
-            (byCategory[category] ??= []).push({
-              userId: c.userId,
-              campaignId: campaign.id,
-              score: sub.scoreTotal,
-            });
-          }
+          if (eligible.length === 0) continue;
+
+          const best = eligible.reduce((a, b) => ((b.scoreTotal ?? 0) > (a.scoreTotal ?? 0) ? b : a));
+          if ((best.scoreTotal ?? 0) < minScore) continue;
+
+          const entry: Entry = {
+            userId: c.userId, campaignId: campaign.id,
+            score: best.scoreTotal ?? 0, category,
+          };
+          const existing = bestByUser.get(c.userId);
+          if (!existing || entry.score > existing.score) bestByUser.set(c.userId, entry);
         }
+      }
+
+      // Regroup the de-duplicated entries by category.
+      const byCategory: Record<string, Entry[]> = {};
+      for (const entry of bestByUser.values()) {
+        (byCategory[entry.category] ??= []).push(entry);
       }
 
       // Rank within each category and issue.
