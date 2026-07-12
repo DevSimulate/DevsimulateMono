@@ -50,8 +50,9 @@ function resolveGitBinary(): string {
     }
   }
 
-  _resolvedGitBinary = "git";
-  return _resolvedGitBinary;
+  // Don't cache the fallback — VS Code's git API may not be ready yet on
+  // first call (extension startup). Keep retrying until we find a real path.
+  return "git";
 }
 
 export function ensureGitOnPath(): void {
@@ -92,8 +93,10 @@ function resolveGitDir(): string | undefined {
 }
 
 function makeGit(baseDir?: string): SimpleGit {
-  if (baseDir) return simpleGit(baseDir);
-  return simpleGit();
+  const binary = resolveGitBinary();
+  const opts = { binary } as Partial<SimpleGitOptions>;
+  if (baseDir) return simpleGit(baseDir, opts);
+  return simpleGit(opts);
 }
 
 // A user-facing error whose message is safe to show directly in a prompt.
@@ -413,6 +416,20 @@ export function watchForPush(
 /**
  * Returns true if there are any uncommitted changes (staged or unstaged) in the repo.
  */
+function clearStaleLocks(repoDir: string): void {
+  const locks = [
+    "index.lock",
+    "HEAD.lock",
+    "COMMIT_EDITMSG.lock",
+    "config.lock",
+    "packed-refs.lock",
+  ];
+  for (const name of locks) {
+    const p = path.join(repoDir, ".git", name);
+    try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch { /* ignore — lock may have been released */ }
+  }
+}
+
 export async function hasUncommittedChanges(repoDir: string): Promise<boolean> {
   try {
     const status = await makeGit(repoDir).status();
@@ -426,6 +443,7 @@ export async function hasUncommittedChanges(repoDir: string): Promise<boolean> {
  * Stages all changes and commits with the given message.
  */
 export async function stageAndCommit(repoDir: string, message: string): Promise<void> {
+  clearStaleLocks(repoDir);
   const git = makeGit(repoDir);
   await git.add("-A");
   await git.commit(message);
@@ -457,6 +475,7 @@ export async function pushBranch(
   creds: GitHubCreds | null
 ): Promise<void> {
   if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
+  clearStaleLocks(repoDir);
   const git = makeGit(repoDir);
   const remotes = await git.getRemotes(true);
   const origin = remotes.find((r) => r.name === "origin");

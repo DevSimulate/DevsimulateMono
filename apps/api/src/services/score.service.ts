@@ -16,6 +16,9 @@ export async function saveReviewResult(
   submissionId: string,
   review: ClaudeReviewResult
 ): Promise<Submission> {
+  const existing = await prisma.submission.findUnique({ where: { id: submissionId } });
+  if (!existing) throw new Error(`Submission ${submissionId} no longer exists — skipping review save`);
+
   const submission = await prisma.submission.update({
     where: { id: submissionId },
     data: {
@@ -46,14 +49,15 @@ export async function updateUserSkillScore(
   userId: string,
   latestScore: number
 ): Promise<void> {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return;
 
   const isFirstSubmission = user.skillScore === 0;
   const newSkillScore = isFirstSubmission
     ? latestScore
     : Math.round(0.8 * user.skillScore + 0.2 * latestScore);
 
-  await prisma.user.update({
+  await prisma.user.updateMany({
     where: { id: userId },
     data: { skillScore: newSkillScore },
   });
@@ -77,7 +81,7 @@ export async function recomputeUserSkillScore(userId: string): Promise<void> {
   for (let i = 1; i < subs.length; i++) {
     s = Math.round(0.8 * s + 0.2 * (subs[i].scoreTotal ?? 0));
   }
-  await prisma.user.update({ where: { id: userId }, data: { skillScore: s } });
+  await prisma.user.updateMany({ where: { id: userId }, data: { skillScore: s } });
 }
 
 /**
