@@ -36,7 +36,7 @@ export default function DemoResetPage() {
             style={{ background: "linear-gradient(135deg, #4f46e5, #4338ca)" }}>
             <Zap size={15} color="white" />
           </div>
-          <span className="font-black text-[#131722] text-sm tracking-tight">DevSimulate</span>
+          <span className="font-bold text-[#131722] text-sm tracking-tight">DevSimulate</span>
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full ml-1"
             style={{ background: "#1c1400", color: "#b54708", border: "1px solid #713f12" }}>
             DEMO TOOLS
@@ -45,7 +45,7 @@ export default function DemoResetPage() {
 
         {/* Card */}
         <div className="rounded-2xl p-8" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
-          <h1 className="text-xl font-black text-[#131722] mb-2">Reset Demo Data</h1>
+          <h1 className="text-xl font-bold text-[#131722] mb-2">Reset Demo Data</h1>
           <p className="text-sm mb-6 leading-relaxed" style={{ color: "#8a93a3" }}>
             Restores Ahmed Khan, Ali Raza, and Sara Malik with their original NOVA-47 scores.
             Run this before every investor meeting.

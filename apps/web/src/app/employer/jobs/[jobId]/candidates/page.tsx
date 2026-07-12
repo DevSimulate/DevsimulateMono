@@ -144,7 +144,7 @@ export default function CandidatesPage(): React.ReactElement {
 
                   {/* Overall score */}
                   {c.submission?.scoreTotal != null ? (
-                    <div className={`text-2xl font-black shrink-0 ${
+                    <div className={`text-2xl font-bold shrink-0 ${
                       c.submission.scoreTotal >= 70 ? "text-emerald-400"
                         : c.submission.scoreTotal >= 40 ? "text-amber-400"
                         : "text-red-400"

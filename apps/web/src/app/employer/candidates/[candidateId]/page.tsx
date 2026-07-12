@@ -128,7 +128,7 @@ function ScoreCircle({ score, size = 100 }: { score: number; size?: number }) {
           style={{ transition: "stroke-dashoffset 1s ease-out" }} />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-black text-[#131722]" style={{ fontSize: size * 0.28 }}>{score}</span>
+        <span className="font-bold text-[#131722]" style={{ fontSize: size * 0.28 }}>{score}</span>
         <span className="text-xs" style={{ color: "#8a93a3" }}>/100</span>
       </div>
     </div>
@@ -142,7 +142,7 @@ function ScoreBar({ label, value, max }: { label: string; value: number; max: nu
     <div className="rounded-xl p-4" style={{ background: "#f2f4f7", border: "1px solid #eef1f5" }}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold" style={{ color: "#5a6472" }}>{label}</span>
-        <span className="text-base font-black" style={{ color }}>{value}<span className="text-xs font-normal" style={{ color: "#9aa3b2" }}>/{max}</span></span>
+        <span className="text-base font-bold" style={{ color }}>{value}<span className="text-xs font-normal" style={{ color: "#9aa3b2" }}>/{max}</span></span>
       </div>
       <div className="h-1.5 rounded-full" style={{ background: "#eef1f5" }}>
         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
@@ -264,7 +264,7 @@ function AssessmentTab({ c }: { c: CandidateDetail }) {
         <div className="flex items-center gap-3 rounded-xl px-4 py-3"
           style={{ background: "#f5f6f8", border: "1px solid #eef1f5" }}>
           <span className="text-sm font-semibold" style={{ color: "#5a6472" }}>Total Score</span>
-          <span className="text-2xl font-black ml-auto" style={{ color: scoreColor(scores.total) }}>
+          <span className="text-2xl font-bold ml-auto" style={{ color: scoreColor(scores.total) }}>
             {scores.total}<span className="text-sm font-normal" style={{ color: "#9aa3b2" }}>/100</span>
           </span>
           {scores.bonus > 0 && (
@@ -333,7 +333,7 @@ function AssessmentTab({ c }: { c: CandidateDetail }) {
           ].map(({ label, value, color, icon: Icon }) => (
             <div key={label} className="rounded-lg p-3 text-center" style={{ background: "#f2f4f7", border: "1px solid #eef1f5" }}>
               <Icon size={14} style={{ color: "#8a93a3", margin: "0 auto 6px" }} />
-              <div className="text-base font-black" style={{ color: color ?? "#ffffff" }}>{value}</div>
+              <div className="text-base font-bold" style={{ color: color ?? "#ffffff" }}>{value}</div>
               <div className="text-xs" style={{ color: "#8a93a3" }}>{label}</div>
             </div>
           ))}
@@ -367,7 +367,7 @@ function AssessmentTab({ c }: { c: CandidateDetail }) {
               <div key={i} className="p-5">
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <p className="text-xs font-semibold" style={{ color: "#4338ca" }}>Q{i + 1}: {fq.q}</p>
-                  <span className="text-xs font-black shrink-0" style={{ color: scoreColor(fq.score * 10) }}>
+                  <span className="text-xs font-bold shrink-0" style={{ color: scoreColor(fq.score * 10) }}>
                     {fq.score}/10
                   </span>
                 </div>
@@ -437,7 +437,7 @@ function ScoreBreakdownTab({ c }: { c: CandidateDetail }) {
           </ResponsiveContainer>
           <div className="mt-4 rounded-lg px-4 py-3 text-xs" style={{ background: "#f2f4f7", border: "1px solid #eef1f5" }}>
             This candidate scored better than{" "}
-            <span className="font-black" style={{ color: scoreColor(percentile) }}>{percentile}%</span>
+            <span className="font-bold" style={{ color: scoreColor(percentile) }}>{percentile}%</span>
             {" "}of all developers who attempted {c.ticket.code}.
           </div>
         </div>
@@ -485,7 +485,7 @@ function BehaviorTab({ c }: { c: CandidateDetail }) {
         <div className="flex items-start justify-between gap-6 flex-wrap">
           <div>
             <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>Authenticity Score</div>
-            <div className="text-5xl font-black mb-1" style={{ color: scoreColor(authenticity.score) }}>
+            <div className="text-5xl font-bold mb-1" style={{ color: scoreColor(authenticity.score) }}>
               {authenticity.score}
             </div>
             <div className="text-sm" style={{ color: "#8a93a3" }}>/ 100</div>
@@ -751,7 +751,7 @@ function CompareTab({ currentId }: { currentId: string }) {
                 <div className="text-xs font-semibold" style={{ color: "#5a6472" }}>
                   {c.name.split(" ")[0]}
                 </div>
-                <span className="text-sm font-black px-4 py-2 rounded-xl"
+                <span className="text-sm font-bold px-4 py-2 rounded-xl"
                   style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
                   {c.recommendation}
                 </span>
@@ -861,13 +861,13 @@ export default function CandidateDetailPage() {
 
         <div className="flex items-start justify-between gap-8 flex-wrap">
           <div className="flex items-start gap-5">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-black shrink-0"
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold shrink-0"
               style={{ background: "#eef0fd", color: "#4338ca", border: "2px solid #c7c9f7" }}>
               {c.initials}
             </div>
             <div>
               <div className="flex items-center gap-3 flex-wrap mb-1">
-                <h1 className="text-2xl font-black text-[#131722]">{c.name}</h1>
+                <h1 className="text-2xl font-bold text-[#131722]">{c.name}</h1>
                 {c.authenticity.flagged && (
                   <span className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
                     style={{ background: "#fef3f2", color: "#b42318", border: "1px solid #991b1b" }}>

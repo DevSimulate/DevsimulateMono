@@ -71,7 +71,7 @@ export default function TeamPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <h1 className="text-lg font-black text-[#131722]">Team</h1>
+        <h1 className="text-lg font-bold text-[#131722]">Team</h1>
         <p className="text-xs" style={{ color: "#8a93a3" }}>People who can review candidates and manage campaigns</p>
       </header>
 

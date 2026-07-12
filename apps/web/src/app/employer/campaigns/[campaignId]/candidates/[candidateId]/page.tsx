@@ -131,7 +131,7 @@ export default function CandidateDetailPage() {
         style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <Link href={`/employer/campaigns/${campaignId}/results`} style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
         <div className="flex-1">
-          <h1 className="text-lg font-black text-[#131722] flex items-center gap-2">
+          <h1 className="text-lg font-bold text-[#131722] flex items-center gap-2">
             {candidate.user.githubUsername}
             <a href={`https://github.com/${candidate.user.githubUsername}`} target="_blank" rel="noreferrer"
               style={{ color: "#5a6472" }}><Github size={15} /></a>
@@ -150,7 +150,7 @@ export default function CandidateDetailPage() {
         {/* Score hero */}
         <div className="rounded-xl p-6 flex items-center gap-8" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
           <div className="text-center">
-            <div className="text-5xl font-black" style={{
+            <div className="text-5xl font-bold" style={{
               color: (s.scoreTotal ?? 0) >= 80 ? "#067647" : (s.scoreTotal ?? 0) >= 60 ? "#b54708" : "#b42318",
             }}>{s.scoreTotal ?? "—"}</div>
             <div className="text-xs" style={{ color: "#8a93a3" }}>/ 100</div>

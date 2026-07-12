@@ -44,7 +44,7 @@ export default function CandidatesPage() {
     <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="px-8 py-4 flex items-center justify-between" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <div>
-          <h1 className="text-lg font-black text-[#131722]">Candidates</h1>
+          <h1 className="text-lg font-bold text-[#131722]">Candidates</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>Everyone who's been assessed, across all campaigns</p>
         </div>
         <div className="flex items-center gap-3">
@@ -76,7 +76,7 @@ export default function CandidatesPage() {
                       <div className="text-xs" style={{ color: "#8a93a3" }}>{c.email ?? "—"}</div>
                     </td>
                     <td className="px-4 py-3 text-xs" style={{ color: "#5a6472" }}>{c.roleName}</td>
-                    <td className="px-4 py-3 text-sm font-black" style={{ color: c.score >= 80 ? "#067647" : c.score >= 60 ? "#b54708" : "#b42318" }}>{c.score}</td>
+                    <td className="px-4 py-3 text-sm font-bold" style={{ color: c.score >= 80 ? "#067647" : c.score >= 60 ? "#b54708" : "#b42318" }}>{c.score}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 text-xs">
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: BAND[c.authBand] }} />

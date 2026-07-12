@@ -47,7 +47,7 @@ export default function EmployerSignupPage(): React.ReactElement {
       </Link>
 
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8">
-        <h1 className="text-2xl font-black mb-1">Create your organisation</h1>
+        <h1 className="text-2xl font-bold mb-1">Create your organisation</h1>
         <p className="text-slate-400 text-sm mb-6">Set up your employer account to start hiring.</p>
 
         {error && (

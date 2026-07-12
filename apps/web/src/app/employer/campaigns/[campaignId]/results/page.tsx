@@ -322,7 +322,7 @@ export default function ResultsPage() {
         style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
         <div className="flex-1">
-          <h1 className="text-lg font-black text-[#131722]">{campaign?.roleName ?? "Results"}</h1>
+          <h1 className="text-lg font-bold text-[#131722]">{campaign?.roleName ?? "Results"}</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>
             {campaign?.companyName} · {candidates.length} scored candidates · ranked for role fit
           </p>
@@ -334,10 +334,10 @@ export default function ResultsPage() {
           <Star size={14} /> Select Top Picks
         </button>
         <button onClick={issueCertificates} disabled={certIssuing}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: "#b54708" }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+          style={{ background: "#ffffff", border: "1px solid #d5d9e0", color: "#131722" }}
           title="Issue e-certificates to all reviewed candidates">
-          <Award size={14} /> {certIssuing ? "Issuing…" : "Issue Certificates"}
+          <Award size={14} style={{ color: "#b54708" }} /> {certIssuing ? "Issuing…" : "Issue Certificates"}
         </button>
         <button onClick={exportCsv}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
@@ -373,8 +373,8 @@ export default function ResultsPage() {
                   background: active ? "#eef0fd" : "#ffffff",
                   border: `1px solid ${active ? "#4338ca" : "#e4e7ec"}`,
                 }}>
-                <span className="text-xs font-semibold" style={{ color: active ? "#fff" : "#bbb" }}>{ROLES[rk].label}</span>
-                <span className="text-[10px]" style={{ color: active ? "#4338ca" : "#8a93a3" }}>{ROLES[rk].sub}</span>
+                <span className="text-xs font-semibold" style={{ color: active ? "#4338ca" : "#5a6472" }}>{ROLES[rk].label}</span>
+                <span className="text-[10px]" style={{ color: active ? "#6c6ad6" : "#8a93a3" }}>{ROLES[rk].sub}</span>
               </button>
             );
           })}
@@ -496,7 +496,7 @@ export default function ResultsPage() {
                           {/* Role-weighted score + confidence */}
                           <td className="px-3 py-3">
                             <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-black tabular-nums" style={{ color: ws != null ? scoreColor(ws) : "#9aa3b2" }}>
+                              <span className="text-lg font-bold tabular-nums" style={{ color: ws != null ? scoreColor(ws) : "#9aa3b2" }}>
                                 {ws ?? "—"}
                               </span>
                               {raw != null && ws != null && raw !== ws && (
@@ -695,7 +695,7 @@ export default function ResultsPage() {
           <div className="rounded-xl max-w-lg w-full p-6" style={{ background: "#ffffff", border: "1px solid #d5d9e0" }}
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-black text-[#131722]">Invite {selected.size} candidate(s)</h2>
+              <h2 className="text-base font-bold text-[#131722]">Invite {selected.size} candidate(s)</h2>
               <button onClick={() => setShowInvite(false)} style={{ color: "#5a6472" }}><X size={18} /></button>
             </div>
             <div className="rounded-lg p-4 mb-4 text-sm" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec", color: "#5a6472" }}>

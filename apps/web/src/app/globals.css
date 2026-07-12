@@ -217,7 +217,14 @@ body {
 
   background: var(--p-ground);
   color: var(--p-text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+  letter-spacing: -0.006em;
 }
+/* Calmer, more intentional heading hierarchy across the portal. */
+.portal h1 { letter-spacing: -0.021em; font-weight: 700; }
+.portal h2, .portal h3 { letter-spacing: -0.015em; font-weight: 650; }
+.portal .tabular, .portal [class*="tabular-nums"] { font-variant-numeric: tabular-nums; }
 
 /* Primitives — used across the portal so pages stay consistent. */
 .p-card { background: var(--p-surface); border: 1px solid var(--p-border); border-radius: 14px; box-shadow: var(--p-shadow-sm); }

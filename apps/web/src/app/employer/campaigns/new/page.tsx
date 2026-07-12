@@ -129,7 +129,7 @@ export default function NewCampaignPage() {
     return (
       <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
         <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-          <h1 className="text-lg font-black text-[#131722]">Campaign Created</h1>
+          <h1 className="text-lg font-bold text-[#131722]">Campaign Created</h1>
         </header>
         <main className="flex-1 px-8 py-10 max-w-2xl mx-auto w-full">
           <div className="rounded-xl p-8 text-center" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
@@ -137,7 +137,7 @@ export default function NewCampaignPage() {
               style={{ background: "#ecfdf3" }}>
               <Check size={28} style={{ color: "#067647" }} />
             </div>
-            <div className="text-xl font-black text-[#131722] mb-1">Your campaign is live!</div>
+            <div className="text-xl font-bold text-[#131722] mb-1">Your campaign is live!</div>
             <div className="text-sm mb-6" style={{ color: "#5a6472" }}>
               Share this link with candidates. When they open it, they sign in with GitHub and
               get assigned a ticket automatically.
@@ -202,7 +202,7 @@ export default function NewCampaignPage() {
       <header className="px-8 py-4 flex items-center gap-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
         <div>
-          <h1 className="text-lg font-black text-[#131722]">New Campaign</h1>
+          <h1 className="text-lg font-bold text-[#131722]">New Campaign</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>Create a hiring assessment campaign</p>
         </div>
       </header>

@@ -129,11 +129,11 @@ export default function CampaignsListPage() {
       <header className="sticky top-0 z-30 flex items-center justify-between px-8 py-4"
         style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <div>
-          <h1 className="text-lg font-black text-[#131722]">Campaigns</h1>
+          <h1 className="text-lg font-bold text-[#131722]">Campaigns</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>Hiring assessment campaigns</p>
         </div>
         <Link href="/employer/campaigns/new"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-[#131722]"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
           style={{ background: "linear-gradient(135deg, #4f46e5, #4338ca)" }}>
           <Plus size={15} /> New Campaign
         </Link>
@@ -155,7 +155,7 @@ export default function CampaignsListPage() {
               Create your first hiring campaign to start assessing candidates.
             </div>
             <Link href="/employer/campaigns/new"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-[#131722]"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
               style={{ background: "#4338ca" }}>
               <Plus size={15} /> Create Campaign
             </Link>
@@ -169,7 +169,7 @@ export default function CampaignsListPage() {
                   style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="min-w-0">
-                      <div className="text-base font-black text-[#131722] truncate">{c.roleName}</div>
+                      <div className="text-base font-bold text-[#131722] truncate">{c.roleName}</div>
                       <div className="text-xs mt-0.5" style={{ color: "#8a93a3" }}>{c.companyName}</div>
                     </div>
                     <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full shrink-0"
@@ -196,7 +196,7 @@ export default function CampaignsListPage() {
 
                   <div className="flex items-center gap-2 mt-auto">
                     <Link href={`/employer/campaigns/${c.id}/results`}
-                      className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-semibold text-[#131722] transition-colors"
+                      className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors"
                       style={{ background: "#4338ca" }}>
                       View Results <ChevronRight size={13} />
                     </Link>
@@ -231,8 +231,8 @@ export default function CampaignsListPage() {
                       onClick={() => { setTagPanel(tagPanel === c.id ? null : c.id); setTagInput(c.devFestTag ?? ""); }}
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
                       style={{
-                        background: c.devFestTag ? "#0c1a0c" : "#eef1f5",
-                        border: c.devFestTag ? "1px solid #2d5a2d" : "1px solid #d5d9e0",
+                        background: c.devFestTag ? "#ecfdf3" : "#eef1f5",
+                        border: c.devFestTag ? "1px solid #a7d8bd" : "1px solid #d5d9e0",
                       }}
                       title={c.devFestTag ? `DevFest: ${c.devFestTag}` : "Tag for DevFest leaderboard"}>
                       <Tag size={14} style={{ color: c.devFestTag ? "#067647" : "#5a6472" }} />
@@ -240,7 +240,7 @@ export default function CampaignsListPage() {
                     {/* Delete */}
                     <button onClick={() => setConfirmDelete(c.id)} disabled={busyId === c.id}
                       className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 disabled:opacity-50"
-                      style={{ background: "#fef3f2", border: "1px solid #3f1010" }}
+                      style={{ background: "#fef3f2", border: "1px solid #f3c9c5" }}
                       title="Delete campaign">
                       <Trash2 size={14} style={{ color: "#b42318" }} />
                     </button>
@@ -248,7 +248,7 @@ export default function CampaignsListPage() {
 
                   {/* DevFest tag panel */}
                   {tagPanel === c.id && (
-                    <div className="mt-3 rounded-lg p-3" style={{ background: "#0c1a0c", border: "1px solid #2d5a2d" }}>
+                    <div className="mt-3 rounded-lg p-3" style={{ background: "#ecfdf3", border: "1px solid #a7d8bd" }}>
                       <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#067647" }}>
                         DevFest tag
                       </p>
@@ -261,7 +261,7 @@ export default function CampaignsListPage() {
                         onChange={(e) => setTagInput(e.target.value)}
                         placeholder="e.g. lmkr-devfest-2025"
                         className="w-full px-3 py-1.5 rounded-lg text-xs mb-2"
-                        style={{ background: "#0a140a", border: "1px solid #2d5a2d", color: "#131722", outline: "none" }}
+                        style={{ background: "#f6fbf7", border: "1px solid #a7d8bd", color: "#131722", outline: "none" }}
                         onKeyDown={(e) => e.key === "Enter" && saveDevFestTag(c.id)}
                       />
                       <div className="flex gap-2">
@@ -285,17 +285,17 @@ export default function CampaignsListPage() {
                       </div>
 
                       {c.devFestTag && (
-                        <div className="mt-3 pt-3" style={{ borderTop: "1px solid #1e3a1e" }}>
+                        <div className="mt-3 pt-3" style={{ borderTop: "1px solid #a7d8bd" }}>
                           <p className="text-[10px] mb-2" style={{ color: "#8a93a3" }}>
                             Issue e-certificates ranked by leaderboard category (Frontend / Backend / DevOps · Infra / System Design) across the whole DevFest.
                           </p>
                           <button onClick={() => issueDevFestCerts(c.devFestTag!, c.id)} disabled={busyId === c.id}
-                            className="w-full py-1.5 rounded-lg text-xs font-bold text-[#131722] disabled:opacity-50"
+                            className="w-full py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
                             style={{ background: "#7c3aed" }}>
                             {busyId === c.id ? "Issuing…" : "🏅 Issue DevFest Certificates (by category)"}
                           </button>
                           {certMsg && (
-                            <p className="text-[10px] mt-2" style={{ color: "#a5b4fc" }}>{certMsg}</p>
+                            <p className="text-[10px] mt-2" style={{ color: "#4338ca" }}>{certMsg}</p>
                           )}
                         </div>
                       )}
@@ -304,13 +304,13 @@ export default function CampaignsListPage() {
 
                   {/* Delete confirmation */}
                   {confirmDelete === c.id && (
-                    <div className="mt-3 rounded-lg p-3" style={{ background: "#fef3f2", border: "1px solid #3f1010" }}>
+                    <div className="mt-3 rounded-lg p-3" style={{ background: "#fef3f2", border: "1px solid #f3c9c5" }}>
                       <div className="text-xs mb-2" style={{ color: "#b42318" }}>
                         Delete &ldquo;{c.roleName}&rdquo; and all its candidate data? This can&apos;t be undone.
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => deleteCampaign(c.id)} disabled={busyId === c.id}
-                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-[#131722] disabled:opacity-50"
+                          className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white disabled:opacity-50"
                           style={{ background: "#dc2626" }}>
                           {busyId === c.id ? "Deleting…" : "Delete"}
                         </button>

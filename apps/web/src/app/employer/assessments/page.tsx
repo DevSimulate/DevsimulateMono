@@ -81,7 +81,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
         return (
           <div key={n} className="flex items-center">
             <div className="flex flex-col items-center">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all"
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all"
                 style={{
                   background: done ? "#4338ca" : active ? "#eef0fd" : "#eef1f5",
                   color: done || active ? "#ffffff" : "#9aa3b2",
@@ -147,7 +147,7 @@ function AssessmentCard({
         </div>
         {assessment.avgScore !== null && (
           <div className="text-right shrink-0">
-            <div className="text-xl font-black" style={{ color: scoreColor(assessment.avgScore) }}>
+            <div className="text-xl font-bold" style={{ color: scoreColor(assessment.avgScore) }}>
               {assessment.avgScore}
             </div>
             <div className="text-xs" style={{ color: "#9aa3b2" }}>avg score</div>
@@ -397,7 +397,7 @@ function CreateModal({
                           <div className="text-xs leading-relaxed line-clamp-2" style={{ color: "#8a93a3" }}>{t.description}</div>
                         </div>
                         <div className="shrink-0 text-right">
-                          <div className="text-sm font-black" style={{ color: scoreColor(t.avgScore) }}>{t.avgScore}</div>
+                          <div className="text-sm font-bold" style={{ color: scoreColor(t.avgScore) }}>{t.avgScore}</div>
                           <div className="text-xs" style={{ color: "#9aa3b2" }}>avg</div>
                           <div className="text-xs mt-1" style={{ color: "#9aa3b2" }}>{t.timesUsed}× used</div>
                           <div className="flex items-center gap-1 text-xs mt-1 justify-end" style={{ color: "#9aa3b2" }}>
@@ -747,7 +747,7 @@ export default function AssessmentsPage() {
       <header className="px-8 py-6 flex items-center justify-between"
         style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <div>
-          <h1 className="text-lg font-black text-[#131722]">Assessments</h1>
+          <h1 className="text-lg font-bold text-[#131722]">Assessments</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>{counts.ACTIVE} active · {counts.COMPLETED} completed · {counts.DRAFT} draft</p>
         </div>
         <button

@@ -64,7 +64,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <h1 className="text-lg font-black text-[#131722]">Settings</h1>
+        <h1 className="text-lg font-bold text-[#131722]">Settings</h1>
         <p className="text-xs" style={{ color: "#8a93a3" }}>Manage your organisation</p>
       </header>
 
@@ -145,13 +145,13 @@ export default function SettingsPage() {
               {logoUrl ? (
                 <img src={logoUrl} alt="logo" className="h-8 rounded object-contain" style={{ background: "#eef1f5", padding: "2px" }} />
               ) : (
-                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-black"
+                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold"
                   style={{ background: previewColor + "22", color: previewColor }}>
                   {(brandName || data?.orgName || "CO").slice(0, 2).toUpperCase()}
                 </div>
               )}
               <div>
-                <div className="text-sm font-black text-[#131722]">{brandName || data?.orgName || "Your Company"}</div>
+                <div className="text-sm font-bold text-[#131722]">{brandName || data?.orgName || "Your Company"}</div>
                 <div className="text-xs" style={{ color: "#5a6472" }}>is hiring</div>
               </div>
               <div className="ml-auto">
@@ -178,7 +178,7 @@ export default function SettingsPage() {
           ].map(({ icon: Icon, label, value, accent }) => (
             <div key={label} className="rounded-xl p-4" style={{ background: "#ffffff", border: "1px solid #222" }}>
               <Icon size={15} style={{ color: accent }} className="mb-2" />
-              <div className="text-xl font-black text-[#131722]">{value}</div>
+              <div className="text-xl font-bold text-[#131722]">{value}</div>
               <div className="text-xs" style={{ color: "#5a6472" }}>{label}</div>
             </div>
           ))}

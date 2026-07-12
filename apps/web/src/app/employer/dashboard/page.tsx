@@ -33,7 +33,7 @@ function StatCard({ icon: Icon, label, value, unit, accent }: { icon: React.Elem
         <Icon size={17} style={{ color: accent }} />
       </div>
       <div className="flex items-baseline gap-1">
-        <span className="text-3xl font-black text-[#131722]">{value}</span>
+        <span className="text-3xl font-bold text-[#131722]">{value}</span>
         {unit && <span className="text-sm" style={{ color: "#8a93a3" }}>{unit}</span>}
       </div>
       <div className="text-sm font-semibold mt-1" style={{ color: "#5a6472" }}>{label}</div>
@@ -60,7 +60,7 @@ export default function EmployerDashboard() {
     <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="sticky top-0 z-30 flex items-center justify-between px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
         <div>
-          <h1 className="text-lg font-black text-[#131722]">Dashboard</h1>
+          <h1 className="text-lg font-bold text-[#131722]">Dashboard</h1>
           <p className="text-xs" style={{ color: "#8a93a3" }}>Your hiring at a glance</p>
         </div>
         <Link href="/employer/campaigns/new" className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-[#131722]" style={{ background: "linear-gradient(135deg,#4338ca,#3f37c9)" }}>
@@ -100,7 +100,7 @@ export default function EmployerDashboard() {
                     <tr key={c.id} style={{ borderBottom: "1px solid #eef1f5" }}>
                       <td className="px-4 py-3 text-xs font-semibold text-[#131722]">{c.githubUsername}</td>
                       <td className="px-4 py-3 text-xs" style={{ color: "#5a6472" }}>{c.roleName}</td>
-                      <td className="px-4 py-3 text-sm font-black" style={{ color: c.score >= 80 ? "#067647" : c.score >= 60 ? "#b54708" : "#b42318" }}>{c.score}</td>
+                      <td className="px-4 py-3 text-sm font-bold" style={{ color: c.score >= 80 ? "#067647" : c.score >= 60 ? "#b54708" : "#b42318" }}>{c.score}</td>
                       <td className="px-4 py-3"><span className="inline-flex items-center gap-1 text-xs"><span className="w-1.5 h-1.5 rounded-full" style={{ background: BAND[c.band] }} /><span style={{ color: BAND[c.band] }}>{c.band[0] + c.band.slice(1).toLowerCase()}</span></span></td>
                       <td className="px-4 py-3"><span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: VERDICT[c.verdict].bg, color: VERDICT[c.verdict].color }}>{VERDICT[c.verdict].label}</span></td>
                     </tr>

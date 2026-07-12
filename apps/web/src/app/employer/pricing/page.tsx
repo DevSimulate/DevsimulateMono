@@ -99,7 +99,7 @@ export default function EmployerPricingPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <h1 className="text-lg font-black text-[#131722]">Plans & Billing</h1>
+        <h1 className="text-lg font-bold text-[#131722]">Plans & Billing</h1>
         <p className="text-xs" style={{ color: "#8a93a3" }}>Assess candidates on real codebases — pay for what you use</p>
       </header>
 
@@ -109,7 +109,7 @@ export default function EmployerPricingPage() {
             style={{ background: "#eef0fd", color: "#4338ca" }}>
             <Zap size={13} /> Half the price of HackerRank · No per-seat fees
           </div>
-          <h2 className="text-3xl font-black text-[#131722]">Pay for results, not seats</h2>
+          <h2 className="text-3xl font-bold text-[#131722]">Pay for results, not seats</h2>
           <p className="text-sm mt-2" style={{ color: "#5a6472" }}>
             $5 to know if a candidate can fix a real bug — vs. hours of engineer time on a take-home.
           </p>
@@ -135,7 +135,7 @@ export default function EmployerPricingPage() {
               )}
               <div className="text-sm font-bold text-[#131722] mb-1">{p.name}</div>
               <div className="flex items-baseline gap-1 mb-2">
-                <span className="text-3xl font-black text-[#131722]">{p.price}</span>
+                <span className="text-3xl font-bold text-[#131722]">{p.price}</span>
                 <span className="text-sm" style={{ color: "#8a93a3" }}>{p.cadence}</span>
               </div>
               <div className="text-xs mb-5 leading-relaxed" style={{ color: "#5a6472" }}>{p.tagline}</div>
