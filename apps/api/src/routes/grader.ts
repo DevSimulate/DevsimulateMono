@@ -1,7 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { verifyGraderSignature } from "../lib/grader";
-import { recomputeUserSkillScore } from "../services/score.service";
 
 const router = Router();
 
@@ -40,31 +39,15 @@ router.post("/result", async (req: Request, res: Response): Promise<void> => {
       graderResult: { ticketId: body.ticketId ?? null, result, at: new Date().toISOString() },
     };
 
-    // ONLY a real test failure (compiled fine, but the fix didn't hold) is objective
-    // proof the code is broken — zero Execution and cap the total into the fail band,
-    // which also forces verdict NO (verdict derives from score). A "pass" is the floor
-    // (no bonus). "inconclusive" means it couldn't even compile (stale base / build
-    // error) — we do NOT penalise; it's flagged for a human instead.
-    if (result === "fail") {
-      const sub = await prisma.submission.findUnique({
-        where: { id: submissionId },
-        select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true, scoreTotal: true },
-      });
-      if (sub) {
-        const withoutExecution =
-          (sub.scoreDiagnosis ?? 0) + (sub.scoreDesign ?? 0) + (sub.scoreCommunication ?? 0);
-        const cappedTotal = Math.min(withoutExecution, 45);
-        data.scoreExecution = 0;
-        data.scoreTotal = cappedTotal;
-        (data as any).hiddenTestPenalty = Math.max(0, (sub.scoreTotal ?? 0) - cappedTotal);
-      }
-    }
+    // Hidden-test grading is DISABLED for now. We still store the raw result for
+    // record-keeping (advisory only), but it never mutates the score — no zeroed
+    // Execution, no cap, no penalty. Re-enable the scoring branch below when
+    // hidden test cases are actually in place.
 
-    const updated = await prisma.submission.update({
+    await prisma.submission.update({
       where: { id: submissionId }, data, select: { userId: true },
     });
-    if (result === "fail") await recomputeUserSkillScore(updated.userId); // reflect deduction
-    console.log(`[grader] result stored for ${submissionId}: ${result}`);
+    console.log(`[grader] result stored (advisory, no score change) for ${submissionId}: ${result}`);
     res.json({ ok: true });
   } catch (e) {
     console.error("[grader] failed to store result:", e instanceof Error ? e.message : e);
