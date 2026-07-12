@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
+import { computeHiringSignals } from "../lib/hiring-signals";
 
 const router = Router();
 
@@ -669,16 +670,17 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
 
         // Time-on-task — flag a finish under 20% of the ticket estimate
         let suspiciouslyFast = false;
+        let minutesTaken: number | null = null;
         if (submission) {
           const assignment = await prisma.ticketAssignment.findFirst({
             where: { userId: c.userId, ticketId: submission.ticketId },
           });
           if (assignment) {
-            const minutesTaken = (submission.submittedAt.getTime() - assignment.assignedAt.getTime()) / 60000;
+            minutesTaken = Math.round((submission.submittedAt.getTime() - assignment.assignedAt.getTime()) / 60000);
             suspiciouslyFast = minutesTaken < submission.ticket.expectedMinutes * 0.2;
           }
         }
-        return { ...c, submission, suspiciouslyFast };
+        return { ...c, submission, suspiciouslyFast, minutesTaken };
       })
     );
 
@@ -741,6 +743,16 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
           ? Math.round((c.submission.scoreDiagnosis / 40) * 100)
           : null,
         employerSummary: c.submission?.followUp?.employerSummary ?? null,
+        // Role-aware hiring signals — skill profile, defense, consistency,
+        // confidence, strength/concern. Role weighting is applied client-side.
+        signals: c.submission
+          ? computeHiringSignals(c.submission, c.submission.followUp ?? null)
+          : null,
+        effort: {
+          minutes: c.minutesTaken,
+          expected: c.submission?.ticket?.expectedMinutes ?? null,
+          difficulty: c.submission?.ticket?.difficulty ?? null,
+        },
       };
     });
 
