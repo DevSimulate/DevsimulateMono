@@ -308,7 +308,7 @@ export async function cloneAndOpenCodebase(
     async (progress) => {
       if (fs.existsSync(targetDir)) {
         progress.report({ message: "Already set up — switching to your branch…" });
-        await ensureBranch(makeGit(targetDir), branchName);
+        await ensureBranch(makeGit(targetDir), branchName, ticket.codebase.repoUrl);
         return;
       }
 
@@ -350,12 +350,11 @@ export async function cloneAndOpenCodebase(
       const repoGit = makeGit(targetDir);
       try {
         await repoGit.remote(["set-url", "origin", authUrl(token, cloneOwner, repoName)]);
-        await ensureBranch(repoGit, branchName);
+        // ensureBranch also records the `upstream` remote and branches from a
+        // clean upstream base so PR creation finds the right base later.
+        await ensureBranch(repoGit, branchName, ticket.codebase.repoUrl);
         // Restore the clean URL afterward so the token isn't left in git config
         await repoGit.remote(["set-url", "origin", publicUrl]);
-        // Record the original source repo as `upstream` so PR creation can find
-        // the correct base later even if the stored URL becomes stale.
-        try { await repoGit.remote(["add", "upstream", ticket.codebase.repoUrl]); } catch { /* already exists */ }
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
         throw new FriendlyError(
@@ -373,15 +372,47 @@ export async function cloneAndOpenCodebase(
 /**
  * Creates the ticket branch if missing, checks it out, and pushes with upstream
  * tracking so a plain `git push` works afterwards.
+ *
+ * A NEW ticket branch is always cut from a CLEAN upstream base — never from the
+ * current HEAD. Reusing the same local clone across tickets used to branch off
+ * the previous ticket's branch, so a second ticket's PR carried every file from
+ * the first (cross-ticket contamination). Branching from upstream/main
+ * guarantees each PR contains only that ticket's own work.
  */
-async function ensureBranch(git: SimpleGit, branchName: string): Promise<void> {
+async function ensureBranch(
+  git: SimpleGit,
+  branchName: string,
+  upstreamUrl: string,
+  baseBranch = "main"
+): Promise<void> {
   const branches = await git.branch();
   if (branches.all.includes(branchName)) {
+    // Existing work on this ticket — check it out and leave it untouched.
     await git.checkout(branchName);
-  } else {
-    await git.checkoutLocalBranch(branchName);
-    await git.push(["--set-upstream", "origin", branchName]);
+    return;
   }
+
+  // Establish a clean upstream base to branch from.
+  let baseRef = baseBranch;
+  try {
+    const remotes = await git.getRemotes(true);
+    if (!remotes.find((r) => r.name === "upstream")) {
+      await git.remote(["add", "upstream", upstreamUrl]);
+    } else {
+      await git.remote(["set-url", "upstream", upstreamUrl]);
+    }
+    await git.fetch(["upstream", baseBranch, "--depth", "1"]);
+    baseRef = `upstream/${baseBranch}`;
+  } catch {
+    // Network/remote issue — fall back to the base branch if it exists locally,
+    // so we still avoid branching off a (possibly contaminated) current HEAD.
+    try { await git.checkout(baseBranch); } catch { /* stay on current HEAD */ }
+    baseRef = baseBranch;
+  }
+
+  // Create the ticket branch explicitly from the clean base, then push it.
+  await git.checkout(["-b", branchName, baseRef]);
+  await git.push(["--set-upstream", "origin", branchName]);
 }
 
 /**
