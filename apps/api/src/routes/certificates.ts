@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
 import { categoryForStack } from "../lib/devfest-categories";
+import { campaignSubmissionScope } from "../lib/campaign-scope";
 
 const router = Router();
 
@@ -66,7 +67,7 @@ router.post(
     try {
       const campaign = await prisma.campaign.findUnique({
         where: { id: campaignId },
-        select: { orgId: true, codebaseId: true },
+        select: { orgId: true, codebaseId: true, ticketIds: true },
       });
       if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
 
@@ -86,7 +87,7 @@ router.post(
             where: {
               userId: c.userId,
               status: "REVIEWED", finalized: true,
-              ticket: { codebaseId: campaign.codebaseId },
+              ...campaignSubmissionScope(campaign),
             },
             orderBy: { scoreTotal: "desc" },
             select: { scoreTotal: true },
@@ -162,7 +163,7 @@ router.post(
             where: {
               userId: c.userId,
               status: "REVIEWED", finalized: true,
-              ticket: { codebaseId: campaign.codebaseId },
+              ...campaignSubmissionScope(campaign),
             },
             orderBy: { scoreTotal: "desc" },
             select: { scoreTotal: true },

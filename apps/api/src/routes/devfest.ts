@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { CATEGORY_MAP, CategoryMeta, OTHER_CATEGORY } from "../lib/devfest-categories";
+import { campaignSubmissionScope } from "../lib/campaign-scope";
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
             userId: candidate.userId,
             status: "REVIEWED",
             finalized: true,
-            ticket: { codebaseId: campaign.codebaseId },
+            ...campaignSubmissionScope(campaign),
           },
           orderBy: { scoreTotal: "desc" },
           select: {

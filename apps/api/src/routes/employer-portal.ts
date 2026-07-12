@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
 import { OrgRole, CampaignStatus, CandidateStatus } from "@prisma/client";
+import { campaignSubmissionScope } from "../lib/campaign-scope";
 
 const router = Router();
 router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
@@ -67,7 +68,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
       where: { campaign: { orgId } },
       include: {
         user: { select: { githubUsername: true } },
-        campaign: { select: { roleName: true, codebaseId: true } },
+        campaign: { select: { roleName: true, codebaseId: true, ticketIds: true } },
       },
       orderBy: { joinedAt: "desc" },
     });
@@ -79,7 +80,7 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
 
     for (const c of candidates) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: c.campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(c.campaign) },
         orderBy: { scoreTotal: "desc" },
         include: { followUp: { select: { declarationMismatch: true } } },
       });
@@ -138,14 +139,14 @@ router.get("/candidates", async (req: Request, res: Response): Promise<void> => 
       where: { campaign: { orgId } },
       include: {
         user: { select: { githubUsername: true, email: true } },
-        campaign: { select: { id: true, roleName: true, codebaseId: true } },
+        campaign: { select: { id: true, roleName: true, codebaseId: true, ticketIds: true } },
       },
     });
 
     const out = [];
     for (const c of rows) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: c.campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(c.campaign) },
         orderBy: { scoreTotal: "desc" },
         include: { followUp: { select: { declarationMismatch: true, aiDeclaration: true } } },
       });

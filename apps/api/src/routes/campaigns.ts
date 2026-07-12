@@ -6,6 +6,7 @@ import { Difficulty, CampaignStatus, CandidateStatus, CampaignType } from "@pris
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail } from "../lib/email";
+import { campaignSubmissionScope } from "../lib/campaign-scope";
 
 const router = Router();
 
@@ -156,7 +157,7 @@ router.get("/leaderboard/:slug", async (req: Request, res: Response): Promise<vo
     }> = [];
     for (const c of rows) {
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(campaign) },
         orderBy: { scoreTotal: "desc" },
         select: {
           scoreTotal: true, scoreDiagnosis: true, scoreDesign: true,
@@ -639,14 +640,18 @@ router.get("/:id/results", async (req: Request, res: Response): Promise<void> =>
       },
     });
 
-    // Resolve each candidate's latest REVIEWED submission for this codebase
+    // Resolve each candidate's best REVIEWED submission for THIS campaign's
+    // ticket(s). Match the campaign's specific tickets when set — otherwise a
+    // candidate with a higher-scoring submission on another ticket of the same
+    // codebase would mask the ticket this campaign actually assessed. Falls back
+    // to codebase-wide matching only for legacy campaigns with no ticketIds.
     const candidates = await Promise.all(
       rawCandidates.map(async (c) => {
         const submission = await prisma.submission.findFirst({
           where: {
             userId: c.userId,
             status: "REVIEWED", finalized: true,
-            ticket: { codebaseId: campaign.codebaseId },
+            ...campaignSubmissionScope(campaign),
           },
           orderBy: { scoreTotal: "desc" },
           include: {
@@ -754,7 +759,7 @@ router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): 
   try {
     const campaignCb = await prisma.campaign.findFirst({
       where: { id: req.params.id, org: { members: { some: { userId } } } },
-      select: { id: true, roleName: true, companyName: true, bookingLink: true, codebaseId: true },
+      select: { id: true, roleName: true, companyName: true, bookingLink: true, codebaseId: true, ticketIds: true },
     });
     if (!campaignCb) { res.status(404).json({ error: "Campaign not found" }); return; }
     const campaign = {
@@ -774,7 +779,7 @@ router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): 
       where: {
         userId: rawCandidate.userId,
         status: "REVIEWED", finalized: true,
-        ticket: { codebaseId: campaignCb.codebaseId },
+        ...campaignSubmissionScope(campaignCb),
       },
       orderBy: { scoreTotal: "desc" },
       include: {
@@ -830,7 +835,7 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
 
     // Was this candidate integrity-flagged at decision time? (for the audit record)
     const sub = await prisma.submission.findFirst({
-      where: { userId: current.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
+      where: { userId: current.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(campaign) },
       orderBy: { scoreTotal: "desc" },
       include: { followUp: { select: { declarationMismatch: true } } },
     });
@@ -895,7 +900,7 @@ router.post("/:id/invite", async (req: Request, res: Response): Promise<void> =>
     for (const c of candidates) {
       if (!c.user.email) { missingEmail++; continue; }
       const sub = await prisma.submission.findFirst({
-        where: { userId: c.userId, status: "REVIEWED", finalized: true, ticket: { codebaseId: campaign.codebaseId } },
+        where: { userId: c.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(campaign) },
         orderBy: { scoreTotal: "desc" },
         select: { scoreTotal: true },
       });
