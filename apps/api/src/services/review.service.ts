@@ -632,12 +632,23 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 400,
+    system: "You are a JSON-only API. You must respond with a single valid JSON object and nothing else — no prose, no markdown, no explanation before or after.",
     messages: [{ role: "user", content: prompt }],
   });
   const content = response.content[0];
   if (content.type !== "text") throw new Error("Unexpected response from Claude");
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  return JSON.parse(clean) as VerbalScoreResult;
+  try {
+    return JSON.parse(clean) as VerbalScoreResult;
+  } catch {
+    // Claude returned prose instead of JSON — extract what we can or use safe defaults
+    const scoreMatch = /\b([0-9]|10)\b/.exec(clean);
+    return {
+      score: scoreMatch ? parseInt(scoreMatch[1], 10) : 5,
+      consistent: true,
+      note: "Verbal explanation received but could not be automatically scored. Please review manually.",
+    };
+  }
 }
 
 /** System-design variant — uses the submitted design doc instead of a PR diff. */
