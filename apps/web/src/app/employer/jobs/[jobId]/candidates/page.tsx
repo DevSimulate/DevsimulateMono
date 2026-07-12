@@ -29,7 +29,7 @@ function ScoreDot({ value, max }: { value: number | null; max: number }): React.
   const pct = s / max;
   const color = pct >= 0.7 ? "bg-emerald-500" : pct >= 0.4 ? "bg-amber-500" : "bg-red-500";
   return (
-    <span className={`inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold text-white ${color}`}>
+    <span className={`inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-bold text-[#131722] ${color}`}>
       {s}
     </span>
   );
@@ -91,10 +91,10 @@ export default function CandidatesPage(): React.ReactElement {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-slate-950 text-[#131722]">
       <header className="border-b border-slate-800 px-6 py-4 flex items-center gap-4">
-        <Link href="/employer/dashboard" className="text-slate-400 hover:text-white text-sm">← Dashboard</Link>
-        <span className="font-bold text-white">Candidates</span>
+        <Link href="/employer/dashboard" className="text-slate-400 hover:text-[#131722] text-sm">← Dashboard</Link>
+        <span className="font-bold text-[#131722]">Candidates</span>
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-10">
@@ -105,7 +105,7 @@ export default function CandidatesPage(): React.ReactElement {
             value={inviteUsername}
             onChange={(e) => setInviteUsername(e.target.value)}
             placeholder="GitHub username to invite"
-            className="flex-1 max-w-xs rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+            className="flex-1 max-w-xs rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-[#131722] placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
           />
           <button
             type="submit"
@@ -138,7 +138,7 @@ export default function CandidatesPage(): React.ReactElement {
                   />
 
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-white text-sm">@{c.candidate.githubUsername}</div>
+                    <div className="font-semibold text-[#131722] text-sm">@{c.candidate.githubUsername}</div>
                     <div className="text-xs text-slate-500">{c.candidate.primaryStack} · Skill {c.candidate.skillScore}</div>
                   </div>
 
@@ -180,7 +180,7 @@ export default function CandidatesPage(): React.ReactElement {
                     {c.submission && (
                       <button
                         onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                        className="text-xs text-slate-400 hover:text-white"
+                        className="text-xs text-slate-400 hover:text-[#131722]"
                       >
                         {expanded === c.id ? "Hide" : "PR desc"}
                       </button>

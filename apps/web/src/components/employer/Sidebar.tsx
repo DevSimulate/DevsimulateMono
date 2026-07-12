@@ -4,25 +4,33 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken, getToken } from "@/lib/auth";
-import { BoltIcon } from "@/components/Logo";
 import {
   LayoutDashboard,
   Users,
   Building2,
   Settings,
   LogOut,
-  ChevronRight,
   Megaphone,
   CreditCard,
 } from "lucide-react";
 
-const NAV = [
-  { href: "/employer/dashboard",   label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/employer/campaigns",   label: "Campaigns",       icon: Megaphone },
-  { href: "/employer/candidates",  label: "Candidates",      icon: Users },
-  { href: "/employer/team",        label: "Team",            icon: Building2 },
-  { href: "/employer/pricing",     label: "Plans & Billing", icon: CreditCard },
-  { href: "/employer/settings",    label: "Settings",        icon: Settings },
+const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: typeof Users }[] }[] = [
+  {
+    label: "Hiring",
+    items: [
+      { href: "/employer/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
+      { href: "/employer/campaigns",  label: "Campaigns",  icon: Megaphone },
+      { href: "/employer/candidates", label: "Candidates", icon: Users },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { href: "/employer/team",     label: "Team",            icon: Building2 },
+      { href: "/employer/pricing",  label: "Plans & Billing", icon: CreditCard },
+      { href: "/employer/settings", label: "Settings",        icon: Settings },
+    ],
+  },
 ];
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -47,96 +55,80 @@ export default function Sidebar() {
     router.push("/");
   }
 
+  const org = profile?.orgName ?? "—";
+
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-60 flex flex-col z-40"
-      style={{ background: "#111111", borderRight: "1px solid #222222" }}
+      style={{ background: "var(--p-sidebar)", color: "var(--p-sidebar-text)" }}
     >
-      {/* Logo */}
-      <div className="px-5 pt-5 pb-4" style={{ borderBottom: "1px solid #222222" }}>
-        <div className="flex items-center gap-2 mb-3">
-          <BoltIcon size={28} />
-          <span className="font-black text-white text-sm tracking-tight">DevSimulate</span>
+      {/* Brand */}
+      <div className="px-4 pt-5 pb-4 flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-lg grid place-items-center text-white font-black text-base shrink-0"
+          style={{ background: "linear-gradient(140deg, #6d6afc, #a78bfa)" }}>
+          D
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-          style={{ background: "#1e1b4b", color: "#818cf8", border: "1px solid #312e81" }}>
-          Employer Portal
-        </span>
+        <div>
+          <div className="font-bold text-white text-sm tracking-tight leading-none">DevSimulate</div>
+          <div className="text-[10.5px] mt-1 font-medium" style={{ color: "var(--p-sidebar-dim)" }}>for Employers</div>
+        </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
-          return (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all group"
-              style={{
-                background: active ? "#1e1b4b" : "transparent",
-                color:      active ? "#818cf8" : "#888888",
-              }}
-              onMouseEnter={e => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = "#1a1a1a";
-                  (e.currentTarget as HTMLElement).style.color = "#ffffff";
-                }
-              }}
-              onMouseLeave={e => {
-                if (!active) {
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                  (e.currentTarget as HTMLElement).style.color = "#888888";
-                }
-              }}
-            >
-              <Icon size={16} />
-              <span className="flex-1">{label}</span>
-              {active && <ChevronRight size={13} style={{ opacity: 0.6 }} />}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-2 px-2.5 overflow-y-auto">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mb-1">
+            <div className="px-2.5 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+              style={{ color: "var(--p-sidebar-dim)" }}>
+              {group.label}
+            </div>
+            {group.items.map(({ href, label, icon: Icon }) => {
+              const active = pathname === href || pathname.startsWith(href + "/");
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors mb-0.5"
+                  style={{
+                    background: active ? "var(--p-sidebar-active)" : "transparent",
+                    color: active ? "#ffffff" : "var(--p-sidebar-text)",
+                    fontWeight: active ? 600 : 500,
+                  }}
+                  onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = "#ffffff0d"; }}
+                  onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  <Icon size={16} style={{ opacity: active ? 1 : 0.8 }} />
+                  <span className="flex-1">{label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* Bottom */}
-      <div className="p-3" style={{ borderTop: "1px solid #222222" }}>
-        {/* Plan */}
-        <div className="rounded-lg px-3 py-2.5 mb-3"
-          style={{ background: "#0d0d1a", border: "1px solid #2d2b55" }}>
-          <div className="text-xs font-bold mb-0.5" style={{ color: "#6366f1" }}>PRO PLAN</div>
-          <div className="text-xs font-semibold text-white">$299 / month</div>
-        </div>
-
-        {/* Company */}
-        <div className="flex items-center gap-2.5 px-1 mb-2">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-            style={{ background: "#1e1b4b", color: "#818cf8" }}>
-            {(profile?.orgName ?? "?").charAt(0).toUpperCase()}
+      {/* Company footer */}
+      <div className="p-3" style={{ borderTop: "1px solid #ffffff14" }}>
+        <div className="flex items-center gap-2.5 px-1.5 py-1.5 mb-1">
+          <div className="w-8 h-8 rounded-lg grid place-items-center text-xs font-bold shrink-0"
+            style={{ background: "#2a2f3a", color: "#cbd2e0" }}>
+            {org.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white truncate">{profile?.orgName ?? "—"}</div>
-            <div className="text-xs truncate" style={{ color: "#555555" }}>
-              {profile?.email ?? (profile ? `@${profile.githubUsername}` : "Not signed in")}
+            <div className="text-[13px] font-semibold text-white truncate">{org}</div>
+            <div className="text-[11px] truncate" style={{ color: "var(--p-sidebar-dim)" }}>
+              {profile?.email ?? (profile ? `@${profile.githubUsername}` : "Not signed in")} · Pro
             </div>
           </div>
         </div>
-
-        {/* Logout */}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg w-full text-xs font-medium transition-all"
-          style={{ color: "#555555" }}
-          onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.color = "#ef4444";
-            (e.currentTarget as HTMLElement).style.background = "#1a0a0a";
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.color = "#555555";
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
+          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg w-full text-xs font-medium transition-colors"
+          style={{ color: "var(--p-sidebar-dim)" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "#f0776d"; (e.currentTarget as HTMLElement).style.background = "#ffffff0d"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--p-sidebar-dim)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
         >
           <LogOut size={14} />
-          Logout
+          Sign out
         </button>
       </div>
     </aside>

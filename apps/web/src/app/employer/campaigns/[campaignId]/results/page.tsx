@@ -13,33 +13,33 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 type AIDeclaration = "NO_AI_USED" | "AI_USED_FOR_PHRASING" | "AI_USED_FOR_UNDERSTANDING" | "AI_USED_FOR_ANSWER";
 
 const AI_BADGE: Record<AIDeclaration, { label: string; bg: string; color: string }> = {
-  NO_AI_USED:                { label: "No AI",      bg: "#052e16", color: "#4ade80" },
-  AI_USED_FOR_PHRASING:      { label: "Phrasing",   bg: "#422006", color: "#fbbf24" },
-  AI_USED_FOR_UNDERSTANDING: { label: "Learning",   bg: "#431407", color: "#fb923c" },
-  AI_USED_FOR_ANSWER:        { label: "Full AI",    bg: "#450a0a", color: "#f87171" },
+  NO_AI_USED:                { label: "No AI",      bg: "#ecfdf3", color: "#067647" },
+  AI_USED_FOR_PHRASING:      { label: "Phrasing",   bg: "#fff8ec", color: "#b54708" },
+  AI_USED_FOR_UNDERSTANDING: { label: "Learning",   bg: "#fff8ec", color: "#b54708" },
+  AI_USED_FOR_ANSWER:        { label: "Full AI",    bg: "#fef3f2", color: "#b42318" },
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
-  NEW:         { bg: "#1e1b4b", color: "#818cf8" },
-  REVIEWED:    { bg: "#1a1a1a", color: "#aaaaaa" },
-  SHORTLISTED: { bg: "#052e16", color: "#4ade80" },
-  REJECTED:    { bg: "#450a0a", color: "#f87171" },
+  NEW:         { bg: "#eef0fd", color: "#4338ca" },
+  REVIEWED:    { bg: "#eef1f5", color: "#5a6472" },
+  SHORTLISTED: { bg: "#ecfdf3", color: "#067647" },
+  REJECTED:    { bg: "#fef3f2", color: "#b42318" },
 };
 
 type Verdict = "STRONG_YES" | "YES" | "MAYBE" | "NO";
 type AuthBand = "HIGH" | "MEDIUM" | "LOW";
 
 const VERDICT_META: Record<Verdict, { label: string; bg: string; color: string }> = {
-  STRONG_YES: { label: "Strong Yes", bg: "#052e16", color: "#4ade80" },
-  YES:        { label: "Yes",        bg: "#0d2818", color: "#34d399" },
-  MAYBE:      { label: "Maybe",      bg: "#422006", color: "#fbbf24" },
-  NO:         { label: "No",         bg: "#450a0a", color: "#f87171" },
+  STRONG_YES: { label: "Strong Yes", bg: "#ecfdf3", color: "#067647" },
+  YES:        { label: "Yes",        bg: "#ecfdf3", color: "#067647" },
+  MAYBE:      { label: "Maybe",      bg: "#fff8ec", color: "#b54708" },
+  NO:         { label: "No",         bg: "#fef3f2", color: "#b42318" },
 };
 
 const AUTH_META: Record<AuthBand, { label: string; color: string }> = {
-  HIGH:   { label: "High",   color: "#4ade80" },
-  MEDIUM: { label: "Medium", color: "#fbbf24" },
-  LOW:    { label: "Low",    color: "#f87171" },
+  HIGH:   { label: "High",   color: "#067647" },
+  MEDIUM: { label: "Medium", color: "#b54708" },
+  LOW:    { label: "Low",    color: "#b42318" },
 };
 
 // ─── Role-weighted scoring (mirrors the API's ROLE_WEIGHTS) ───────────────────
@@ -56,17 +56,17 @@ const DIM_LABEL: Record<DimKey, string> = { diagnosis: "Diagnosis", design: "Des
 
 type DefenseLevel = "DEFENDED" | "SHAKY" | "FAILED" | "NONE";
 const DEFENSE_META: Record<DefenseLevel, { label: string; color: string; bg: string }> = {
-  DEFENDED: { label: "Defended",        color: "#4ade80", bg: "#052e16" },
-  SHAKY:    { label: "Shaky defense",   color: "#fbbf24", bg: "#422006" },
-  FAILED:   { label: "Couldn't defend", color: "#f87171", bg: "#450a0a" },
-  NONE:     { label: "No verbal",       color: "#888888", bg: "#1a1a1a" },
+  DEFENDED: { label: "Defended",        color: "#067647", bg: "#ecfdf3" },
+  SHAKY:    { label: "Shaky defense",   color: "#b54708", bg: "#fff8ec" },
+  FAILED:   { label: "Couldn't defend", color: "#b42318", bg: "#fef3f2" },
+  NONE:     { label: "No verbal",       color: "#5a6472", bg: "#eef1f5" },
 };
 
 type Confidence = "HIGH" | "MEDIUM" | "LOW";
 const CONF_META: Record<Confidence, { label: string; color: string }> = {
-  HIGH:   { label: "High confidence", color: "#4ade80" },
-  MEDIUM: { label: "Some variance",   color: "#fbbf24" },
-  LOW:    { label: "High variance",   color: "#f87171" },
+  HIGH:   { label: "High confidence", color: "#067647" },
+  MEDIUM: { label: "Some variance",   color: "#b54708" },
+  LOW:    { label: "High variance",   color: "#b42318" },
 };
 
 interface Signals {
@@ -120,13 +120,13 @@ function weightedScore(sig: Signals | null, role: RoleKey): number | null {
     p.communication.pct * w.communication + p.execution.pct * w.execution
   );
 }
-const scoreColor = (s: number) => s >= 80 ? "#4ade80" : s >= 60 ? "#e5e7eb" : s >= 45 ? "#fbbf24" : "#f87171";
+const scoreColor = (s: number) => s >= 80 ? "#067647" : s >= 60 ? "#131722" : s >= 45 ? "#b54708" : "#b42318";
 function levelFit(s: number): { label: string; color: string; ico: string } {
-  if (s >= 80) return { label: "Exceeds", color: "#4ade80", ico: "★" };
-  if (s >= 58) return { label: "Meets",   color: "#c7c9d1", ico: "◆" };
-  return { label: "Below level", color: "#f87171", ico: "▽" };
+  if (s >= 80) return { label: "Exceeds", color: "#067647", ico: "★" };
+  if (s >= 58) return { label: "Meets",   color: "#5a6472", ico: "◆" };
+  return { label: "Below level", color: "#b42318", ico: "▽" };
 }
-const triColor = (v: number) => v >= 1 ? "#4ade80" : v >= 0.5 ? "#fbbf24" : "#f87171";
+const triColor = (v: number) => v >= 1 ? "#067647" : v >= 0.5 ? "#b54708" : "#b42318";
 
 function Triangle({ t, size }: { t: { code: number; written: number; spoken: number }; size: number }) {
   const s = size, pad = size * 0.17, r = size * 0.09;
@@ -317,52 +317,52 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#e5e7eb" }}>
+    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
       <header className="sticky top-0 z-30 flex items-center gap-4 px-8 py-4"
-        style={{ background: "#0a0a0a", borderBottom: "1px solid #1a1a1a" }}>
-        <Link href="/employer/campaigns" style={{ color: "#888888" }}><ArrowLeft size={18} /></Link>
+        style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
+        <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
         <div className="flex-1">
-          <h1 className="text-lg font-black text-white">{campaign?.roleName ?? "Results"}</h1>
-          <p className="text-xs" style={{ color: "#555555" }}>
+          <h1 className="text-lg font-black text-[#131722]">{campaign?.roleName ?? "Results"}</h1>
+          <p className="text-xs" style={{ color: "#8a93a3" }}>
             {campaign?.companyName} · {candidates.length} scored candidates · ranked for role fit
           </p>
         </div>
         <button onClick={selectTopPicks}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-          style={{ background: "#1e1b4b", border: "1px solid #312e81" }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
+          style={{ background: "#eef0fd", border: "1px solid #c7c9f7", color: "#4338ca" }}
           title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
           <Star size={14} /> Select Top Picks
         </button>
         <button onClick={issueCertificates} disabled={certIssuing}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: "#b45309" }}
+          style={{ background: "#b54708" }}
           title="Issue e-certificates to all reviewed candidates">
           <Award size={14} /> {certIssuing ? "Issuing…" : "Issue Certificates"}
         </button>
         <button onClick={exportCsv}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+          style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
           <Download size={14} /> Export CSV
         </button>
       </header>
 
       {certResult && (
         <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
-          style={{ background: "#451a03", color: "#fbbf24", borderBottom: "1px solid #92400e" }}>
+          style={{ background: "#fff8ec", color: "#b54708", borderBottom: "1px solid #e6c98a" }}>
           <Award size={15} /> {certResult} — candidates can now view and share their certificates
         </div>
       )}
       {inviteResult && (
         <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
-          style={{ background: "#052e16", color: "#4ade80", borderBottom: "1px solid #166534" }}>
+          style={{ background: "#ecfdf3", color: "#067647", borderBottom: "1px solid #a7d8bd" }}>
           <Check size={15} /> Invites sent — {inviteResult}
         </div>
       )}
 
       {/* ── Role-weighting bar ── */}
       <div className="px-8 py-3 flex items-center gap-4 flex-wrap"
-        style={{ background: "#0c0c0c", borderBottom: "1px solid #1a1a1a" }}>
-        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "#666" }}>Rank for</span>
+        style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
+        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "#8a93a3" }}>Rank for</span>
         <div className="flex gap-1.5 flex-wrap">
           {(Object.keys(ROLES) as RoleKey[]).map((rk) => {
             const active = role === rk;
@@ -370,11 +370,11 @@ export default function ResultsPage() {
               <button key={rk} onClick={() => setRole(rk)}
                 className="flex flex-col items-start px-3 py-1.5 rounded-lg text-left transition-colors"
                 style={{
-                  background: active ? "#1e1b4b" : "#141414",
-                  border: `1px solid ${active ? "#6366f1" : "#242424"}`,
+                  background: active ? "#eef0fd" : "#ffffff",
+                  border: `1px solid ${active ? "#4338ca" : "#e4e7ec"}`,
                 }}>
                 <span className="text-xs font-semibold" style={{ color: active ? "#fff" : "#bbb" }}>{ROLES[rk].label}</span>
-                <span className="text-[10px]" style={{ color: active ? "#818cf8" : "#555" }}>{ROLES[rk].sub}</span>
+                <span className="text-[10px]" style={{ color: active ? "#4338ca" : "#8a93a3" }}>{ROLES[rk].sub}</span>
               </button>
             );
           })}
@@ -384,11 +384,11 @@ export default function ResultsPage() {
             const pct = Math.round(ROLES[role].w[d] * 100);
             return (
               <div key={d} className="flex items-center gap-1.5">
-                <span className="text-[10px]" style={{ color: "#666" }}>{DIM_LABEL[d].slice(0, 4)}</span>
-                <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: "#242424" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#6366f1" }} />
+                <span className="text-[10px]" style={{ color: "#8a93a3" }}>{DIM_LABEL[d].slice(0, 4)}</span>
+                <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: "#e4e7ec" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#4338ca" }} />
                 </div>
-                <span className="text-[10px] tabular-nums" style={{ color: "#888" }}>{pct}%</span>
+                <span className="text-[10px] tabular-nums" style={{ color: "#5a6472" }}>{pct}%</span>
               </div>
             );
           })}
@@ -397,17 +397,17 @@ export default function ResultsPage() {
 
       <div className="flex flex-1">
         {/* ── Filter panel ── */}
-        <aside className="w-64 shrink-0 p-5 space-y-6" style={{ background: "#0d0d0d", borderRight: "1px solid #1a1a1a" }}>
+        <aside className="w-64 shrink-0 p-5 space-y-6" style={{ background: "#f2f4f7", borderRight: "1px solid #eef1f5" }}>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest" style={{ color: "#555555" }}>
+            <label className="text-xs font-bold uppercase tracking-widest" style={{ color: "#8a93a3" }}>
               Min Score: {minScore}
             </label>
             <input type="range" min={0} max={100} value={minScore}
               onChange={(e) => setMinScore(parseInt(e.target.value))}
-              className="w-full mt-3" style={{ accentColor: "#6366f1" }} />
+              className="w-full mt-3" style={{ accentColor: "#4338ca" }} />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest block mb-3" style={{ color: "#555555" }}>
+            <label className="text-xs font-bold uppercase tracking-widest block mb-3" style={{ color: "#8a93a3" }}>
               AI Declaration
             </label>
             <div className="space-y-2">
@@ -420,34 +420,34 @@ export default function ResultsPage() {
               ))}
             </div>
           </div>
-          <div className="text-xs leading-relaxed" style={{ color: "#555" }}>
-            <div className="font-bold uppercase tracking-widest mb-2" style={{ color: "#444" }}>Reading the signals</div>
-            Score is <b style={{ color: "#888" }}>re-weighted</b> for the role above. The
-            <b style={{ color: "#888" }}> consistency</b> triangle compares code · written · spoken.
-            <b style={{ color: "#f87171" }}> Re-review</b> flags a score to double-check before deciding.
+          <div className="text-xs leading-relaxed" style={{ color: "#8a93a3" }}>
+            <div className="font-bold uppercase tracking-widest mb-2" style={{ color: "#9aa3b2" }}>Reading the signals</div>
+            Score is <b style={{ color: "#5a6472" }}>re-weighted</b> for the role above. The
+            <b style={{ color: "#5a6472" }}> consistency</b> triangle compares code · written · spoken.
+            <b style={{ color: "#b42318" }}> Re-review</b> flags a score to double-check before deciding.
           </div>
         </aside>
 
         {/* ── Table ── */}
         <main className="flex-1 p-6 pb-28">
           {loading ? (
-            <div className="text-center py-20 text-sm" style={{ color: "#555555" }}>Loading…</div>
+            <div className="text-center py-20 text-sm" style={{ color: "#8a93a3" }}>Loading…</div>
           ) : candidates.length === 0 ? (
-            <div className="text-center py-20 text-sm" style={{ color: "#555555" }}>
+            <div className="text-center py-20 text-sm" style={{ color: "#8a93a3" }}>
               No scored candidates match your filters yet.
             </div>
           ) : (
-            <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid #222222" }}>
-              <table className="w-full text-sm" style={{ background: "#0d0d0d", minWidth: 940 }}>
+            <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid #e4e7ec" }}>
+              <table className="w-full text-sm" style={{ background: "#f2f4f7", minWidth: 940 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #1a1a1a", background: "#111111" }}>
+                  <tr style={{ borderBottom: "1px solid #eef1f5", background: "#ffffff" }}>
                     <th className="px-3 py-3 w-10">
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
-                        onChange={toggleAll} style={{ accentColor: "#6366f1" }} />
+                        onChange={toggleAll} style={{ accentColor: "#4338ca" }} />
                     </th>
                     {["#", "Candidate", "Score", "Level fit", "Defense", "Consistency", "Authenticity", "Verdict", "Status", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider"
-                        style={{ color: "#444444" }}>{h}</th>
+                        style={{ color: "#9aa3b2" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -467,28 +467,28 @@ export default function ResultsPage() {
                     return (
                       <Fragment key={c.id}>
                         <tr onClick={() => toggleExpand(c.id)} style={{
-                          borderBottom: isOpen ? "none" : "1px solid #161616",
-                          borderLeft: c.recommended ? "3px solid #22c55e" : "3px solid transparent",
-                          background: selected.has(c.id) ? "#13131f" : "transparent",
+                          borderBottom: isOpen ? "none" : "1px solid #eef1f5",
+                          borderLeft: c.recommended ? "3px solid #067647" : "3px solid transparent",
+                          background: selected.has(c.id) ? "#f2f4f7" : "transparent",
                           cursor: "pointer",
                         }}>
                           <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                             <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)}
-                              style={{ accentColor: "#6366f1" }} />
+                              style={{ accentColor: "#4338ca" }} />
                           </td>
-                          <td className="px-3 py-3 text-xs font-bold tabular-nums" style={{ color: i === 0 ? "#e8762b" : "#666666" }}>{i + 1}</td>
+                          <td className="px-3 py-3 text-xs font-bold tabular-nums" style={{ color: i === 0 ? "#e8762b" : "#8a93a3" }}>{i + 1}</td>
                           <td className="px-3 py-3">
-                            <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                            <div className="text-xs font-semibold text-[#131722] flex items-center gap-1.5">
                               {c.user.githubUsername || c.user.email || "—"}
                               {c.recommended && (
                                 <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full"
-                                  style={{ background: "#052e16", color: "#4ade80" }}>
+                                  style={{ background: "#ecfdf3", color: "#067647" }}>
                                   <Star size={9} /> Rec
                                 </span>
                               )}
                             </div>
                             {c.effort?.minutes != null && c.effort.expected != null && (
-                              <div className="text-[10px] mt-0.5" style={{ color: "#555" }}>
+                              <div className="text-[10px] mt-0.5" style={{ color: "#8a93a3" }}>
                                 {c.effort.minutes}m / {c.effort.expected}m {ai ? `· ${aiMeta?.label}` : ""}
                               </div>
                             )}
@@ -496,19 +496,19 @@ export default function ResultsPage() {
                           {/* Role-weighted score + confidence */}
                           <td className="px-3 py-3">
                             <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-black tabular-nums" style={{ color: ws != null ? scoreColor(ws) : "#444" }}>
+                              <span className="text-lg font-black tabular-nums" style={{ color: ws != null ? scoreColor(ws) : "#9aa3b2" }}>
                                 {ws ?? "—"}
                               </span>
                               {raw != null && ws != null && raw !== ws && (
-                                <span className="text-[10px]" style={{ color: "#555" }}>raw {raw}</span>
+                                <span className="text-[10px]" style={{ color: "#8a93a3" }}>raw {raw}</span>
                               )}
                             </div>
                             <div className="flex items-center gap-1 mt-0.5">
                               <span className="w-1.5 h-1.5 rounded-full" style={{ background: confMeta.color }} />
-                              <span className="text-[10px]" style={{ color: "#666" }}>{confMeta.label}</span>
+                              <span className="text-[10px]" style={{ color: "#8a93a3" }}>{confMeta.label}</span>
                               {borderline && (
                                 <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded" title="Score near the decision bar or contradicted — re-review before deciding"
-                                  style={{ background: "#422006", color: "#fbbf24" }}>RE-REVIEW</span>
+                                  style={{ background: "#fff8ec", color: "#b54708" }}>RE-REVIEW</span>
                               )}
                             </div>
                           </td>
@@ -516,7 +516,7 @@ export default function ResultsPage() {
                           <td className="px-3 py-3">
                             {fit && (
                               <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md"
-                                style={{ color: fit.color, background: "#141414", border: `1px solid ${fit.color}33` }}>
+                                style={{ color: fit.color, background: "#ffffff", border: `1px solid ${fit.color}33` }}>
                                 <span>{fit.ico}</span>{fit.label}
                               </span>
                             )}
@@ -540,7 +540,7 @@ export default function ResultsPage() {
                               <span style={{ color: AUTH_META[c.authBand].color }}>{AUTH_META[c.authBand].label}</span>
                               {c.flagged && (
                                 <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded"
-                                  style={{ background: "#450a0a", color: "#f87171" }}
+                                  style={{ background: "#fef3f2", color: "#b42318" }}
                                   title="Answers contradict the candidate's own AI declaration — review before deciding">
                                   Review
                                 </span>
@@ -562,7 +562,7 @@ export default function ResultsPage() {
                           </td>
                           <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                             <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`}
-                              className="flex items-center gap-1 text-xs font-semibold" style={{ color: "#6366f1" }}>
+                              className="flex items-center gap-1 text-xs font-semibold" style={{ color: "#4338ca" }}>
                               View <ExternalLink size={11} />
                             </Link>
                           </td>
@@ -570,24 +570,24 @@ export default function ResultsPage() {
 
                         {/* Expanded: skill profile + consistency + interview probe */}
                         {isOpen && sig && (
-                          <tr style={{ borderBottom: "1px solid #161616", background: "#0a0a0a" }}>
+                          <tr style={{ borderBottom: "1px solid #eef1f5", background: "#f5f6f8" }}>
                             <td colSpan={11} className="px-6 py-5">
                               <div className="grid gap-6" style={{ gridTemplateColumns: "1.2fr 1fr" }}>
                                 <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#555" }}>
-                                    Skill profile <span style={{ color: "#818cf8" }}>· weighted for {ROLES[role].label}</span>
+                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>
+                                    Skill profile <span style={{ color: "#4338ca" }}>· weighted for {ROLES[role].label}</span>
                                   </div>
                                   <div className="space-y-2.5">
                                     {(Object.keys(DIM_LABEL) as DimKey[]).map((d) => {
                                       const p = sig.skillProfile[d];
                                       const lead = ROLES[role].w[d] === Math.max(...Object.values(ROLES[role].w));
-                                      const col = p.pct >= 75 ? "#4ade80" : p.pct >= 55 ? "#6366f1" : p.pct >= 40 ? "#fbbf24" : "#f87171";
+                                      const col = p.pct >= 75 ? "#067647" : p.pct >= 55 ? "#4338ca" : p.pct >= 40 ? "#b54708" : "#b42318";
                                       return (
                                         <div key={d} className="grid items-center gap-3" style={{ gridTemplateColumns: "110px 1fr 34px" }}>
-                                          <span className="text-xs" style={{ color: lead ? "#818cf8" : "#999", fontWeight: lead ? 700 : 400 }}>
+                                          <span className="text-xs" style={{ color: lead ? "#4338ca" : "#999", fontWeight: lead ? 700 : 400 }}>
                                             {DIM_LABEL[d]}{lead ? " ◂" : ""}
                                           </span>
-                                          <div className="h-2 rounded-full overflow-hidden" style={{ background: "#242424" }}>
+                                          <div className="h-2 rounded-full overflow-hidden" style={{ background: "#e4e7ec" }}>
                                             <div className="h-full rounded-full transition-all" style={{ width: `${p.pct}%`, background: col }} />
                                           </div>
                                           <span className="text-[11px] tabular-nums text-right" style={{ color: "#999" }}>{p.pct}</span>
@@ -595,13 +595,13 @@ export default function ResultsPage() {
                                       );
                                     })}
                                   </div>
-                                  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 text-xs" style={{ borderTop: "1px solid #1a1a1a" }}>
-                                    {sig.strength && <span style={{ color: "#999" }}><b style={{ color: "#4ade80" }}>Strength</b> · {sig.strength}</span>}
-                                    {sig.concern && <span style={{ color: "#999" }}><b style={{ color: "#f87171" }}>Watch</b> · {sig.concern}</span>}
+                                  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 text-xs" style={{ borderTop: "1px solid #eef1f5" }}>
+                                    {sig.strength && <span style={{ color: "#999" }}><b style={{ color: "#067647" }}>Strength</b> · {sig.strength}</span>}
+                                    {sig.concern && <span style={{ color: "#999" }}><b style={{ color: "#b42318" }}>Watch</b> · {sig.concern}</span>}
                                   </div>
                                 </div>
                                 <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#555" }}>
+                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>
                                     Consistency — code · written · spoken
                                   </div>
                                   <div className="flex items-center gap-4">
@@ -615,14 +615,14 @@ export default function ResultsPage() {
                                       ))}
                                     </div>
                                   </div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mt-4 mb-2" style={{ color: "#555" }}>
+                                  <div className="text-[11px] font-bold uppercase tracking-widest mt-4 mb-2" style={{ color: "#8a93a3" }}>
                                     Interview pack — probes {DIM_LABEL[(interview[c.id]?.dimension as DimKey) ?? sig.weakestDimension].toLowerCase()}
                                   </div>
                                   {interview[c.id]?.questions ? (
                                     <div className="space-y-2.5">
                                       {interview[c.id]!.questions!.map((q, qi) => (
                                         <div key={qi} className="flex gap-2.5 text-xs leading-relaxed" style={{ color: "#cbd0dc" }}>
-                                          <span className="font-bold tabular-nums flex-none" style={{ color: "#818cf8" }}>{qi + 1}</span>
+                                          <span className="font-bold tabular-nums flex-none" style={{ color: "#4338ca" }}>{qi + 1}</span>
                                           <span>{q}</span>
                                         </div>
                                       ))}
@@ -630,15 +630,15 @@ export default function ResultsPage() {
                                   ) : (
                                     <button onClick={() => genInterview(c.id)} disabled={interview[c.id]?.loading}
                                       className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
-                                      style={{ background: "#1e1b4b", border: "1px solid #312e81", color: "#c7d2fe" }}>
+                                      style={{ background: "#eef0fd", border: "1px solid #c7c9f7", color: "#c7d2fe" }}>
                                       {interview[c.id]?.loading ? "Generating…" : "Generate 3 interview questions"}
                                     </button>
                                   )}
                                   {interview[c.id]?.error && (
-                                    <div className="text-xs mt-2" style={{ color: "#f87171" }}>{interview[c.id]?.error}</div>
+                                    <div className="text-xs mt-2" style={{ color: "#b42318" }}>{interview[c.id]?.error}</div>
                                   )}
                                   <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold mt-3" style={{ color: "#6366f1" }}>
+                                    className="inline-flex items-center gap-1 text-xs font-semibold mt-3" style={{ color: "#4338ca" }}>
                                     Open full profile <ExternalLink size={11} />
                                   </Link>
                                 </div>
@@ -659,30 +659,30 @@ export default function ResultsPage() {
       {/* ── Floating action bar ── */}
       {selected.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl"
-          style={{ background: "#1a1a1a", border: "1px solid #333333", marginLeft: "120px" }}>
-          <span className="text-sm font-bold text-white">{selected.size} selected</span>
-          <div className="w-px h-6" style={{ background: "#333333" }} />
+          style={{ background: "#eef1f5", border: "1px solid #d5d9e0", marginLeft: "120px" }}>
+          <span className="text-sm font-bold text-[#131722]">{selected.size} selected</span>
+          <div className="w-px h-6" style={{ background: "#d5d9e0" }} />
           <button onClick={() => setShowInvite(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#6366f1" }}>
+            style={{ background: "#4338ca" }}>
             <Mail size={13} /> Invite to Interview
           </button>
           <button onClick={exportCsv}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#222222", color: "#e5e7eb" }}>
+            style={{ background: "#e4e7ec", color: "#131722" }}>
             <Download size={13} /> Export
           </button>
           <button onClick={() => bulkStatus("REVIEWED")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#222222", color: "#e5e7eb" }}>
+            style={{ background: "#e4e7ec", color: "#131722" }}>
             <CheckCircle2 size={13} /> Mark Reviewed
           </button>
           <button onClick={() => bulkStatus("REJECTED")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#2a0a0a", color: "#f87171" }}>
+            style={{ background: "#fef3f2", color: "#b42318" }}>
             <X size={13} /> Reject
           </button>
-          <button onClick={() => setSelected(new Set())} className="text-xs font-medium" style={{ color: "#888888" }}>
+          <button onClick={() => setSelected(new Set())} className="text-xs font-medium" style={{ color: "#5a6472" }}>
             Clear
           </button>
         </div>
@@ -692,38 +692,38 @@ export default function ResultsPage() {
       {showInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
           style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setShowInvite(false)}>
-          <div className="rounded-xl max-w-lg w-full p-6" style={{ background: "#111111", border: "1px solid #2a2a2a" }}
+          <div className="rounded-xl max-w-lg w-full p-6" style={{ background: "#ffffff", border: "1px solid #d5d9e0" }}
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-black text-white">Invite {selected.size} candidate(s)</h2>
-              <button onClick={() => setShowInvite(false)} style={{ color: "#888888" }}><X size={18} /></button>
+              <h2 className="text-base font-black text-[#131722]">Invite {selected.size} candidate(s)</h2>
+              <button onClick={() => setShowInvite(false)} style={{ color: "#5a6472" }}><X size={18} /></button>
             </div>
-            <div className="rounded-lg p-4 mb-4 text-sm" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e", color: "#aaaaaa" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#555555" }}>Email preview</div>
-              <p className="mb-2"><span style={{ color: "#666" }}>Subject:</span> You&apos;ve been shortlisted — {campaign?.roleName} at {campaign?.companyName}</p>
-              <div className="border-t my-3" style={{ borderColor: "#1e1e1e" }} />
+            <div className="rounded-lg p-4 mb-4 text-sm" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec", color: "#5a6472" }}>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>Email preview</div>
+              <p className="mb-2"><span style={{ color: "#8a93a3" }}>Subject:</span> You&apos;ve been shortlisted — {campaign?.roleName} at {campaign?.companyName}</p>
+              <div className="border-t my-3" style={{ borderColor: "#e4e7ec" }} />
               <p className="leading-relaxed text-xs">
                 Hi [Candidate],<br /><br />
                 You performed strongly on the {campaign?.companyName} {campaign?.roleName} assessment on DevSimulate.
                 We&apos;d like to invite you for an interview.<br /><br />
-                Book your slot: <span style={{ color: "#818cf8" }}>{campaign?.bookingLink ?? "[booking link]"}</span><br /><br />
+                Book your slot: <span style={{ color: "#4338ca" }}>{campaign?.bookingLink ?? "[booking link]"}</span><br /><br />
                 {campaign?.companyName} Hiring Team
               </p>
             </div>
             {!campaign?.bookingLink && (
-              <div className="rounded-lg px-3 py-2 mb-4 text-xs" style={{ background: "#422006", color: "#fbbf24" }}>
+              <div className="rounded-lg px-3 py-2 mb-4 text-xs" style={{ background: "#fff8ec", color: "#b54708" }}>
                 No booking link set on this campaign. Candidates will be shortlisted but the email won&apos;t include a link.
               </div>
             )}
             <div className="flex gap-3">
               <button onClick={confirmInvite}
                 className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white flex items-center justify-center gap-2"
-                style={{ background: "#6366f1" }}>
+                style={{ background: "#4338ca" }}>
                 <Check size={15} /> Confirm & Send
               </button>
               <button onClick={() => setShowInvite(false)}
                 className="px-5 py-2.5 rounded-lg text-sm font-semibold"
-                style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
                 Cancel
               </button>
             </div>

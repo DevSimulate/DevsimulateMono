@@ -12,9 +12,9 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com"
 interface Codebase { id: string; name: string; stack: string; }
 
 const inputStyle = {
-  background: "#0d0d0d",
-  border: "1px solid #2a2a2a",
-  color: "#e5e7eb",
+  background: "#f2f4f7",
+  border: "1px solid #d5d9e0",
+  color: "#131722",
 };
 
 export default function NewCampaignPage() {
@@ -127,51 +127,51 @@ export default function NewCampaignPage() {
   // Success view
   if (createdSlug) {
     return (
-      <div className="flex flex-col min-h-screen" style={{ color: "#e5e7eb" }}>
-        <header className="px-8 py-4" style={{ background: "#0a0a0a", borderBottom: "1px solid #1a1a1a" }}>
-          <h1 className="text-lg font-black text-white">Campaign Created</h1>
+      <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
+        <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
+          <h1 className="text-lg font-black text-[#131722]">Campaign Created</h1>
         </header>
         <main className="flex-1 px-8 py-10 max-w-2xl mx-auto w-full">
-          <div className="rounded-xl p-8 text-center" style={{ background: "#111111", border: "1px solid #222222" }}>
+          <div className="rounded-xl p-8 text-center" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ background: "#052e16" }}>
-              <Check size={28} style={{ color: "#4ade80" }} />
+              style={{ background: "#ecfdf3" }}>
+              <Check size={28} style={{ color: "#067647" }} />
             </div>
-            <div className="text-xl font-black text-white mb-1">Your campaign is live!</div>
-            <div className="text-sm mb-6" style={{ color: "#888888" }}>
+            <div className="text-xl font-black text-[#131722] mb-1">Your campaign is live!</div>
+            <div className="text-sm mb-6" style={{ color: "#5a6472" }}>
               Share this link with candidates. When they open it, they sign in with GitHub and
               get assigned a ticket automatically.
             </div>
 
-            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#555555" }}>
+            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0" }}>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>
                 Application Link
               </div>
               <div className="flex items-center gap-3">
-                <code className="flex-1 text-sm break-all" style={{ color: "#818cf8" }}>{fullLink}</code>
+                <code className="flex-1 text-sm break-all" style={{ color: "#4338ca" }}>{fullLink}</code>
                 <button onClick={copyLink}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-white"
-                  style={{ background: "#6366f1" }}>
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-[#131722]"
+                  style={{ background: "#4338ca" }}>
                   {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
                 </button>
               </div>
             </div>
 
-            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#555555" }}>
+            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec" }}>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>
                 What candidates see
               </div>
-              <div className="text-sm" style={{ color: "#aaaaaa" }}>
+              <div className="text-sm" style={{ color: "#5a6472" }}>
                 {form.type === "CONTEST" ? (
                   <>
-                    <span className="font-bold text-white">{form.companyName}</span> is running{" "}
-                    <span className="font-bold text-white">{form.roleName}</span>. Solve a real{" "}
+                    <span className="font-bold text-[#131722]">{form.companyName}</span> is running{" "}
+                    <span className="font-bold text-[#131722]">{form.roleName}</span>. Solve a real{" "}
                     {form.difficulty.toLowerCase()}-level coding challenge, get AI-scored, and climb the live leaderboard.
                   </>
                 ) : (
                   <>
-                    <span className="font-bold text-white">{form.companyName}</span> is hiring for{" "}
-                    <span className="font-bold text-white">{form.roleName}</span>. Complete a real{" "}
+                    <span className="font-bold text-[#131722]">{form.companyName}</span> is hiring for{" "}
+                    <span className="font-bold text-[#131722]">{form.roleName}</span>. Complete a real{" "}
                     {form.difficulty.toLowerCase()}-level coding ticket to be considered.
                   </>
                 )}
@@ -180,13 +180,13 @@ export default function NewCampaignPage() {
 
             <div className="flex gap-3">
               <Link href="/employer/campaigns"
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-center text-white"
-                style={{ background: "#6366f1" }}>
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-center text-[#131722]"
+                style={{ background: "#4338ca" }}>
                 View All Campaigns
               </Link>
               <a href={fullLink} target="_blank" rel="noreferrer"
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold"
-                style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
                 Preview <ExternalLink size={13} />
               </a>
             </div>
@@ -198,20 +198,20 @@ export default function NewCampaignPage() {
 
   // Form view
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#e5e7eb" }}>
-      <header className="px-8 py-4 flex items-center gap-4" style={{ background: "#0a0a0a", borderBottom: "1px solid #1a1a1a" }}>
-        <Link href="/employer/campaigns" style={{ color: "#888888" }}><ArrowLeft size={18} /></Link>
+    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
+      <header className="px-8 py-4 flex items-center gap-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
+        <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
         <div>
-          <h1 className="text-lg font-black text-white">New Campaign</h1>
-          <p className="text-xs" style={{ color: "#555555" }}>Create a hiring assessment campaign</p>
+          <h1 className="text-lg font-black text-[#131722]">New Campaign</h1>
+          <p className="text-xs" style={{ color: "#8a93a3" }}>Create a hiring assessment campaign</p>
         </div>
       </header>
 
       <main className="flex-1 px-8 py-8 max-w-2xl mx-auto w-full">
-        <div className="rounded-xl p-6 space-y-5" style={{ background: "#111111", border: "1px solid #222222" }}>
+        <div className="rounded-xl p-6 space-y-5" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
 
           {error && (
-            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "#1c0000", border: "1px solid #7f1d1d", color: "#f87171" }}>
+            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "#1c0000", border: "1px solid #7f1d1d", color: "#b42318" }}>
               {error}
             </div>
           )}
@@ -226,11 +226,11 @@ export default function NewCampaignPage() {
                 <button key={opt.v} type="button" onClick={() => setForm({ ...form, type: opt.v })}
                   className="text-left rounded-lg p-3 transition-colors"
                   style={{
-                    background: form.type === opt.v ? "#1e1b4b" : "#0d0d0d",
-                    border: `1px solid ${form.type === opt.v ? "#6366f1" : "#2a2a2a"}`,
+                    background: form.type === opt.v ? "#eef0fd" : "#f2f4f7",
+                    border: `1px solid ${form.type === opt.v ? "#4338ca" : "#d5d9e0"}`,
                   }}>
-                  <div className="text-sm font-bold text-white">{opt.title}</div>
-                  <div className="text-xs mt-0.5" style={{ color: "#888" }}>{opt.desc}</div>
+                  <div className="text-sm font-bold text-[#131722]">{opt.title}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "#5a6472" }}>{opt.desc}</div>
                 </button>
               ))}
             </div>
@@ -294,34 +294,34 @@ export default function NewCampaignPage() {
           )}
 
           {/* Optional ticket curation */}
-          <div className="rounded-lg p-4" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
+          <div className="rounded-lg p-4" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec" }}>
             <div className="flex items-center justify-between mb-1">
-              <div className="text-sm font-semibold text-white">Which tickets?</div>
-              <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#888" }}>
-                <input type="checkbox" checked={pickMode} onChange={(e) => setPickMode(e.target.checked)} style={{ accentColor: "#6366f1" }} />
+              <div className="text-sm font-semibold text-[#131722]">Which tickets?</div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#5a6472" }}>
+                <input type="checkbox" checked={pickMode} onChange={(e) => setPickMode(e.target.checked)} style={{ accentColor: "#4338ca" }} />
                 Choose specific tickets
               </label>
             </div>
             {!pickMode ? (
-              <div className="text-xs" style={{ color: "#555" }}>
-                Each candidate gets a <span style={{ color: "#aaa" }}>random {form.difficulty.toLowerCase()} ticket</span> from this codebase — different candidates get different problems, so they can&apos;t share answers.
+              <div className="text-xs" style={{ color: "#8a93a3" }}>
+                Each candidate gets a <span style={{ color: "#5a6472" }}>random {form.difficulty.toLowerCase()} ticket</span> from this codebase — different candidates get different problems, so they can&apos;t share answers.
               </div>
             ) : (
               <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
                 {library.length === 0 ? (
-                  <div className="text-xs" style={{ color: "#555" }}>No tickets found for this codebase + difficulty.</div>
+                  <div className="text-xs" style={{ color: "#8a93a3" }}>No tickets found for this codebase + difficulty.</div>
                 ) : library.map((t) => (
                   <label key={t.id} className="flex items-start gap-2.5 rounded-lg px-3 py-2 cursor-pointer transition-colors"
-                    style={{ background: selectedTickets.has(t.id) ? "#1e1b4b" : "#111", border: `1px solid ${selectedTickets.has(t.id) ? "#312e81" : "#1e1e1e"}` }}>
-                    <input type="checkbox" checked={selectedTickets.has(t.id)} onChange={() => toggleTicket(t.id)} className="mt-0.5" style={{ accentColor: "#6366f1" }} />
+                    style={{ background: selectedTickets.has(t.id) ? "#eef0fd" : "#ffffff", border: `1px solid ${selectedTickets.has(t.id) ? "#c7c9f7" : "#e4e7ec"}` }}>
+                    <input type="checkbox" checked={selectedTickets.has(t.id)} onChange={() => toggleTicket(t.id)} className="mt-0.5" style={{ accentColor: "#4338ca" }} />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-white truncate">{t.title}</div>
-                      <div className="text-xs" style={{ color: "#555" }}>~{t.expectedMinutes} min</div>
+                      <div className="text-xs font-semibold text-[#131722] truncate">{t.title}</div>
+                      <div className="text-xs" style={{ color: "#8a93a3" }}>~{t.expectedMinutes} min</div>
                     </div>
                   </label>
                 ))}
                 {library.length > 0 && (
-                  <div className="text-xs pt-1" style={{ color: "#555" }}>
+                  <div className="text-xs pt-1" style={{ color: "#8a93a3" }}>
                     {selectedTickets.size === 0
                       ? "Pick at least one. Candidates get a random ticket from your selection."
                       : `${selectedTickets.size} selected — candidates get a random one of these.`}
@@ -332,8 +332,8 @@ export default function NewCampaignPage() {
           </div>
 
           <button onClick={handleSubmit} disabled={submitting}
-            className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #6366f1, #4f46e5)" }}>
+            className="w-full py-3 rounded-lg text-sm font-bold text-[#131722] disabled:opacity-50"
+            style={{ background: "linear-gradient(135deg, #4f46e5, #4338ca)" }}>
             {submitting ? "Creating…" : "Create Campaign & Generate Link"}
           </button>
         </div>
@@ -345,7 +345,7 @@ export default function NewCampaignPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-semibold mb-1.5" style={{ color: "#888888" }}>{label}</label>
+      <label className="block text-xs font-semibold mb-1.5" style={{ color: "#5a6472" }}>{label}</label>
       {children}
     </div>
   );

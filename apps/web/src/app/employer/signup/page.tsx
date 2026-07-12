@@ -41,8 +41,8 @@ export default function EmployerSignupPage(): React.ReactElement {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center px-6">
-      <Link href="/" className="font-bold text-white tracking-tight mb-10 text-xl">
+    <div className="min-h-screen bg-slate-950 text-[#131722] flex flex-col items-center justify-center px-6">
+      <Link href="/" className="font-bold text-[#131722] tracking-tight mb-10 text-xl">
         ⚡ DevSimulate
       </Link>
 
@@ -64,7 +64,7 @@ export default function EmployerSignupPage(): React.ReactElement {
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="Acme Corp"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-[#131722] placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 
@@ -74,7 +74,7 @@ export default function EmployerSignupPage(): React.ReactElement {
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
               placeholder="acmecorp.com"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-[#131722] placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
             />
           </div>
 

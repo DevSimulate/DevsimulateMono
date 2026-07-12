@@ -11,9 +11,9 @@ interface Member {
 }
 
 const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
-  ADMIN:   { bg: "#1e1b4b", color: "#818cf8" },
-  MANAGER: { bg: "#052e16", color: "#4ade80" },
-  MEMBER:  { bg: "#1a1a1a", color: "#888" },
+  ADMIN:   { bg: "#eef0fd", color: "#4338ca" },
+  MANAGER: { bg: "#ecfdf3", color: "#067647" },
+  MEMBER:  { bg: "#eef1f5", color: "#5a6472" },
 };
 
 export default function TeamPage() {
@@ -69,42 +69,42 @@ export default function TeamPage() {
   const isAdmin = myRole === "ADMIN";
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#e5e7eb" }}>
-      <header className="px-8 py-4" style={{ background: "#0a0a0a", borderBottom: "1px solid #1a1a1a" }}>
-        <h1 className="text-lg font-black text-white">Team</h1>
-        <p className="text-xs" style={{ color: "#555" }}>People who can review candidates and manage campaigns</p>
+    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
+      <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
+        <h1 className="text-lg font-black text-[#131722]">Team</h1>
+        <p className="text-xs" style={{ color: "#8a93a3" }}>People who can review candidates and manage campaigns</p>
       </header>
 
       <main className="flex-1 px-8 py-6 max-w-3xl">
         {isAdmin && (
-          <div className="rounded-xl p-5 mb-6" style={{ background: "#111", border: "1px solid #222" }}>
-            <div className="text-sm font-bold text-white mb-3 flex items-center gap-2"><UserPlus size={15} /> Add a team member</div>
+          <div className="rounded-xl p-5 mb-6" style={{ background: "#ffffff", border: "1px solid #222" }}>
+            <div className="text-sm font-bold text-[#131722] mb-3 flex items-center gap-2"><UserPlus size={15} /> Add a team member</div>
             <div className="flex gap-2">
               <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their GitHub username"
-                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb" }} />
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0", color: "#131722" }} />
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0", color: "#131722" }}>
                 <option value="MEMBER">Member</option>
                 <option value="MANAGER">Manager</option>
                 <option value="ADMIN">Admin</option>
               </select>
-              <button onClick={invite} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: "#6366f1" }}>Add</button>
+              <button onClick={invite} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-[#131722] disabled:opacity-50" style={{ background: "#4338ca" }}>Add</button>
             </div>
-            {error && <div className="text-xs mt-2" style={{ color: "#f87171" }}>{error}</div>}
-            <div className="text-xs mt-2" style={{ color: "#555" }}>They must have signed in to DevSimulate at least once.</div>
+            {error && <div className="text-xs mt-2" style={{ color: "#b42318" }}>{error}</div>}
+            <div className="text-xs mt-2" style={{ color: "#8a93a3" }}>They must have signed in to DevSimulate at least once.</div>
           </div>
         )}
 
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #222" }}>
-          {loading ? <div className="px-5 py-8 text-center text-sm" style={{ color: "#555" }}>Loading…</div> :
+          {loading ? <div className="px-5 py-8 text-center text-sm" style={{ color: "#8a93a3" }}>Loading…</div> :
             members.map((m, i) => (
-              <div key={m.id} className="flex items-center gap-3 px-5 py-3.5" style={{ background: "#0d0d0d", borderBottom: i < members.length - 1 ? "1px solid #161616" : "none" }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#1e1b4b", color: "#818cf8" }}>{m.githubUsername.charAt(0).toUpperCase()}</div>
+              <div key={m.id} className="flex items-center gap-3 px-5 py-3.5" style={{ background: "#f2f4f7", borderBottom: i < members.length - 1 ? "1px solid #eef1f5" : "none" }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#eef0fd", color: "#4338ca" }}>{m.githubUsername.charAt(0).toUpperCase()}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white">{m.githubUsername} {m.isMe && <span className="text-xs" style={{ color: "#555" }}>(you)</span>}</div>
-                  <div className="text-xs" style={{ color: "#555" }}>{m.email ?? "—"}</div>
+                  <div className="text-sm font-semibold text-[#131722]">{m.githubUsername} {m.isMe && <span className="text-xs" style={{ color: "#8a93a3" }}>(you)</span>}</div>
+                  <div className="text-xs" style={{ color: "#8a93a3" }}>{m.email ?? "—"}</div>
                 </div>
                 {isAdmin && !m.isMe ? (
-                  <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
+                  <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
                     <option value="MEMBER">Member</option>
                     <option value="MANAGER">Manager</option>
                     <option value="ADMIN">Admin</option>
@@ -115,7 +115,7 @@ export default function TeamPage() {
                   </span>
                 )}
                 {isAdmin && !m.isMe && (
-                  <button onClick={() => remove(m.id)} className="p-1.5 rounded-lg" style={{ color: "#666" }} title="Remove"><Trash2 size={14} /></button>
+                  <button onClick={() => remove(m.id)} className="p-1.5 rounded-lg" style={{ color: "#8a93a3" }} title="Remove"><Trash2 size={14} /></button>
                 )}
               </div>
             ))}
