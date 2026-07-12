@@ -157,6 +157,7 @@ export default function ResultsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [role, setRole] = useState<RoleKey>("balanced");
+  const [interview, setInterview] = useState<Record<string, { loading: boolean; error?: string; dimension?: string; questions?: string[] }>>({});
   const [showInvite,    setShowInvite]    = useState(false);
   const [inviteResult,  setInviteResult]  = useState<string | null>(null);
   const [certIssuing,   setCertIssuing]   = useState(false);
@@ -211,6 +212,25 @@ export default function ResultsPage() {
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }
+  async function genInterview(candId: string) {
+    if (interview[candId]?.loading || interview[candId]?.questions) return;
+    setInterview((p) => ({ ...p, [candId]: { loading: true } }));
+    try {
+      const token = getToken();
+      const r = await fetch(`${API}/employer/campaigns/${campaignId}/candidates/${candId}/interview-questions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const j = await r.json();
+      if (j.data?.questions?.length) {
+        setInterview((p) => ({ ...p, [candId]: { loading: false, dimension: j.data.dimension, questions: j.data.questions } }));
+      } else {
+        setInterview((p) => ({ ...p, [candId]: { loading: false, error: j.error ?? "Couldn't generate questions" } }));
+      }
+    } catch {
+      setInterview((p) => ({ ...p, [candId]: { loading: false, error: "Couldn't reach the server" } }));
+    }
   }
   function toggleAll() {
     setSelected((prev) =>
@@ -596,11 +616,30 @@ export default function ResultsPage() {
                                     </div>
                                   </div>
                                   <div className="text-[11px] font-bold uppercase tracking-widest mt-4 mb-2" style={{ color: "#555" }}>
-                                    Interview — probe {DIM_LABEL[sig.weakestDimension].toLowerCase()}
+                                    Interview pack — probes {DIM_LABEL[(interview[c.id]?.dimension as DimKey) ?? sig.weakestDimension].toLowerCase()}
                                   </div>
+                                  {interview[c.id]?.questions ? (
+                                    <div className="space-y-2.5">
+                                      {interview[c.id]!.questions!.map((q, qi) => (
+                                        <div key={qi} className="flex gap-2.5 text-xs leading-relaxed" style={{ color: "#cbd0dc" }}>
+                                          <span className="font-bold tabular-nums flex-none" style={{ color: "#818cf8" }}>{qi + 1}</span>
+                                          <span>{q}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <button onClick={() => genInterview(c.id)} disabled={interview[c.id]?.loading}
+                                      className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
+                                      style={{ background: "#1e1b4b", border: "1px solid #312e81", color: "#c7d2fe" }}>
+                                      {interview[c.id]?.loading ? "Generating…" : "Generate 3 interview questions"}
+                                    </button>
+                                  )}
+                                  {interview[c.id]?.error && (
+                                    <div className="text-xs mt-2" style={{ color: "#f87171" }}>{interview[c.id]?.error}</div>
+                                  )}
                                   <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: "#6366f1" }}>
-                                    Open full profile & tailored questions <ExternalLink size={11} />
+                                    className="inline-flex items-center gap-1 text-xs font-semibold mt-3" style={{ color: "#6366f1" }}>
+                                    Open full profile <ExternalLink size={11} />
                                   </Link>
                                 </div>
                               </div>

@@ -719,3 +719,51 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   return JSON.parse(clean) as VerbalScoreResult;
 }
+
+/**
+ * Generates 3 live-interview questions for a HIRING MANAGER (not the candidate),
+ * targeting the dimension the candidate was weakest on and grounded in the
+ * specific ticket they solved. Used by the employer dashboard's interview pack.
+ */
+export async function generateInterviewQuestions(ctx: {
+  ticketTitle: string;
+  ticketDescription: string;
+  difficulty: string;
+  codebaseName: string;
+  weakDimension: string;
+  topImprovement: string | null;
+  prDescription: string;
+}): Promise<string[]> {
+  const prompt = `You are helping a hiring manager prepare for a LIVE interview with a candidate who completed a take-home assessment. Write exactly 3 interview questions that probe the candidate's ${ctx.weakDimension.toUpperCase()} — the dimension they scored weakest on — grounded in THIS specific ticket.
+
+Codebase: ${ctx.codebaseName}
+Ticket (${ctx.difficulty}): ${ctx.ticketTitle}
+${ctx.ticketDescription}
+
+Candidate's PR summary: ${ctx.prDescription || "(none provided)"}
+${ctx.topImprovement ? `The assessment flagged this weakness: ${ctx.topImprovement}` : ""}
+
+Each question must:
+- Be answerable out loud in an interview (no coding), testing genuine understanding
+- Target ${ctx.weakDimension} specifically, tied to this ticket's real problem
+- Escalate: Q1 opens the topic, Q2 probes a trade-off or edge case, Q3 tests production judgment
+- Be concrete to this ticket — never generic textbook questions, never yes/no phrasing
+
+Respond with ONLY valid JSON: { "questions": ["<q1>", "<q2>", "<q3>"] }`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 600,
+    system: "You are a JSON-only API. Respond with a single valid JSON object and nothing else.",
+    messages: [{ role: "user", content: prompt }],
+  });
+  const content = response.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  try {
+    const parsed = JSON.parse(clean) as { questions?: string[] };
+    return (parsed.questions ?? []).filter((q) => typeof q === "string" && q.trim()).slice(0, 3);
+  } catch {
+    throw new Error("Could not generate interview questions — please try again.");
+  }
+}

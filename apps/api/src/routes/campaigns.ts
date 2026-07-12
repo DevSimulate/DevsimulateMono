@@ -8,6 +8,7 @@ import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { computeHiringSignals } from "../lib/hiring-signals";
+import { generateInterviewQuestions } from "../services/review.service";
 
 const router = Router();
 
@@ -824,6 +825,53 @@ router.get("/:id/candidates/:candidateId", async (req: Request, res: Response): 
     res.json({ data: { candidate: { ...rawCandidate, submission }, campaign, timing } });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch candidate" });
+  }
+});
+
+/**
+ * POST /campaigns/:id/candidates/:candidateId/interview-questions
+ * Generates 3 tailored interview questions probing the candidate's weakest
+ * dimension, grounded in the ticket they solved. On-demand (LLM call).
+ */
+router.post("/:id/candidates/:candidateId/interview-questions", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: req.params.id, org: { members: { some: { userId } } } },
+      select: { id: true, codebaseId: true, ticketIds: true },
+    });
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const cand = await prisma.campaignCandidate.findUnique({
+      where: { id: req.params.candidateId },
+      select: { userId: true },
+    });
+    if (!cand) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+    const submission = await prisma.submission.findFirst({
+      where: { userId: cand.userId, status: "REVIEWED", finalized: true, ...campaignSubmissionScope(campaign) },
+      orderBy: { scoreTotal: "desc" },
+      include: {
+        ticket: { include: { codebase: { select: { name: true } } } },
+        followUp: { select: { verbalScore: true, declarationMismatch: true } },
+      },
+    });
+    if (!submission) { res.status(404).json({ error: "No scored submission for this candidate" }); return; }
+
+    const signals = computeHiringSignals(submission, submission.followUp);
+    const questions = await generateInterviewQuestions({
+      ticketTitle: submission.ticket.title,
+      ticketDescription: submission.ticket.description,
+      difficulty: String(submission.ticket.difficulty),
+      codebaseName: submission.ticket.codebase.name,
+      weakDimension: signals.weakestDimension,
+      topImprovement: signals.concern,
+      prDescription: submission.prDescription ?? "",
+    });
+
+    res.json({ data: { dimension: signals.weakestDimension, questions } });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to generate interview questions" });
   }
 });
 
