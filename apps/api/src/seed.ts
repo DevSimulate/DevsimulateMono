@@ -3173,6 +3173,207 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
     });
   }
 
+  // ─── Meridian GlobeView — C++17 / OpenGL 3D map & terrain renderer ──────────
+  const globeviewCodebase = await prisma.codebase.upsert({
+    where: { id: "meridian-globeview-seed-id-001" },
+    update: { repoUrl: "https://github.com/DevSimulate/meridian-globeview" },
+    create: {
+      id: "meridian-globeview-seed-id-001",
+      name: "Meridian GlobeView",
+      stack: Stack.CPP,
+      repoUrl: "https://github.com/DevSimulate/meridian-globeview",
+      description: "A C++17 + OpenGL real-time 3D map client. Streams Web Mercator tiles, renders terrain with level-of-detail, draws country/zone overlays, and tracks live vehicle markers on a planet-scale scene.",
+      companyLore: `Meridian runs a real-time fleet dispatch and mapping platform. GlobeView is the rendering client every dispatcher stares at all day — terrain, satellite tiles, geofences, and thousands of live vehicles on a globe. The scene is planet-scale (the world is ~40,000,000 metres across), the camera goes from continent view down to a single street, and the bugs are the kind that only appear at the edges: far from the origin, near the poles, across the date line, or under a flood of concurrent position updates. "It looks fine on my machine, in my city" is where most of these hide.`,
+    },
+  });
+
+  const globeviewTickets = [
+    {
+      id: "ticket-gv-01-seed-id-001",
+      title: "GV-01: Satellite tiles and labels render upside down",
+      description: `Satellite imagery tiles and text labels render vertically mirrored — the map is flipped top-to-bottom. It started after we swapped the tile decoder. The 3D terrain geometry is oriented correctly; only the textured tile quads and labels are flipped.
+
+**Files:** \`src/render/TileRenderer.cpp\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/render/TileRenderer.cpp"],
+      rubric: {
+        diagnosis: "Did they identify the mismatch between OpenGL's bottom-left texture origin and the top-left origin of Web Mercator tile images (and the decoded bitmap), so the V texture coordinate is inverted? Did they note geometry is unaffected because it doesn't use these UVs?",
+        design: "Did they fix it at the right layer — flipping the V coordinate / tile UV mapping (or the unpack orientation) — rather than flipping every image on the CPU or the whole scene?",
+        communication: "Did they explain texture-space vs image-space origin conventions and why only textured quads flipped while terrain did not?",
+        execution: "Are tiles and labels upright, without double-flipping or inverting the rest of the scene?",
+      },
+      expectedMinutes: 40,
+    },
+    {
+      id: "ticket-gv-02-seed-id-002",
+      title: "GV-02: The map jitters and swims when zoomed into a city",
+      description: `At country and continent zoom the map is rock solid. Zoom into a city and vertices visibly shake and swim by fractions of a pixel as the camera moves — buildings and roads especially. It's worse the farther the location is from the map's (0,0) origin, and worst at high latitudes. Nothing looks wrong in the numbers; it only shows up on screen, in motion.
+
+**Files:** \`src/render/Camera.cpp\`, \`src/render/TileRenderer.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/Camera.cpp", "src/render/TileRenderer.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that world coordinates near a city are on the order of millions of metres, and float32's ~24-bit mantissa cannot represent sub-metre precision at that magnitude, so positions quantise and jitter once the model-view transform is applied in single precision?",
+        design: "Did they choose a correct fix — camera-relative / relative-to-centre (RTC) rendering, per-tile local origins, or doing the model-view transform in double precision on the CPU before handing float32 to the GPU — and weigh the trade-offs? Did they avoid a fix that just moves the precision loss elsewhere?",
+        communication: "Did they explain WHY it only appears zoomed in and far from the origin (large magnitudes shrink representable precision) and not at country scale?",
+        execution: "Does the jitter disappear across the full zoom range without introducing precision problems elsewhere?",
+      },
+      expectedMinutes: 90,
+    },
+    {
+      id: "ticket-gv-03-seed-id-003",
+      title: "GV-03: Rendered colours look washed out and too dark",
+      description: `The rendered map looks noticeably darker and more washed out than the designers' mockups. Bright terrain looks muddy, and blending two semi-transparent overlays produces colours that are too dark. If you screenshot it and nudge the gamma in an image tool, it "looks right" — but that's obviously not a fix.
+
+**Files:** \`src/render/ColorPipeline.cpp\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/render/ColorPipeline.cpp"],
+      rubric: {
+        diagnosis: "Did they identify an sRGB/linear colour-space mismatch — sampling sRGB textures as if they were linear (or vice versa), or applying gamma twice — so lighting and blending happen in the wrong space?",
+        design: "Did they fix it properly — mark colour textures as sRGB so sampling decodes to linear, do lighting/blending in linear space, and convert to sRGB once at output — rather than an ad-hoc brightness multiply?",
+        communication: "Did they explain why blending in the wrong space darkens midtones, and why a flat gamma tweak only appears to fix it?",
+        execution: "Do colours match the design and does blending two overlays look correct?",
+      },
+      expectedMinutes: 45,
+    },
+    {
+      id: "ticket-gv-04-seed-id-004",
+      title: "GV-04: Roads flicker against terrain, worse toward the horizon",
+      description: `Roads and building footprints flicker against the terrain underneath — two surfaces fighting over which is in front. Up close it's fine; toward the horizon it gets bad. We render from the vehicle out to the horizon, so the near plane is 0.1 m and the far plane is 2,000,000 m.
+
+**Files:** \`src/render/DepthConfig.h\`, \`src/render/Camera.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/DepthConfig.h", "src/render/Camera.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that the enormous near:far ratio (0.1 → 2e6) starves depth precision, and that standard perspective depth is hyperbolic — nearly all precision sits next to the camera, leaving distant surfaces with too few distinguishable depth values (z-fighting)?",
+        design: "Did they choose a sound fix — reversed-Z with a floating-point depth buffer, a logarithmic depth buffer, or moving the near plane out — and discuss the trade-offs? Did they treat depth bias as a band-aid rather than the fix?",
+        communication: "Did they explain why the flicker is worst far away and tie it primarily to the NEAR-plane distance, not the far plane?",
+        execution: "Does the flicker stop across the full view distance without clipping near geometry?",
+      },
+      expectedMinutes: 85,
+    },
+    {
+      id: "ticket-gv-05-seed-id-005",
+      title: "GV-05: Cracks appear between terrain tiles of different detail",
+      description: `Thin cracks open along the seams between terrain tiles and you can see the sky through them. They appear specifically where a high-detail tile borders a lower-detail one — near the camera meeting farther terrain. Tiles of equal detail meet cleanly.
+
+**Files:** \`src/render/TerrainMesh.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/TerrainMesh.cpp"],
+      rubric: {
+        diagnosis: "Did they identify T-junctions at LOD boundaries — the finer tile's edge has more vertices than the coarse neighbour's edge, so interpolated edge heights don't line up and a gap opens?",
+        design: "Did they choose a correct stitching approach — edge skirts, snapping the fine edge's vertices to the coarse neighbour, or constraining adjacent tiles to at most one LOD apart — and weigh overdraw vs complexity?",
+        communication: "Did they explain why cracks appear only at LOD transitions and not between equal-detail tiles?",
+        execution: "Do the seams close across LOD boundaries during zoom, without skirts poking visibly through the surface?",
+      },
+      expectedMinutes: 90,
+    },
+    {
+      id: "ticket-gv-06-seed-id-006",
+      title: "GV-06: GPU memory climbs until the app is killed",
+      description: `Pan and zoom around the map for a few minutes and GPU memory climbs steadily until the driver kills the app. It never drops, even when you return to an area you already viewed. Sitting still is fine.
+
+**Files:** \`src/cache/TileCache.cpp\``,
+      difficulty: Difficulty.MID,
+      filesInvolved: ["src/cache/TileCache.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that tiles (textures + vertex buffers) are created as new areas scroll in but never released when they scroll out — no eviction — so GPU resources leak monotonically? Did they check whether the GL handles are freed at all (lifetime/RAII)?",
+        design: "Did they add a bounded cache with LRU eviction and RAII wrappers that delete GL resources in their destructors, rather than an ad-hoc manual free? Did they consider keeping recently-seen tiles to avoid re-upload churn?",
+        communication: "Did they explain the difference between a leak and a bounded working set, and why revisiting an old area still grows memory?",
+        execution: "Does GPU memory stabilise under continuous panning, with GL handles correctly freed?",
+      },
+      expectedMinutes: 50,
+    },
+    {
+      id: "ticket-gv-07-seed-id-007",
+      title: "GV-07: A few country overlays draw a streak across the whole map",
+      description: `Most country and zone boundary overlays render fine, but a handful — Russia, Fiji, the Aleutians — draw a giant triangle or streak straight across the entire map from one edge to the other. Every affected region sits near the ±180° line.
+
+**Files:** \`src/render/OverlayRenderer.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/OverlayRenderer.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that these polygons cross the antimeridian (±180° longitude), so triangulating them in a naive lon/lat plane produces triangles spanning from -180 to +180 across the whole map?",
+        design: "Did they choose a correct fix — splitting the polygon at the antimeridian, unwrapping longitudes into a continuous range before triangulating, or clipping to the view — while preserving winding and holes?",
+        communication: "Did they connect the visual streak to the date-line wraparound and explain why only regions near ±180° are affected?",
+        execution: "Do the affected overlays render correctly with no streak, while unaffected ones still render normally?",
+      },
+      expectedMinutes: 80,
+    },
+    {
+      id: "ticket-gv-08-seed-id-008",
+      title: "GV-08: Vehicle markers flicker and tear during live tracking",
+      description: `During live tracking, vehicle markers occasionally flicker, tear, or snap to a stale position for a single frame — worse when many vehicles update at once. Static markers are fine. Position updates arrive on a background thread; rendering runs on the main thread.
+
+**Files:** \`src/render/MarkerBuffer.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/MarkerBuffer.cpp"],
+      rubric: {
+        diagnosis: "Did they identify a data race on the shared marker vertex buffer — the tracking thread writes positions into the same buffer the GPU / render thread is reading for the current frame, with no synchronisation or fence — producing torn, half-updated reads?",
+        design: "Did they choose a correct fix — double/triple-buffering the marker buffer with a fence, staging updates and swapping atomically at a safe point, or persistent-mapped buffers with proper fencing — rather than holding a lock across the GPU read?",
+        communication: "Did they explain the CPU-writes-while-GPU-reads race and why it worsens as concurrent updates increase?",
+        execution: "Do markers update smoothly with no tearing under heavy concurrent updates, without stalling the render thread?",
+      },
+      expectedMinutes: 90,
+    },
+    {
+      id: "ticket-gv-09-seed-id-009",
+      title: "GV-09: Frame rate collapses with many overlays while the GPU sits idle",
+      description: `With a lot of overlays and markers on screen the frame rate drops from 60 to about 18 fps. A profiler shows the GPU mostly idle while the CPU render thread is pegged at 100%. Each overlay is submitted on its own.
+
+**Files:** \`src/render/FrameGraph.cpp\``,
+      difficulty: Difficulty.SENIOR,
+      filesInvolved: ["src/render/FrameGraph.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that the renderer is CPU/submit-bound, not GPU-bound — thousands of tiny draw calls, each rebinding shader/buffers and re-setting uniforms (and possibly re-uploading a buffer every frame) — so submission overhead dominates while the GPU starves?",
+        design: "Did they choose a correct fix — batching overlays into shared buffers, instancing markers, sorting to cut state changes, and eliminating per-frame re-uploads — and reason about draw-call count vs actual GPU work? Did they avoid 'optimising' shading that isn't the bottleneck?",
+        communication: "Did they explain how 'GPU idle + CPU pegged' points to submission cost rather than shading cost?",
+        execution: "Does the frame rate recover under many overlays, with a meaningfully lower draw-call count?",
+      },
+      expectedMinutes: 85,
+    },
+    {
+      id: "ticket-gv-10-seed-id-010",
+      title: "GV-10: The globe spins wildly on the smallest drag",
+      description: `Grabbing and dragging the map to rotate the globe over-rotates massively — a tiny mouse movement whips the view halfway around the world. It's unusable for fine positioning. Zoom and pan are fine; only rotation is affected.
+
+**Files:** \`src/render/Camera.cpp\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/render/Camera.cpp"],
+      rubric: {
+        diagnosis: "Did they find that the drag delta is treated as an angle in degrees but passed into a rotation built with std::sin/std::cos (or a rotate call that expects radians), so every angle is scaled by ~57.3× (180/π) — turning a small drag into a huge rotation?",
+        design: "Did they convert degrees→radians once at a single boundary and commit to one convention, rather than scattering magic 57.29/0.0174 factors through the code?",
+        communication: "Did they explain the radian/degree convention mismatch and identify the ~57× over-rotation factor as the tell?",
+        execution: "Does a small drag now produce a proportional, correct rotation?",
+      },
+      expectedMinutes: 20,
+    },
+    {
+      id: "ticket-gv-11-seed-id-011",
+      title: "GV-11: Satellite tiles have a blue tint — reds and blues look swapped",
+      description: `Satellite imagery comes out with a strong blue cast: red rooftops look blue, blue water looks reddish. Vector overlays and text are the correct colour — only the decoded imagery tiles are affected. It started when we upgraded the image decoder.
+
+**Files:** \`src/render/TextureUpload.cpp\``,
+      difficulty: Difficulty.JUNIOR,
+      filesInvolved: ["src/render/TextureUpload.cpp"],
+      rubric: {
+        diagnosis: "Did they identify that the decoder now outputs pixels in BGRA byte order, but the texture is uploaded with format GL_RGBA — so the red and blue channels are swapped? Did they note vector overlays are unaffected because they don't go through this upload path?",
+        design: "Did they fix it at the upload boundary — using GL_BGRA (or converting byte order once at decode) — rather than swizzling channels in the shader as a workaround?",
+        communication: "Did they explain the pixel format / channel-order mismatch as the cause of the blue tint, and why only imagery is affected?",
+        execution: "Do tiles show correct colours with red and blue no longer swapped, and no cost added to every fragment?",
+      },
+      expectedMinutes: 18,
+    },
+  ];
+
+  for (const t of globeviewTickets) {
+    await prisma.ticket.upsert({
+      where: { id: t.id },
+      update: {},
+      create: { ...t, stack: Stack.CPP, codebaseId: globeviewCodebase.id },
+    });
+  }
+
   // ─── FinServe — Java 17 + Spring Boot payments service ──────────────────────
   const finserveCodebase = await prisma.codebase.upsert({
     where: { id: "finserve-seed-id-001" },
