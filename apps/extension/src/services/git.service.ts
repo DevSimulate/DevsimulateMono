@@ -370,20 +370,43 @@ export async function cloneAndOpenCodebase(
 }
 
 /**
+ * Asks the remote which branch its HEAD points at. Codebases are not all on
+ * "main" — several are still on "master" — so the base branch must be resolved,
+ * never assumed.
+ */
+async function detectDefaultBranch(git: SimpleGit, upstreamUrl: string): Promise<string | null> {
+  try {
+    const out = await git.raw(["ls-remote", "--symref", upstreamUrl, "HEAD"]);
+    const m = /ref:\s+refs\/heads\/(\S+)\s+HEAD/.exec(out);
+    if (m) return m[1];
+  } catch { /* offline or remote unreachable */ }
+  return null;
+}
+
+/** True if `ref` resolves to a commit in this repo. */
+async function refExists(git: SimpleGit, ref: string): Promise<boolean> {
+  try {
+    await git.raw(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Creates the ticket branch if missing, checks it out, and pushes with upstream
  * tracking so a plain `git push` works afterwards.
  *
  * A NEW ticket branch is always cut from a CLEAN upstream base — never from the
  * current HEAD. Reusing the same local clone across tickets used to branch off
  * the previous ticket's branch, so a second ticket's PR carried every file from
- * the first (cross-ticket contamination). Branching from upstream/main
- * guarantees each PR contains only that ticket's own work.
+ * the first (cross-ticket contamination). Branching from the upstream default
+ * branch guarantees each PR contains only that ticket's own work.
  */
 async function ensureBranch(
   git: SimpleGit,
   branchName: string,
-  upstreamUrl: string,
-  baseBranch = "main"
+  upstreamUrl: string
 ): Promise<void> {
   const branches = await git.branch();
   if (branches.all.includes(branchName)) {
@@ -392,8 +415,9 @@ async function ensureBranch(
     return;
   }
 
-  // Establish a clean upstream base to branch from.
-  let baseRef = baseBranch;
+  // Resolve the upstream's real default branch — it is NOT always "main".
+  const defaultBranch = await detectDefaultBranch(git, upstreamUrl);
+
   try {
     const remotes = await git.getRemotes(true);
     if (!remotes.find((r) => r.name === "upstream")) {
@@ -401,13 +425,24 @@ async function ensureBranch(
     } else {
       await git.remote(["set-url", "upstream", upstreamUrl]);
     }
-    await git.fetch(["upstream", baseBranch, "--depth", "1"]);
-    baseRef = `upstream/${baseBranch}`;
-  } catch {
-    // Network/remote issue — fall back to the base branch if it exists locally,
-    // so we still avoid branching off a (possibly contaminated) current HEAD.
-    try { await git.checkout(baseBranch); } catch { /* stay on current HEAD */ }
-    baseRef = baseBranch;
+    if (defaultBranch) {
+      await git.fetch(["upstream", defaultBranch, "--depth", "1"]);
+    }
+  } catch { /* offline — fall back to a local base below */ }
+
+  // Pick the first base that actually resolves, so we never hand checkout a ref
+  // that doesn't exist (which fails with "'x' is not a commit").
+  const candidates = [
+    defaultBranch ? `upstream/${defaultBranch}` : "",
+    defaultBranch ?? "",
+    "upstream/main", "upstream/master",
+    "main", "master",
+    branches.current ?? "",
+    "HEAD",
+  ];
+  let baseRef = "HEAD";
+  for (const c of candidates) {
+    if (c && (await refExists(git, c))) { baseRef = c; break; }
   }
 
   // Create the ticket branch explicitly from the clean base, then push it.
