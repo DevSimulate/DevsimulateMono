@@ -102,6 +102,14 @@ const DEVFEST_SVG = `<svg width="100%" height="100%" viewBox="0 0 1000 328" fill
 <path d="M77.3407 106.79L63.7207 119.84L105.531 162.21L63.7207 204.02L77.3407 217.07L132.581 162.21L77.3407 106.79Z" fill="#195792"/>
 </svg>`;
 
+// DevSimulate issuer mark — the terminal ">_" logo.
+const DEVSIM_SVG = `<svg width="100%" height="100%" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="ds_issuer_g" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop stop-color="#6366F1"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+<rect width="40" height="40" rx="10" fill="url(#ds_issuer_g)"/>
+<polyline points="15,12.5 25.5,20 15,27.5" fill="none" stroke="#FFFFFF" stroke-width="4.3" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="15" y="30.4" width="11" height="3.4" rx="1.7" fill="#2DD4BF"/>
+</svg>`;
+
 export default function CertificatePage() {
   const { id }              = useParams<{ id: string }>();
   const [cert, setCert]       = useState<CertData | null>(null);
@@ -216,6 +224,8 @@ export default function CertificatePage() {
 
         .field-footer { margin-top:24px; padding-top:20px; border-top:1px solid var(--hairline);
           display:flex; align-items:flex-end; justify-content:space-between; gap:20px; }
+        .issuer-lockup { display:flex; align-items:center; gap:11px; }
+        .devsim-mark { width:40px; height:40px; flex-shrink:0; }
         .issued-by { font-size:9.5px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-secondary); font-weight:600; }
         .issuer-name { font-size:17px; font-weight:700; color:var(--text-primary); margin-top:2px; text-decoration:none; display:block; }
         .verify { text-align:right; font-size:11px; line-height:1.8; text-decoration:none; }
@@ -298,9 +308,12 @@ export default function CertificatePage() {
               </div>
 
               <footer className="field-footer">
-                <div>
-                  <div className="issued-by">Assessed &amp; issued by</div>
-                  <a href="https://www.devsimulate.com/" target="_blank" rel="noopener noreferrer" className="issuer-name">DevSimulate</a>
+                <div className="issuer-lockup">
+                  <span className="devsim-mark" dangerouslySetInnerHTML={{ __html: DEVSIM_SVG }} />
+                  <div>
+                    <div className="issued-by">Assessed &amp; issued by</div>
+                    <a href="https://www.devsimulate.com/" target="_blank" rel="noopener noreferrer" className="issuer-name">DevSimulate</a>
+                  </div>
                 </div>
                 <a href={certUrl} target="_blank" rel="noopener noreferrer" className="verify">
                   <div className="cred-id">{credId}</div>
