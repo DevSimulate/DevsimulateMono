@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { BoltIcon } from "@/components/Logo";
 import { clearToken, getToken } from "@/lib/auth";
 import {
   LayoutDashboard,
@@ -64,10 +65,7 @@ export default function Sidebar() {
     >
       {/* Brand */}
       <div className="px-4 pt-5 pb-4 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-lg grid place-items-center text-white font-black text-base shrink-0"
-          style={{ background: "linear-gradient(140deg, #6d6afc, #a78bfa)" }}>
-          D
-        </div>
+        <BoltIcon size={32} />
         <div>
           <div className="font-bold text-white text-sm tracking-tight leading-none">DevSimulate</div>
           <div className="text-[10.5px] mt-1 font-medium" style={{ color: "var(--p-sidebar-dim)" }}>for Employers</div>
