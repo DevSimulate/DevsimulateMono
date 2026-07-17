@@ -90,6 +90,46 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    // The BRANCH is the ground truth for which ticket this work belongs to — the
+    // client's ticketId is not trusted. A returning candidate with several open
+    // assignments can otherwise submit ticket A's PR under ticket B's id, which
+    // silently scores them against the wrong rubric and generates follow-up
+    // questions about a bug they never touched. Fail loudly instead.
+    if (isCode) {
+      const branchAssignment = await prisma.ticketAssignment.findFirst({
+        where: { userId, branchName },
+        include: { ticket: { select: { title: true } } },
+      });
+
+      if (branchAssignment && branchAssignment.ticketId !== ticketId) {
+        const claimed = await prisma.ticket.findUnique({
+          where: { id: ticketId },
+          select: { title: true },
+        });
+        res.status(400).json({
+          error:
+            `This branch is for “${branchAssignment.ticket.title}”, but the submission was sent for ` +
+            `“${claimed?.title ?? ticketId}”. Open the ticket you actually worked on and submit again.`,
+        });
+        return;
+      }
+
+      if (!branchAssignment) {
+        // The branch isn't one we handed out, so it can't confirm the ticket.
+        // Require at least that the claimed ticket is assigned to this user.
+        const claimedAssignment = await prisma.ticketAssignment.findFirst({
+          where: { userId, ticketId },
+        });
+        if (!claimedAssignment) {
+          res.status(400).json({
+            error:
+              "You don't have an active assignment for this ticket. Open the ticket from your dashboard and submit from the branch it created.",
+          });
+          return;
+        }
+      }
+    }
+
     let jobData: ReviewJobData;
 
     if (isDesign) {
