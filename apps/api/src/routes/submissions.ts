@@ -66,25 +66,32 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
     }
 
     // Enforce the campaign deadline — once a contest/campaign has closed, it
-    // accepts no further submissions.
+    // accepts no further submissions. Scope this to the campaigns that actually
+    // contain THIS ticket: an unrelated expired campaign on the same codebase
+    // (e.g. an old event the candidate also joined) must NOT block a submission
+    // to a different, still-open campaign.
     const ticketMeta = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { codebaseId: true },
+      select: { codebaseId: true, difficulty: true },
     });
     if (ticketMeta) {
-      const closed = await prisma.campaignCandidate.findFirst({
-        where: {
-          userId,
-          campaign: {
-            codebaseId: ticketMeta.codebaseId,
-            deadline: { not: null, lt: new Date() },
-          },
-        },
-        select: { campaign: { select: { roleName: true } } },
+      const memberships = await prisma.campaignCandidate.findMany({
+        where: { userId, campaign: { codebaseId: ticketMeta.codebaseId } },
+        select: { campaign: { select: { roleName: true, deadline: true, ticketIds: true, difficulty: true } } },
       });
-      if (closed) {
+      const containsTicket = (c: { ticketIds: string[]; difficulty: typeof ticketMeta.difficulty }) =>
+        c.ticketIds.length ? c.ticketIds.includes(ticketId) : c.difficulty === ticketMeta.difficulty;
+      const relevant = memberships.map((m) => m.campaign).filter(containsTicket);
+
+      const now = new Date();
+      const hasOpen = relevant.some((c) => !c.deadline || c.deadline >= now);
+      const closed = relevant.find((c) => c.deadline && c.deadline < now);
+
+      // Block only if this ticket's campaign has closed AND there is no still-open
+      // campaign for it.
+      if (closed && !hasOpen) {
         res.status(403).json({
-          error: `This competition has closed — the deadline for “${closed.campaign.roleName}” has passed, so no more submissions are accepted.`,
+          error: `This competition has closed — the deadline for “${closed.roleName}” has passed, so no more submissions are accepted.`,
         });
         return;
       }
