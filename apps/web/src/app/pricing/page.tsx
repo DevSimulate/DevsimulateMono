@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 const INCLUDED = [
   "All NovaTech CRM tickets — unlimited",
-  "Claude AI scoring on every PR",
+  "AI review across all four dimensions",
   "Full written feedback — Diagnosis, Design, Communication, Execution",
   "Score history on your dashboard",
   "Public shareable profile",

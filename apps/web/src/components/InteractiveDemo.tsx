@@ -317,7 +317,7 @@ export function InteractiveDemo({ onClose }: InteractiveDemoProps) {
                 </h3>
                 <p className="text-slate-300 mb-4">
                   Get access to 200+ realistic tickets across multiple tech stacks.
-                  Claude AI scores every dimension of your thinking.
+                  Every dimension of your thinking is scored.
                 </p>
                 <a
                   href={`https://github.com/login/oauth/authorize?client_id=${process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}&scope=read:user,user:email,public_repo`}

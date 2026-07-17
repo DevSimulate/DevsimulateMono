@@ -6,81 +6,65 @@ import Logo from "@/components/Logo";
 import { getToken } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-const PRO_FEATURES = [
-  "All NovaTech CRM tickets — unlimited",
-  "Claude AI scoring on every PR",
-  "Full written feedback — Diagnosis, Design, Communication, Execution",
-  "Score history on your dashboard",
-  "Public shareable profile",
-  "More codebases as they launch",
-];
-
 const ONBOARDING_URL = "/onboarding/select";
 
+const PRO_FEATURES = [
+  "Every codebase — .NET, Node, Python, C++ and more",
+  "Full written feedback on all four dimensions",
+  "Spoken defense on every submission",
+  "Score history and trend on your dashboard",
+  "Public shareable profile",
+  "New codebases as they launch",
+];
+
+// Small inline icons — no emoji, so it reads like a product not a deck.
+const icons: Record<string, React.ReactElement> = {
+  ticket: <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4zM12 6v12" />,
+  wrench: <path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.4l-5 5a1.5 1.5 0 0 0 2.1 2.1l5-5a3.5 3.5 0 0 0 4.4-4.9l-2 2-1.6-1.6z" />,
+  shield: <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6zM9 12l2 2 4-4" />,
+  bug: <path d="M9 8a3 3 0 0 1 6 0M6 12h12M8 8V6M16 8V6M7 12v3a5 5 0 0 0 10 0v-3M4 11h2M18 11h2M5 16l2-1M19 16l-2-1M12 17v4" />,
+  target: <path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />,
+  mic: <path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3zM6 11v1a6 6 0 0 0 12 0v-1M12 19v2" />,
+  building: <path d="M4 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14M14 20V10h4a2 2 0 0 1 2 2v8M7 8h2M7 12h2M7 16h2M17 14h.01M17 17h.01M3 20h18" />,
+};
+
+function Ic({ name, size = 22 }: { name: string; size?: number }): React.ReactElement {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {icons[name]}
+    </svg>
+  );
+}
+
 const STEPS = [
-  {
-    num: "01",
-    emoji: "🎯",
-    title: "Get a real ticket",
-    body: "Ambiguous engineering tickets from realistic fake codebases. No toy problems — actual production complexity.",
-    color: "#EBEBFF",
-  },
-  {
-    num: "02",
-    emoji: "🔧",
-    title: "Solve it your way",
-    body: "Use any tool — Claude, Copilot, ChatGPT. We score your thinking, not whether you used AI.",
-    color: "#CCFBF1",
-  },
-  {
-    num: "03",
-    emoji: "🤖",
-    title: "Claude scores your PR",
-    body: "Open a PR with your reasoning. Claude evaluates root cause, design, communication, and execution.",
-    color: "#FEF3C7",
-  },
+  { num: "01", icon: "ticket", title: "Get a real ticket",
+    body: "An ambiguous ticket from a real company codebase — a symptom to chase, not a puzzle to solve. Production complexity, not algorithms." },
+  { num: "02", icon: "wrench", title: "Fix it your way",
+    body: "Use any AI tool you like. We don't measure typing — we measure judgment. Find the root cause, ship the fix, open a PR." },
+  { num: "03", icon: "shield", title: "Prove the work is yours",
+    body: "Hidden tests check the code holds up, and you defend your fix out loud. Anyone can paste an answer — few can defend one." },
 ];
 
 const FEATURES = [
-  {
-    emoji: "🐛",
-    title: "Real codebases, real bugs",
-    body: "Not algorithm puzzles. Actual .NET, Node and Python services with race conditions, fire-and-forget anti-patterns, and conflicting business rules.",
-    tag: "Authentic",
-    tagColor: "#EBEBFF",
-    tagText: "#5B5BD6",
-  },
-  {
-    emoji: "🧠",
-    title: "Diagnosis is 40% of your score",
-    body: "Finding WHY a bug exists is 10× harder than fixing it. We reward engineers who go deep on root cause analysis.",
-    tag: "Thinking-first",
-    tagColor: "#CCFBF1",
-    tagText: "#0D9488",
-  },
-  {
-    emoji: "📊",
-    title: "Track 4 dimensions over time",
-    body: "Diagnosis, Design, Communication, Execution. See your chart evolve as you complete tickets and spot your weakest area.",
-    tag: "Analytics",
-    tagColor: "#FEF3C7",
-    tagText: "#D97706",
-  },
-  {
-    emoji: "🏢",
-    title: "Built for teams and hiring",
-    body: "Employers run assessments, rank candidates by score, and track training across the org — all from one dashboard.",
-    tag: "Employer",
-    tagColor: "#FCE7F3",
-    tagText: "#BE185D",
-  },
+  { icon: "bug", title: "Real codebases, real bugs",
+    body: "Not algorithm puzzles. Actual .NET, Node, Python and C++ services with race conditions, silent failures, and conflicting business rules.",
+    tag: "Authentic", tagColor: "#EBEBFF", tagText: "#5B5BD6" },
+  { icon: "target", title: "Diagnosis is 40% of the score",
+    body: "Finding why a bug exists is far harder than fixing it. The scoring rewards engineers who go deep on root cause, not quick patches.",
+    tag: "Thinking-first", tagColor: "#CCFBF1", tagText: "#0D9488" },
+  { icon: "mic", title: "Defend your fix out loud",
+    body: "Every submission ends with a spoken defense of your own change. It's the one thing an AI answer can't fake — and the reason the result is trustworthy.",
+    tag: "Verified", tagColor: "#FEF3C7", tagText: "#B45309" },
+  { icon: "building", title: "Built for hiring & events",
+    body: "Employers rank candidates on proof, not résumés. Run a private assessment or a public DevFest with live leaderboards and certificates.",
+    tag: "For teams", tagColor: "#FCE7F3", tagText: "#BE185D" },
 ];
 
 const SCORES = [
-  { label: "Diagnosis", pct: 40, desc: "Root cause analysis", bg: "#EBEBFF", color: "#5B5BD6" },
-  { label: "Design", pct: 30, desc: "Solution trade-offs", bg: "#CCFBF1", color: "#0D9488" },
-  { label: "Communication", pct: 20, desc: "PR clarity & reasoning", bg: "#FEF3C7", color: "#D97706" },
+  { label: "Diagnosis", pct: 40, desc: "Finding the real root cause", bg: "#EBEBFF", color: "#5B5BD6" },
+  { label: "Design", pct: 30, desc: "Trade-offs & judgment", bg: "#CCFBF1", color: "#0D9488" },
+  { label: "Communication", pct: 20, desc: "Explaining the why", bg: "#FEF3C7", color: "#B45309" },
   { label: "Execution", pct: 10, desc: "Does it actually work?", bg: "#FCE7F3", color: "#BE185D" },
 ];
 
@@ -90,7 +74,7 @@ export default function LandingPage(): React.ReactElement {
 
   async function handleUpgrade() {
     const token = getToken();
-    if (!token) { window.location.href = "/onboarding/select"; return; }
+    if (!token) { window.location.href = ONBOARDING_URL; return; }
     setUpgradeLoading(true);
     setUpgradeError(null);
     try {
@@ -110,79 +94,54 @@ export default function LandingPage(): React.ReactElement {
   return (
     <main className="bg-grid min-h-screen overflow-x-hidden">
 
-      {/* ── Beta banner ── */}
-      <div className="w-full py-2 px-4 text-center text-xs font-bold" style={{ background: "#5B5BD6", color: "#FFFFFF" }}>
-        🚀 DevSimulate is in public beta — 2 free tickets/month, then $9/mo &nbsp;·&nbsp;{" "}
-        <Link href="/pricing" className="underline underline-offset-2 opacity-90 hover:opacity-100">See pricing</Link>
-      </div>
-
       {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between max-w-7xl mx-auto w-full" style={{ maxWidth: "100%" }}>
+      <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between mx-auto w-full" style={{ maxWidth: "100%" }}>
         <Logo variant="horizontal" size={32} />
         <div className="hidden md:flex items-center gap-8">
           {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Pricing", "#pricing"], ["Leaderboard", "/leaderboard"]].map(([label, href]) => (
             <a key={label} href={href} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
-            >
-              {label}
-            </a>
+            >{label}</a>
           ))}
         </div>
         <div className="flex items-center gap-3">
-          <Link href="/employer/campaigns" className="text-sm font-medium hidden sm:block transition-colors"
-            style={{ color: "#6B6B6B" }}
+          <Link href="/employer/campaigns" className="text-sm font-medium hidden sm:block transition-colors" style={{ color: "#6B6B6B" }}
             onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
             onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
-          >
-            For Employers
-          </Link>
-          <Link href="/dashboard" className="text-sm font-medium hidden sm:block transition-colors"
-            style={{ color: "#6B6B6B" }}
+          >For Employers</Link>
+          <Link href="/dashboard" className="text-sm font-medium hidden sm:block transition-colors" style={{ color: "#6B6B6B" }}
             onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
             onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
-          >
-            Dashboard
-          </Link>
-          <Link href={ONBOARDING_URL} className="btn-primary text-sm">
-            Start free →
-          </Link>
+          >Dashboard</Link>
+          <Link href={ONBOARDING_URL} className="btn-primary text-sm">Start free →</Link>
         </div>
       </nav>
 
       {/* ── Hero ── */}
       <section className="relative px-6 pt-20 pb-16 flex flex-col items-center text-center overflow-hidden">
-        {/* Soft bg blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] rounded-full opacity-30 pointer-events-none"
-          style={{ background: "radial-gradient(ellipse, rgba(91,91,214,0.15) 0%, transparent 70%)" }} />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[420px] rounded-full opacity-30 pointer-events-none"
+          style={{ background: "radial-gradient(ellipse, rgba(91,91,214,0.16) 0%, transparent 70%)" }} />
 
-        {/* Badge */}
-        <div className="fade-in-up section-label">
-          <span>✦</span> AI-Powered Developer Training
-        </div>
+        <div className="fade-in-up section-label">Technical assessment, verified</div>
 
-        {/* Headline */}
         <h1 className="fade-in-up delay-100 text-5xl sm:text-7xl font-black tracking-tight leading-[1.05] mb-5 max-w-3xl" style={{ color: "#1A1A1A" }}>
           Prove you can{" "}
           <span className="gradient-text">debug anything.</span>
         </h1>
 
         <p className="fade-in-up delay-200 text-lg text-[#6B6B6B] max-w-xl mb-8 leading-relaxed">
-          Solve real engineering tickets from fake company codebases.
-          Get scored by Claude AI on your <strong style={{ color: "#1A1A1A", fontWeight: 600 }}>thinking</strong> — not just whether the tests pass.
+          Solve real engineering tickets from real company codebases. Use any AI tool you like —
+          then <strong style={{ color: "#1A1A1A", fontWeight: 600 }}>defend your fix out loud</strong>.
+          The score measures your thinking, so it&apos;s one hiring teams can trust.
         </p>
 
-        {/* CTAs */}
         <div className="fade-in-up delay-300 flex flex-col sm:flex-row gap-3 mb-16">
-          <Link href={ONBOARDING_URL} className="btn-primary">
-            Start for free — no credit card
-          </Link>
-          <a href="#how-it-works" className="btn-outline">
-            See how it works ↓
-          </a>
+          <Link href={ONBOARDING_URL} className="btn-primary">Start for free — no credit card</Link>
+          <a href="#how-it-works" className="btn-outline">See how it works ↓</a>
         </div>
 
-        {/* Floating score card */}
+        {/* Product-style score card */}
         <div className="fade-in-up delay-400 score-float w-full max-w-sm mx-auto">
           <div className="card rounded-2xl p-5 text-left" style={{ transform: "rotate(-1.5deg)" }}>
             <div className="flex items-start justify-between mb-4">
@@ -191,17 +150,17 @@ export default function LandingPage(): React.ReactElement {
                 <div className="font-bold text-sm" style={{ color: "#1A1A1A" }}>Intermittent Order Fulfillment Failure</div>
               </div>
               <div className="text-right ml-4 shrink-0">
-                <div className="text-4xl font-black gradient-text leading-none">76</div>
+                <div className="text-4xl font-black gradient-text leading-none">82</div>
                 <div className="text-xs" style={{ color: "#6B6B6B" }}>/100</div>
               </div>
             </div>
 
             <div className="space-y-2.5 mb-4">
               {[
-                { label: "Diagnosis", val: 28, max: 40 },
-                { label: "Design", val: 28, max: 30 },
-                { label: "Communication", val: 10, max: 20 },
-                { label: "Execution", val: 10, max: 10 },
+                { label: "Diagnosis", val: 34, max: 40 },
+                { label: "Design", val: 25, max: 30 },
+                { label: "Communication", val: 15, max: 20 },
+                { label: "Execution", val: 8, max: 10 },
               ].map(({ label, val, max }) => (
                 <div key={label}>
                   <div className="flex justify-between text-xs mb-1">
@@ -215,19 +174,18 @@ export default function LandingPage(): React.ReactElement {
               ))}
             </div>
 
-            <div className="rounded-xl p-3 text-xs leading-relaxed italic" style={{ background: "#F7F6F3", color: "#6B6B6B" }}>
-              &ldquo;Correct fix: replaced the discarded Task with await + conditional fulfillment, directly closing the race condition.&rdquo;
-              <div className="mt-1 font-semibold not-italic" style={{ color: "#5B5BD6" }}>— Claude Sonnet 4.6</div>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: "#ECFDF3", color: "#067647" }}>
+              <span style={{ display: "grid" }}><Ic name="mic" size={15} /></span>
+              <span className="text-xs font-semibold">Defended out loud · 9/10</span>
             </div>
           </div>
         </div>
 
-        {/* Social proof bar */}
         <div className="fade-in-up delay-500 mt-14 flex flex-wrap justify-center gap-10">
           {[
-            { val: "4 dimensions", label: "scored per PR" },
-            { val: "< 60s", label: "AI review time" },
-            { val: "100pts", label: "max possible score" },
+            { val: "4 dimensions", label: "scored per submission" },
+            { val: "Spoken", label: "defense on every fix" },
+            { val: "100 pts", label: "max possible score" },
           ].map(({ val, label }) => (
             <div key={label} className="text-center">
               <div className="text-2xl font-black" style={{ color: "#1A1A1A" }}>{val}</div>
@@ -242,15 +200,14 @@ export default function LandingPage(): React.ReactElement {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <div className="section-label">How it works</div>
-            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>From ticket to score in 3 steps</h2>
+            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Three steps, no toy problems</h2>
           </div>
-
           <div className="grid md:grid-cols-3 gap-5">
-            {STEPS.map(({ num, emoji, title, body, color }) => (
-              <div key={num} className="card shine p-7 relative overflow-hidden">
-                <div className="absolute top-4 right-4 text-3xl font-black opacity-10" style={{ color: "#5B5BD6" }}>{num}</div>
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4" style={{ background: color }}>
-                  {emoji}
+            {STEPS.map(({ num, icon, title, body }) => (
+              <div key={num} className="card p-7 relative overflow-hidden">
+                <div className="absolute top-4 right-5 text-3xl font-black opacity-10" style={{ color: "#5B5BD6" }}>{num}</div>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
+                  <Ic name={icon} />
                 </div>
                 <h3 className="font-bold text-lg mb-2" style={{ color: "#1A1A1A" }}>{title}</h3>
                 <p className="text-sm leading-relaxed" style={{ color: "#6B6B6B" }}>{body}</p>
@@ -265,20 +222,19 @@ export default function LandingPage(): React.ReactElement {
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-14">
             <div className="section-label" style={{ background: "#CCFBF1", color: "#0D9488" }}>Why DevSimulate</div>
-            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Not another coding quiz</h2>
+            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>AI can pass your test. It can&apos;t defend the answer.</h2>
             <p className="mt-3 max-w-xl mx-auto" style={{ color: "#6B6B6B" }}>
-              Real engineering is messy, ambiguous, and full of hidden context. We simulate that.
+              Take-homes and LeetCode are gameable now. We measure understanding you can&apos;t fake.
             </p>
           </div>
-
           <div className="grid sm:grid-cols-2 gap-5">
-            {FEATURES.map(({ emoji, title, body, tag, tagColor, tagText }) => (
-              <div key={title} className="card shine p-7">
+            {FEATURES.map(({ icon, title, body, tag, tagColor, tagText }) => (
+              <div key={title} className="card p-7">
                 <div className="flex items-start justify-between gap-4 mb-4">
-                  <div className="text-3xl">{emoji}</div>
-                  <span className="text-xs font-bold px-3 py-1 rounded-full shrink-0" style={{ background: tagColor, color: tagText }}>
-                    {tag}
-                  </span>
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: tagColor, color: tagText }}>
+                    <Ic name={icon} />
+                  </div>
+                  <span className="text-xs font-bold px-3 py-1 rounded-full shrink-0" style={{ background: tagColor, color: tagText }}>{tag}</span>
                 </div>
                 <h3 className="font-bold text-lg mb-2" style={{ color: "#1A1A1A" }}>{title}</h3>
                 <p className="text-sm leading-relaxed" style={{ color: "#6B6B6B" }}>{body}</p>
@@ -292,19 +248,17 @@ export default function LandingPage(): React.ReactElement {
       <section id="scoring" className="py-24 px-6" style={{ background: "#EEECEA" }}>
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-14">
-            <div className="section-label">The Scoring Model</div>
+            <div className="section-label">The scoring model</div>
             <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Execution is only 10%</h2>
             <p className="mt-3 max-w-xl mx-auto" style={{ color: "#6B6B6B" }}>
-              Shipping code that works is table stakes. Understanding <em>why</em> the bug exists separates senior engineers.
+              Shipping code that works is table stakes. Understanding <em>why</em> the bug exists is what separates senior engineers.
             </p>
           </div>
-
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {SCORES.map(({ label, pct, desc, bg, color }) => (
-              <div key={label} className="card shine p-6 text-center group">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 transition-transform group-hover:scale-105"
-                  style={{ background: bg }}>
-                  <span className="text-3xl font-black" style={{ color }}>{pct}%</span>
+              <div key={label} className="card p-6 text-center group">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-3 transition-transform group-hover:scale-105" style={{ background: bg }}>
+                  <span className="text-2xl font-black" style={{ color }}>{pct}%</span>
                 </div>
                 <div className="font-bold mb-1" style={{ color: "#1A1A1A" }}>{label}</div>
                 <div className="text-xs" style={{ color: "#6B6B6B" }}>{desc}</div>
@@ -320,43 +274,28 @@ export default function LandingPage(): React.ReactElement {
           <div className="text-center mb-10">
             <div className="section-label">Pricing</div>
             <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Simple, honest pricing</h2>
-            <p className="mt-3 text-base" style={{ color: "#6B6B6B" }}>
-              Free plan to try it. Pro when you&apos;re serious about levelling up.
-            </p>
+            <p className="mt-3 text-base" style={{ color: "#6B6B6B" }}>Free to try it. Pro when you&apos;re serious about levelling up.</p>
           </div>
-
           <div className="grid sm:grid-cols-2 gap-5">
-            {/* Free */}
             <div className="card rounded-2xl p-7 flex flex-col">
               <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>Free</div>
               <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$0</div>
               <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>2 submissions / month</div>
               <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
-                {["2 tickets per month", "Full AI-scored feedback", "Public profile page", "Score history"].map(f => (
-                  <li key={f} className="flex items-center gap-2">
-                    <span className="font-black" style={{ color: "#0D9488" }}>✓</span> {f}
-                  </li>
+                {["2 tickets per month", "Full scored feedback", "Spoken defense", "Public profile page"].map(f => (
+                  <li key={f} className="flex items-center gap-2"><span className="font-black" style={{ color: "#0D9488" }}>✓</span> {f}</li>
                 ))}
               </ul>
-              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">
-                Get started free
-              </Link>
+              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">Get started free</Link>
             </div>
-
-            {/* Pro */}
             <div className="card-glow rounded-2xl p-7 flex flex-col relative overflow-hidden">
-              <div className="absolute top-0 right-0 text-xs font-black px-3 py-1 rounded-bl-xl"
-                style={{ background: "#5B5BD6", color: "#fff" }}>
-                PRO
-              </div>
+              <div className="absolute top-0 right-0 text-xs font-black px-3 py-1 rounded-bl-xl" style={{ background: "#5B5BD6", color: "#fff" }}>PRO</div>
               <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#5B5BD6" }}>Pro</div>
               <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$9</div>
               <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>per month · cancel anytime</div>
               <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
                 {PRO_FEATURES.map(f => (
-                  <li key={f} className="flex items-start gap-2">
-                    <span className="font-black mt-0.5 shrink-0" style={{ color: "#5B5BD6" }}>✓</span> {f}
-                  </li>
+                  <li key={f} className="flex items-start gap-2"><span className="font-black mt-0.5 shrink-0" style={{ color: "#5B5BD6" }}>✓</span> {f}</li>
                 ))}
               </ul>
               {upgradeError && <p className="text-xs mb-3 text-red-500">{upgradeError}</p>}
@@ -366,10 +305,7 @@ export default function LandingPage(): React.ReactElement {
               </button>
             </div>
           </div>
-
-          <p className="text-xs text-center mt-6" style={{ color: "#9CA3AF" }}>
-            Payments processed securely by Stripe. Cancel anytime.
-          </p>
+          <p className="text-xs text-center mt-6" style={{ color: "#9CA3AF" }}>Payments processed securely by Stripe. Cancel anytime.</p>
         </div>
       </section>
 
@@ -386,11 +322,9 @@ export default function LandingPage(): React.ReactElement {
                 <span className="gradient-text">how good you really are?</span>
               </h2>
               <p className="mb-8 text-lg" style={{ color: "#6B6B6B" }}>
-                Your first ticket is free. No credit card. Just your GitHub account and your best thinking.
+                Your first ticket is free. No credit card — just your GitHub account and your best thinking.
               </p>
-              <Link href={ONBOARDING_URL} className="btn-primary text-base px-10 py-4">
-                Get started — it&apos;s free
-              </Link>
+              <Link href={ONBOARDING_URL} className="btn-primary text-base px-10 py-4">Get started — it&apos;s free</Link>
             </div>
           </div>
         </div>
@@ -400,14 +334,12 @@ export default function LandingPage(): React.ReactElement {
       <footer className="py-8 px-6 border-t" style={{ borderColor: "#E4E2DD", background: "#F7F6F3" }}>
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <Logo variant="horizontal" size={28} />
-          <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2026 DevSimulate. Scored by Claude AI.</p>
+          <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2026 DevSimulate. Real tickets. Real defense.</p>
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
             <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
             <Link href="/employer/campaigns" className="hover:text-indigo-600 transition-colors">For Employers</Link>
-            <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">
-              ossama@devsimulate.com
-            </a>
+            <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">ossama@devsimulate.com</a>
           </div>
         </div>
       </footer>

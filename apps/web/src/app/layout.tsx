@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "DevSimulate — Real tickets. AI scoring. Level up.",
   description:
-    "The developer training platform where you solve real-world engineering tickets from fake company codebases and get scored on your thinking by Claude AI.",
+    "The developer training platform where you solve real-world engineering tickets from fake company codebases and get scored on your thinking — and defended out loud.",
   openGraph: {
     title: "DevSimulate",
     description: "Solve real tickets. Get scored by AI.",

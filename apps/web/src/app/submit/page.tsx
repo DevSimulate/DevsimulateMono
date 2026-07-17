@@ -881,7 +881,7 @@ function SubmitPageInner() {
             <div className="section-label mb-1">Your Approach</div>
             <p className="text-sm mb-5" style={{ color: "#6B6B6B" }}>
               Explain your fix — root cause, how you found it, why you chose this solution.
-              Be specific. This is what Claude scores.
+              Be specific — this is what the review scores.
             </p>
             <textarea
               value={description}
@@ -984,8 +984,8 @@ function SubmitPageInner() {
             </div>
             <div className="text-sm mb-1" style={{ color: "#6B6B6B" }}>
               {isDesign
-                ? "Claude is evaluating your architecture and generating a follow-up question. Usually 30–60 seconds."
-                : "Claude is reading your diff and generating a question. Usually 60–90 seconds."}
+                ? "Evaluating your architecture and generating a follow-up question. Usually 30–60 seconds."
+                : "Reading your diff and generating a question. Usually 60–90 seconds."}
             </div>
             <div className="text-xs font-mono mb-8" style={{ color: elapsed > 90 ? "#D97706" : "#6B6B6B" }}>
               {Math.floor(elapsed / 60).toString().padStart(2, "0")}:{(elapsed % 60).toString().padStart(2, "0")} elapsed
@@ -1332,7 +1332,7 @@ function SubmitPageInner() {
 
             {result.claudeReview && (
               <div className="card p-6">
-                <div className="section-label mb-4">Claude&rsquo;s Feedback</div>
+                <div className="section-label mb-4">Feedback</div>
                 <p className="text-sm italic leading-relaxed mb-5" style={{ color: "#6B6B6B" }}>
                   &ldquo;{result.claudeReview.summary}&rdquo;
                 </p>

@@ -240,7 +240,7 @@ export default function CandidateDetailPage() {
         {/* Claude feedback */}
         {review?.summary && (
           <div className="rounded-xl p-5" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
-            <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>Claude&apos;s Assessment</div>
+            <div className="text-xs uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>AI Assessment</div>
             <p className="text-sm italic leading-relaxed mb-4" style={{ color: "#5a6472" }}>&ldquo;{review.summary}&rdquo;</p>
             <div className="grid grid-cols-2 gap-3">
               {review.topStrength && (

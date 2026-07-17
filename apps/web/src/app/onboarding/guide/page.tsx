@@ -15,172 +15,121 @@ const GITHUB_AUTH_URL =
     "/auth/callback"
   )}`;
 
-// ─── Step definitions ─────────────────────────────────────────────────────────
+// ─── Inline icons (no emoji, so it reads like a product) ──────────────────────
+const ICONS: Record<string, React.ReactElement> = {
+  grid: <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
+  github: <path d="M9 19c-4 1.4-4-2.2-6-2.6M15 21v-3.4a3 3 0 0 0-.8-2.3c2.7-.3 5.5-1.3 5.5-6a4.7 4.7 0 0 0-1.3-3.2 4.3 4.3 0 0 0-.1-3.3s-1 -.3-3.4 1.3a11.6 11.6 0 0 0-6 0C6 1.9 5 2.2 5 2.2a4.3 4.3 0 0 0-.1 3.3A4.7 4.7 0 0 0 3.5 8.7c0 4.7 2.8 5.7 5.5 6a3 3 0 0 0-.8 2.3V21" />,
+  ticket: <path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4zM12 6v12" />,
+  puzzle: <path d="M14 4a2 2 0 1 0-4 0H6a1 1 0 0 0-1 1v4a2 2 0 1 1 0 4v4a1 1 0 0 0 1 1h4a2 2 0 1 0 4 0h4a1 1 0 0 0 1-1v-4a2 2 0 1 1 0-4V5a1 1 0 0 0-1-1z" />,
+  plug: <path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4" />,
+  rocket: <path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M9 11a12 12 0 0 1 8-8c1 0 2 0 3 1s1 2 1 3a12 12 0 0 1-8 8l-2 1-3-3zM14 8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z" />,
+  wrench: <path d="M14.5 6.5a3.5 3.5 0 0 0-4.9 4.4l-5 5a1.5 1.5 0 0 0 2.1 2.1l5-5a3.5 3.5 0 0 0 4.4-4.9l-2 2-1.6-1.6z" />,
+  pr: <path d="M6 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6 8v12M18 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 16V9a3 3 0 0 0-3-3h-3M13 9l-2-3 2-3" />,
+  mic: <path d="M12 4a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V7a3 3 0 0 1 3-3zM6 11v1a6 6 0 0 0 12 0v-1M12 19v2" />,
+};
 
+function Ic({ name, size = 20 }: { name: string; size?: number }): React.ReactElement {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+// ─── Steps — reflects the streamlined flow (extension handles fork/clone/branch/push/PR) ──
 const STEPS: {
-  num: string;
-  icon: string;
-  color: string;
-  title: string;
-  lines: string[];
-  note: string | null;
-  highlight?: boolean;
-  done?: boolean;
+  num: string; icon: string; color: string; title: string;
+  lines: string[]; note: string | null; highlight?: boolean; done?: boolean;
 }[] = [
   {
-    num: "01",
-    icon: "🌐",
-    color: "#EBEBFF",
-    title: "Go to DevSimulate and click Start Free",
+    num: "01", icon: "grid", color: "#EBEBFF", done: true,
+    title: "Choose your codebase",
     lines: [
-      "Visit devsimulate.com in your browser.",
-      'Click the "Start free" button in the top navigation.',
-      "You land on the codebase selection page.",
-    ],
-    note: null,
-    done: true,
-  },
-  {
-    num: "02",
-    icon: "🗂️",
-    color: "#CCFBF1",
-    title: "Select your codebase",
-    lines: [
-      "Choose the stack you want to practice — .NET, Python, Node.js, React, DevOps, and more.",
+      "On devsimulate.com, pick the stack you want — .NET, Node, Python, C++, React and more.",
       "Click the codebase card that matches your target role.",
-      "You land on the ticket list for that codebase.",
     ],
     note: null,
-    done: true,
   },
   {
-    num: "03",
-    icon: "🐙",
-    color: "#FEF3C7",
+    num: "02", icon: "github", color: "#CCFBF1",
     title: "Sign in with GitHub",
     lines: [
-      'Click "Sign in with GitHub" at the bottom of this page.',
-      "GitHub asks you to authorize DevSimulate — click Authorize.",
-      "Takes about 5 seconds. We only read your public profile and email.",
-      "After login you land on the Tickets page.",
-    ],
-    note: "We never get write access to your code. The only permission is read:user.",
-  },
-  {
-    num: "04",
-    icon: "🎫",
-    color: "#FCE7F3",
-    title: "Browse tickets and assign yourself one",
-    lines: [
-      "The Tickets page shows all available NovaTech CRM bugs.",
-      "Each card shows: difficulty (JUNIOR, MID, or SENIOR), the bug title, files involved, and expected time.",
-      "Pick a ticket that fits your level and click Assign to me.",
-      "The ticket is now locked to your account and a branch name is generated automatically.",
-    ],
-    note: "Start with a JUNIOR or MID ticket on your first attempt. SENIOR tickets assume deep familiarity with the codebase.",
-  },
-  {
-    num: "05",
-    icon: "🧩",
-    color: "#EBEBFF",
-    title: "Install DevSimulate in VS Code",
-    lines: [
-      "Open VS Code.",
-      "Press Ctrl+Shift+X on Windows/Linux or Cmd+Shift+X on Mac to open the Extensions panel.",
-      'Search "DevSimulate" in the search box.',
-      "Click Install on the DevSimulate extension.",
-      "After install a lightning bolt icon appears in the VS Code left sidebar.",
+      "Click Sign in with GitHub and approve — it takes a few seconds.",
+      "Your work lives on your own fork; we only read your public profile and email.",
     ],
     note: null,
   },
   {
-    num: "06",
-    icon: "🔑",
-    color: "#CCFBF1",
-    title: "Login from VS Code and see your ticket",
+    num: "03", icon: "ticket", color: "#FEF3C7",
+    title: "Pick a ticket",
     lines: [
-      "Click the DevSimulate lightning bolt icon in the VS Code sidebar.",
-      'Click "Login with GitHub" inside the sidebar panel.',
-      "A browser tab opens — authorize and copy the code shown back into VS Code when prompted.",
-      "Once authenticated your assigned ticket appears in the sidebar.",
+      "Browse the tickets for your codebase — each shows difficulty, the bug, and expected time.",
+      "Click Assign to me. The ticket locks to your account and your branch is created automatically.",
+    ],
+    note: "New here? Start with a Junior or Mid ticket.",
+  },
+  {
+    num: "04", icon: "puzzle", color: "#FCE7F3",
+    title: "Install the DevSimulate extension",
+    lines: [
+      "Open VS Code and press Ctrl+Shift+X (Cmd+Shift+X on Mac) for Extensions.",
+      "Search DevSimulate and click Install.",
     ],
     note: null,
   },
   {
-    num: "07",
-    icon: "📦",
-    color: "#FEF3C7",
-    title: "Clone the codebase — extension sets up the repo",
+    num: "05", icon: "plug", color: "#EBEBFF",
+    title: "Connect VS Code",
     lines: [
-      'Click "Clone Codebase" next to your ticket in the VS Code sidebar.',
-      "A folder picker opens — choose where you want to clone the repo.",
-      "The extension automatically clones the repo and creates your branch.",
-      "VS Code reopens with the cloned folder. Your branch is already checked out — ready to code.",
+      "Click the DevSimulate icon in the VS Code sidebar.",
+      "Connect with your web session — your assigned ticket appears right there.",
     ],
     note: null,
   },
   {
-    num: "08",
-    icon: "🔧",
-    color: "#FCE7F3",
-    title: "Read the ticket, find the root cause, fix it",
+    num: "06", icon: "rocket", color: "#CCFBF1",
+    title: "Open in VS Code — one click sets everything up",
     lines: [
-      "Open the ticket description in the sidebar. Read it carefully. More than once.",
-      "Explore the files listed in the ticket. Understand what the code is supposed to do.",
-      "Find the root cause — not just where the error shows up, but WHY it happens.",
-      "Write your fix. Test it if you can.",
-      "Push your branch: git push origin your-branch-name.",
-      "Go to GitHub, open your repo, and click Compare & pull request to open a PR.",
+      "Click Open in VS Code next to your ticket.",
+      "The extension forks the repo, downloads it, and checks out your branch for you.",
+      "No git commands, no manual setup — it opens ready to code.",
     ],
-    note: "40% of your score is Diagnosis — did you understand WHY the bug exists? Fixing the symptom without understanding the cause scores low.",
-    highlight: true,
+    note: "Let the extension do the setup. Cloning by hand can leave your work unlinked from the ticket.",
   },
   {
-    num: "09",
-    icon: "🚀",
-    color: "#EBEBFF",
-    title: "Copy your PR URL and submit via VS Code",
+    num: "07", icon: "wrench", color: "#FEF3C7", highlight: true,
+    title: "Find the root cause, then fix it",
     lines: [
-      "Go to GitHub, open your repository, and navigate to your open Pull Request.",
-      "Copy the PR URL from the browser address bar (e.g. https://github.com/you/novatech-crm/pull/1).",
-      "Back in VS Code press Ctrl+Shift+P or Cmd+Shift+P to open the command palette.",
-      'Type "DevSimulate: Submit PR" and press Enter.',
-      "Paste your PR URL when prompted and press Enter.",
-      "Your browser opens with the DevSimulate submission form.",
+      "Read the ticket twice — it describes a symptom, not the bug.",
+      "Explore the code and work out WHY it breaks, not just where.",
+      "Make a minimal fix. Use any AI tool you like — you're scored on judgment, not typing.",
     ],
-    note: null,
+    note: "Diagnosis is 40% of your score. A fix that patches the symptom without understanding the cause scores low.",
   },
   {
-    num: "10",
-    icon: "📝",
-    color: "#CCFBF1",
-    title: "Describe your fix and hit Submit",
+    num: "08", icon: "pr", color: "#FCE7F3",
+    title: "Push & Create PR — one button",
     lines: [
-      "In the browser form you see your PR details and a description text area.",
-      "Write 3 to 5 sentences about: what the root cause was, why the bug happened, and why your fix is correct.",
-      "This description is 20% of your score — do not leave it blank.",
-      "Click Submit for Review.",
+      "Click Push & Create PR in the extension. It pushes your branch and opens the pull request for you.",
+      "In the description, write what was broken, why it broke, and what you changed.",
     ],
-    note: "Treat this like a Slack message to a senior engineer. Clear, direct, specific — not a summary of what you changed.",
+    note: "The description is 20% of your score. Write it like a message to a senior engineer — clear and specific.",
   },
   {
-    num: "11",
-    icon: "🤖",
-    color: "#FEF3C7",
-    title: "Claude reviews your PR and scores it in ~60 seconds",
+    num: "09", icon: "mic", color: "#EBEBFF",
+    title: "Submit, then defend your fix",
     lines: [
-      "Claude reads your PR diff and your description and scores against the ticket rubric.",
-      "After ~60 seconds your score appears with 4 dimensions: Diagnosis (40 pts), Design (30 pts), Communication (20 pts), Execution (10 pts).",
-      "Two follow-up questions appear about your specific code changes — answer them honestly.",
-      "Your answers verify you understand your own fix. They confirm your score — they don't add bonus points. Weak or contradictory answers lose points.",
-      "Everything is saved to your Dashboard: score history, Claude feedback, and follow-up Q&A.",
+      "Submit for review. Your score across four dimensions comes back in about a minute.",
+      "Answer two quick questions about your change, then record a short spoken defense.",
+      "This proves the fix is yours — anyone can paste an answer, few can defend one.",
+      "Everything saves to your Dashboard: score history, feedback, and your answers.",
     ],
     note: null,
   },
 ];
 
 // ─── Inner component ──────────────────────────────────────────────────────────
-
 function GuideContent() {
   const searchParams = useSearchParams();
   const codebaseId = searchParams.get("codebaseId") ?? undefined;
@@ -188,9 +137,7 @@ function GuideContent() {
 
   const ticketsHref = codebaseId ? `/tickets?codebaseId=${codebaseId}` : "/tickets";
 
-  useEffect(() => {
-    setAuthed(!!getToken());
-  }, []);
+  useEffect(() => { setAuthed(!!getToken()); }, []);
 
   function handleGetStarted() {
     localStorage.setItem("ds_guide_seen", "true");
@@ -204,12 +151,8 @@ function GuideContent() {
 
   return (
     <main className="bg-grid min-h-screen" style={{ background: "#F7F6F3" }}>
-
-      {/* Nav */}
       <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href={ticketsHref}
-          className="text-sm font-medium transition-colors"
-          style={{ color: "#6B6B6B" }}
+        <Link href={ticketsHref} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
           onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
           onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
           ← Back to tickets
@@ -219,8 +162,6 @@ function GuideContent() {
       </nav>
 
       <div className="max-w-2xl mx-auto px-5 py-14">
-
-        {/* Header */}
         <div className="text-center mb-12 fade-in-up">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4 text-xs font-bold"
             style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
@@ -228,81 +169,53 @@ function GuideContent() {
             How DevSimulate works
           </div>
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-tight mb-4" style={{ color: "#1A1A1A" }}>
-            Complete walkthrough —<br />
-            <span className="gradient-text">start to scored PR</span>
+            From ticket to{" "}
+            <span className="gradient-text">scored fix</span>
           </h1>
           <p className="text-base max-w-md mx-auto leading-relaxed" style={{ color: "#6B6B6B" }}>
-            11 steps, nothing skipped. Follow this exactly on your first run.
+            Nine simple steps. The extension handles the git setup — you focus on the fix.
           </p>
         </div>
 
-        {/* Progress strip */}
         <div className="flex items-center gap-1 mb-10 px-1">
           {STEPS.map((s, i) => (
-            <div key={i} className="flex-1 h-1 rounded-full"
-              style={{ background: s.done ? "#22c55e" : "#E4E2DD" }} />
+            <div key={i} className="flex-1 h-1 rounded-full" style={{ background: s.done ? "#22c55e" : "#E4E2DD" }} />
           ))}
         </div>
 
-        {/* Steps */}
         <div className="space-y-4">
           {STEPS.map((step, i) => (
-            <div key={step.num}
-              className="card fade-in-up rounded-2xl overflow-hidden"
-              style={{ animationDelay: `${i * 50}ms` }}>
-
+            <div key={step.num} className="card fade-in-up rounded-2xl overflow-hidden" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="flex items-start gap-4 p-5 sm:p-6">
-
-                {/* Icon */}
                 <div className="shrink-0 flex flex-col items-center">
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center"
                     style={{
                       background: step.done ? "#DCFCE7" : step.color,
                       border: step.done ? "2px solid #22c55e" : "none",
-                      fontSize: step.done ? "18px" : "22px",
+                      color: step.done ? "#16a34a" : "#5B5BD6",
                     }}>
-                    {step.done ? "✓" : step.icon}
+                    {step.done ? <Ic name="grid" size={18} /> : <Ic name={step.icon} />}
                   </div>
-                  {i < STEPS.length - 1 && (
-                    <div className="w-0.5 mt-2 rounded-full"
-                      style={{ height: "18px", background: "#E4E2DD" }} />
-                  )}
+                  {i < STEPS.length - 1 && <div className="w-0.5 mt-2 rounded-full" style={{ height: "18px", background: "#E4E2DD" }} />}
                 </div>
 
                 <div className="flex-1 min-w-0 pb-1">
-                  {/* Step num + done badge */}
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xs font-black tracking-widest" style={{ color: "#9CA3AF" }}>
-                      STEP {step.num}
-                    </span>
+                    <span className="text-xs font-black tracking-widest" style={{ color: "#9CA3AF" }}>STEP {step.num}</span>
                     {step.done && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: "#DCFCE7", color: "#16a34a" }}>
-                        Done ✓
-                      </span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#DCFCE7", color: "#16a34a" }}>Done ✓</span>
                     )}
                   </div>
-
-                  {/* Title */}
-                  <h3 className="font-black text-base mb-3" style={{ color: "#1A1A1A" }}>
-                    {step.title}
-                  </h3>
-
-                  {/* Action lines */}
+                  <h3 className="font-black text-base mb-3" style={{ color: "#1A1A1A" }}>{step.title}</h3>
                   <ol className="space-y-2">
                     {step.lines.map((line, j) => (
-                      <li key={j} className="flex items-start gap-2.5 text-sm leading-relaxed"
-                        style={{ color: "#3A3A3A" }}>
+                      <li key={j} className="flex items-start gap-2.5 text-sm leading-relaxed" style={{ color: "#3A3A3A" }}>
                         <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold mt-0.5"
-                          style={{ background: step.color, color: "#1A1A1A", minWidth: "20px" }}>
-                          {j + 1}
-                        </span>
+                          style={{ background: step.color, color: "#1A1A1A", minWidth: "20px" }}>{j + 1}</span>
                         <span>{line}</span>
                       </li>
                     ))}
                   </ol>
-
-                  {/* Note */}
                   {step.note && (
                     <div className="mt-3 rounded-xl px-3.5 py-2.5 text-xs leading-relaxed"
                       style={{
@@ -310,8 +223,7 @@ function GuideContent() {
                         borderLeft: `3px solid ${step.highlight ? "#F97316" : "#5B5BD6"}`,
                         color: step.highlight ? "#9A3412" : "#4B4B4B",
                       }}>
-                      <span className="font-bold"
-                        style={{ color: step.highlight ? "#EA580C" : "#5B5BD6" }}>
+                      <span className="font-bold" style={{ color: step.highlight ? "#EA580C" : "#5B5BD6" }}>
                         {step.highlight ? "Important: " : "Note: "}
                       </span>
                       {step.note}
@@ -323,62 +235,32 @@ function GuideContent() {
           ))}
         </div>
 
-        {/* Honest expectation */}
-        <div className="card rounded-2xl p-7 mt-8 mb-10 fade-in-up"
-          style={{ background: "#FFFBEB", border: "1px solid #FDE68A", animationDelay: "600ms" }}>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl shrink-0">☕</span>
-            <div>
-              <h3 className="font-black text-base mb-2" style={{ color: "#92400E" }}>
-                One honest thing before you start
-              </h3>
-              <p className="text-sm leading-relaxed" style={{ color: "#78350F" }}>
-                Your first ticket will take <strong>2–4 hours</strong>, not 45 minutes.
-                The bug descriptions are intentionally vague — that is realistic.
-                A score of <strong>65–75 on your first attempt is solid</strong>.
-                Claude is strict on Diagnosis because root cause analysis is the skill that actually matters in production.
-              </p>
-            </div>
-          </div>
+        <div className="card rounded-2xl p-7 mt-8 mb-10 fade-in-up" style={{ background: "#FFFBEB", border: "1px solid #FDE68A", animationDelay: "500ms" }}>
+          <h3 className="font-black text-base mb-2" style={{ color: "#92400E" }}>One honest thing before you start</h3>
+          <p className="text-sm leading-relaxed" style={{ color: "#78350F" }}>
+            Your first ticket takes <strong>a couple of hours</strong>, not 45 minutes — the descriptions are
+            intentionally vague, because that&apos;s realistic. A score of <strong>65–75 on your first attempt is solid</strong>.
+            The scoring is strict on Diagnosis, because finding the real root cause is the skill that actually matters in production.
+          </p>
         </div>
 
-        {/* CTA */}
-        <div className="text-center fade-in-up" style={{ animationDelay: "650ms" }}>
-          <p className="text-sm font-medium mb-4" style={{ color: "#6B6B6B" }}>
-            Steps 1 and 2 are done. Pick up from Step 3 below.
-          </p>
+        <div className="text-center fade-in-up" style={{ animationDelay: "550ms" }}>
           <button onClick={handleGetStarted} className="btn-primary text-base px-10 py-4">
-            {authed
-              ? "Browse Tickets →"
-              : "Sign in with GitHub — it’s free →"}
+            {authed ? "Browse Tickets →" : "Sign in with GitHub — it's free →"}
           </button>
-          {authed === false && (
-            <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
-              We only request read access to your public GitHub profile.
-            </p>
-          )}
-          {authed === true && (
-            <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
-              You are already signed in. Jump straight to tickets.
-            </p>
-          )}
-          <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>
-            Free plan · 2 tickets/month · No credit card
-          </p>
+          {authed === false && <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>We only request read access to your public GitHub profile.</p>}
+          {authed === true && <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>You&apos;re already signed in — jump straight to tickets.</p>}
+          <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>Free plan · 2 tickets/month · No credit card</p>
         </div>
-
       </div>
     </main>
   );
 }
 
-// ─── Export with Suspense for useSearchParams ─────────────────────────────────
-
 export default function GuidePage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center"
-        style={{ background: "#F7F6F3", color: "#6B6B6B" }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#F7F6F3", color: "#6B6B6B" }}>
         Loading...
       </div>
     }>

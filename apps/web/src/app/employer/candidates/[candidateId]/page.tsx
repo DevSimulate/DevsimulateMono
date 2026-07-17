@@ -282,7 +282,7 @@ function AssessmentTab({ c }: { c: CandidateDetail }) {
           style={{ background: "#ffffff" }}
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#eef1f5"}
           onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#ffffff"}>
-          <span className="text-sm font-bold text-[#131722]">Claude Review Summary</span>
+          <span className="text-sm font-bold text-[#131722]">Assessment Summary</span>
           <span className="text-xs" style={{ color: "#8a93a3" }}>{reviewOpen ? "collapse ▲" : "expand ▼"}</span>
         </button>
 
