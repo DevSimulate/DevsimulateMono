@@ -41,7 +41,7 @@ Key facts engineers must know:
       title: "NOVA-47: Intermittent Order Fulfillment Failure",
       description: "Customers are reporting that their orders sometimes get confirmed but never actually get fulfilled. It happens roughly 1 in 50 orders. The CEO was affected yesterday. We cannot reproduce it consistently. No exceptions appear in the logs. Only seems to affect orders over $500. Figure out what is going wrong and fix it properly.",
       difficulty: Difficulty.MID,
-      filesInvolved: ["src/Services/OrderService.cs", "src/Services/NotificationService.cs", "src/Repositories/OrderRepository.cs"],
+      filesInvolved: ["src/NovaTechCRM.Services/OrderService.cs", "src/NovaTechCRM.Infrastructure/Notifications/NotificationService.cs", "src/NovaTechCRM.Repositories/OrderRepository.cs"],
       rubric: { diagnosis: "Did the developer identify the FraudShield integration as the root cause? Did they notice the fire-and-forget notification pattern masks the failure? Did they find the missing await/async bug or timeout misconfiguration causing silent drops for orders >$500?", design: "Did they propose proper error handling with retry logic? Did they consider idempotency? Did they add dead-letter queue or alerting rather than just catching exceptions?", communication: "Did they clearly explain root cause vs symptom? Did they document the FraudShield integration behaviour and its failure modes?", execution: "Does their fix actually prevent the silent failure? Does it handle the race condition or timeout correctly?" },
       expectedMinutes: 90,
     },
@@ -50,7 +50,7 @@ Key facts engineers must know:
       title: "NOVA-52: Dashboard Performance Degradation",
       description: "The main customer dashboard loads in under 2 seconds for new customers. For customers with more than 18 months of history it takes between 40 and 60 seconds. Product wants it under 2 seconds for everyone. This started after the data migration last quarter.",
       difficulty: Difficulty.MID,
-      filesInvolved: ["src/Controllers/DashboardController.cs", "src/Repositories/CustomerRepository.cs", "src/Services/ReportingService.cs"],
+      filesInvolved: ["src/NovaTechCRM.Api/Controllers/DashboardController.cs", "src/NovaTechCRM.Repositories/CustomerRepository.cs", "src/NovaTechCRM.Services/ReportingService.cs"],
       rubric: { diagnosis: "Did they identify the N+1 query in CustomerRepository introduced during the SQL migration? Did they find that the reporting cache is not being populated correctly for customers created before the migration date?", design: "Did they choose an appropriate fix — e.g. fixing the cache rebuild, adding a composite index, or rewriting the query to use a single JOIN? Did they consider migration-safe rollout?", communication: "Did they clearly explain why new customers are fast but legacy customers are slow? Did they link the issue to the SQL migration?", execution: "Does their solution actually bring load time under 2 seconds for legacy customers? Did they add a query explain plan or benchmark?" },
       expectedMinutes: 75,
     },
@@ -59,7 +59,7 @@ Key facts engineers must know:
       title: "NOVA-58: Discount Calculation Conflict",
       description: "Finance and Sales are in a meeting room arguing. Finance says the discount engine is calculating wrong totals. Sales says the numbers are correct and Finance does not understand the business rules. Both have spreadsheets. You need to read the code, understand the actual business rules, determine who is right, document what the rules actually are, and fix any discrepancy you find.",
       difficulty: Difficulty.SENIOR,
-      filesInvolved: ["src/Services/DiscountEngine.cs", "src/Models/DiscountRule.cs", "docs/business-rules.md"],
+      filesInvolved: ["src/NovaTechCRM.Services/DiscountEngine.cs", "src/NovaTechCRM.Domain/Models/DiscountRule.cs", "docs/business-rules.md"],
       rubric: { diagnosis: "Did they correctly read the code and identify that the cascade priority order (Contract > Promotional > Volume > Default) is not being enforced? Did they determine that Finance is correct — the engine is applying discounts additively instead of using the highest-priority rule only?", design: "Did they fix the cascade logic correctly? Did they write the updated business rules documentation? Did they consider backwards compatibility for existing contracts?", communication: "Did they clearly adjudicate between Finance and Sales with evidence from the code? Did they write clear documentation that both teams could understand? Did they explain the impact of the bug?", execution: "Does the fixed engine pass the Finance team's test cases? Does it maintain the correct cascade priority?" },
       expectedMinutes: 120,
     },
@@ -3394,7 +3394,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-01: Looking up a missing account 500s instead of returning empty",
       description: "GET /api/accounts/{number} for an account number that doesn't exist throws a NullPointerException and returns a 500. It should cleanly report 'not found'. The crash happens inside the service, not the controller.\n\n**Files:** `service/AccountService.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["service/AccountService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/AccountService.java"],
       rubric: {
         diagnosis: "Did they find that getByNumber() calls findByAccountNumber(...).orElse(null) and then immediately dereferences account.getOwnerName() — NPE when the account is absent?",
         design: "Did they guard the null before dereferencing without breaking the blank-name normalisation?",
@@ -3408,7 +3408,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-02: Accounts vanish from caches/sets after their balance changes",
       description: "We keep Accounts in HashSets and as HashMap keys. After a transfer changes an account's balance, code that looks the account up in those collections suddenly can't find it — even though it's the same account.\n\n**Files:** `model/Account.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["model/Account.java"],
+      filesInvolved: ["src/main/java/com/finserve/model/Account.java"],
       rubric: {
         diagnosis: "Did they identify that equals() uses only id but hashCode() uses mutable fields (including balance), violating the equals/hashCode contract and making the object's hashCode change after it's placed in a hash structure?",
         design: "Did they make hashCode consistent with equals (stable identity) and exclude mutable fields?",
@@ -3422,7 +3422,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-03: The 'accounts opened' metric undercounts under load",
       description: "The /api/accounts/metrics/opened counter undercounts when accounts are opened concurrently — open 1,000 across 10 threads and it reads less than 1,000.\n\n**Files:** `service/AccountService.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["service/AccountService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/AccountService.java"],
       rubric: {
         diagnosis: "Did they identify accountsOpened as a mutable static int incremented with non-atomic ++ (read-modify-write), losing concurrent increments?",
         design: "Did they make it thread-safe (AtomicInteger/LongAdder or synchronization)?",
@@ -3436,7 +3436,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-04: A failed transfer can debit the sender without crediting the receiver",
       description: "If the credit step fails, the sender has already been debited and that debit stays. Money disappears. Transfers must be all-or-nothing.\n\n**Files:** `service/TransferService.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/TransferService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java"],
       rubric: {
         diagnosis: "Did they identify that transfer() is NOT @Transactional, so each save() commits separately — if the second fails, the first (debit) is already committed and can't roll back?",
         design: "Did they wrap the whole transfer in @Transactional so a failure rolls back the debit too (including the transaction record)?",
@@ -3450,7 +3450,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-05: Missing account returns 200 with an empty body, not 404",
       description: "The accounts endpoint returns HTTP 200 with a null body for an account that doesn't exist. Clients can't tell 'no such account' from a real one.\n\n**Files:** `controller/AccountController.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["controller/AccountController.java"],
+      filesInvolved: ["src/main/java/com/finserve/controller/AccountController.java"],
       rubric: {
         diagnosis: "Did they see that the controller always wraps the result in ResponseEntity.ok(...), even when the service returns null?",
         design: "Did they map not-found to 404 while keeping the success path at 200?",
@@ -3464,7 +3464,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-06: Nightly statement export leaks file handles until the batch dies",
       description: "The nightly batch exports thousands of statements and eventually fails with 'Too many open files'. Exported files are sometimes truncated or empty.\n\n**Files:** `service/StatementService.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/StatementService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/StatementService.java"],
       rubric: {
         diagnosis: "Did they find that exportStatement() opens a FileWriter and only flush()es, never close()ing it — leaking handles and risking truncated output?",
         design: "Did they use try-with-resources (or finally) so the writer is always closed?",
@@ -3478,7 +3478,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-07: Building a statement fires hundreds of queries (N+1)",
       description: "Generating a statement is slow. Query logs show one query for the transactions, then one extra query per transaction — 501 queries for 500 transactions.\n\n**Files:** `service/StatementService.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/StatementService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/StatementService.java"],
       rubric: {
         diagnosis: "Did they identify the N+1 — buildStatement loads all transactions then calls accounts.findById(...) per transaction?",
         design: "Did they batch the lookups (collect ids, findAllById once and map) or use a fetch join?",
@@ -3492,7 +3492,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-08: Interest application corrupts balances with rounding drift",
       description: "After the daily interest job runs a while, balances are off by fractions of a cent and the errors accumulate. Reconciliation flags accounts a penny or two off.\n\n**Files:** `service/AccountService.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/AccountService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/AccountService.java"],
       rubric: {
         diagnosis: "Did they identify that applyInterest converts BigDecimal to double, does floating-point math, and converts back — losing precision and drifting?",
         design: "Did they do the math entirely in BigDecimal with an explicit scale and RoundingMode, never touching double?",
@@ -3506,7 +3506,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-09: Transfer failures are reported to the client as success",
       description: "A transfer that throws (insufficient funds, missing account) returns HTTP 200 with {\"status\":\"PENDING\"} and the client shows success. The user thinks money moved when it didn't.\n\n**Files:** `controller/TransferController.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["controller/TransferController.java"],
+      filesInvolved: ["src/main/java/com/finserve/controller/TransferController.java"],
       rubric: {
         diagnosis: "Did they find the catch-all that swallows every exception and returns ok('PENDING'), hiding real failures behind a fake success?",
         design: "Did they let real errors surface with appropriate status codes (400/404/500) instead of blanket-swallowing, without leaking internals?",
@@ -3520,7 +3520,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-10: Concurrent transfers from the same account lose money (lost update)",
       description: "Two transfers debiting the same account at once sometimes both succeed when only one should fit the balance, and the final balance reflects only one debit. Classic 'both read 100, both write 90'.\n\n**Files:** `service/TransferService.java`, `model/Account.java`",
       difficulty: Difficulty.SENIOR,
-      filesInvolved: ["service/TransferService.java", "model/Account.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java", "src/main/java/com/finserve/model/Account.java"],
       rubric: {
         diagnosis: "Did they identify the read-modify-write race with no locking or @Version — both transactions read the same balance, both pass the check, the second write overwrites the first, losing a debit?",
         design: "Did they choose and justify a correct concurrency control — optimistic (@Version + retry), pessimistic (SELECT FOR UPDATE), or an atomic update query — and handle the retry/failure path?",
@@ -3534,7 +3534,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-11: The rebalancing job occasionally deadlocks the service",
       description: "rebalance(A,B,...) runs on multiple threads. Under load it sometimes hangs forever — two threads each holding one account, waiting for the other. Thread dumps show a deadlock.\n\n**Files:** `service/TransferService.java`",
       difficulty: Difficulty.SENIOR,
-      filesInvolved: ["service/TransferService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java"],
       rubric: {
         diagnosis: "Did they identify the lock-ordering deadlock — rebalance synchronizes on A then B, so rebalance(A,B) and rebalance(B,A) acquire locks in opposite order? Bonus: did they note synchronizing on JPA entities won't coordinate across transactions/nodes?",
         design: "Did they impose a consistent global lock ordering (e.g. lower id first) or replace in-JVM locking with DB-level locking that works across instances?",
@@ -3548,7 +3548,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-12: Negative or zero transfer amounts are accepted",
       description: "You can POST a transfer with amount 0 or negative. A negative transfer effectively moves money the wrong way. There's no validation.\n\n**Files:** `service/TransferService.java`, `controller/TransferController.java`",
       difficulty: Difficulty.JUNIOR,
-      filesInvolved: ["service/TransferService.java", "controller/TransferController.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java", "src/main/java/com/finserve/controller/TransferController.java"],
       rubric: {
         diagnosis: "Did they identify that amount is never validated to be strictly positive, so 0 and negatives invert or no-op the transfer?",
         design: "Did they reject non-positive amounts (BigDecimal compareTo ZERO) at a sensible layer with a 400?",
@@ -3562,7 +3562,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-13: Cross-currency transfers move raw amounts with no conversion",
       description: "A transfer from a USD account to a EUR account adds the raw number across — 100 USD 'adds 100 EUR' with no conversion and no rejection. Currency is stored but never checked.\n\n**Files:** `service/TransferService.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/TransferService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java"],
       rubric: {
         diagnosis: "Did they identify that transfer() never compares the two accounts' currencies, so cross-currency transfers move raw amounts unguarded?",
         design: "Did they at minimum reject mismatched currencies (or define a clear conversion contract), choosing the safe default of rejecting?",
@@ -3576,7 +3576,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-14: Under load, requests fail with 'connection is not available'",
       description: "During the statement batch plus live traffic, requests fail with HikariCP 'Connection is not available, request timed out'. The pool is size 5. It correlates with long operations holding connections.\n\n**Files:** `service/StatementService.java`, `service/TransferService.java`",
       difficulty: Difficulty.SENIOR,
-      filesInvolved: ["service/StatementService.java", "service/TransferService.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/StatementService.java", "src/main/java/com/finserve/service/TransferService.java"],
       rubric: {
         diagnosis: "Did they reason about pool exhaustion — the N+1 holding a connection for hundreds of queries, and/or file IO inside a transaction holding a connection — starving the 5-connection pool?",
         design: "Did they reduce connection hold time (fix N+1, move IO outside the transaction, keep transactions short) rather than just enlarging the pool, identifying the worst offender?",
@@ -3590,7 +3590,7 @@ The "Debug deployment config" step uses \`echo "... \${{ secrets.DB_PASSWORD }}"
       title: "FS-15: Incomplete, non-atomic audit trail for transfers",
       description: "Compliance needs an immutable record of each transfer: who, to whom, how much, when, resulting balances. Today the Transaction omits balances and is written outside a guaranteed-atomic boundary, so it can diverge from what actually happened.\n\n**Files:** `service/TransferService.java`, `model/Transaction.java`",
       difficulty: Difficulty.MID,
-      filesInvolved: ["service/TransferService.java", "model/Transaction.java"],
+      filesInvolved: ["src/main/java/com/finserve/service/TransferService.java", "src/main/java/com/finserve/model/Transaction.java"],
       rubric: {
         diagnosis: "Did they recognize the audit record is incomplete and written outside a guaranteed-atomic boundary, so it can diverge from the real balance changes?",
         design: "Did they enrich the Transaction and ensure it's written in the SAME transaction as the balance changes (atomic), considering immutability?",
