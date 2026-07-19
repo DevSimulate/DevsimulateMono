@@ -9,6 +9,7 @@ import {
   checkoutBranch,
   pushBranch,
   createPullRequest,
+  rememberCreatedPr,
   FriendlyError,
 } from "../services/git.service";
 import { SidebarProvider } from "../views/sidebar";
@@ -131,6 +132,11 @@ export async function pushAndCreatePRCommand(
         );
       }
     );
+
+    // Remember the PR we just created for THIS branch, so Submit uses this exact
+    // URL instead of re-discovering a PR (which can pick a previous ticket's
+    // still-open PR). Keyed by the unique per-ticket branch name.
+    await rememberCreatedPr(context, assignment.branchName, prUrl);
 
     const choice = await vscode.window.showInformationMessage(
       `DevSimulate: Code pushed and PR created! Now click "Submit PR for Review" to get your AI score.`,

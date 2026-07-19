@@ -138,9 +138,13 @@
       }
       button:hover { opacity: 0.85; }
       button:active { opacity: 0.7; }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button:disabled:hover { opacity: 0.45; }
       .btn-primary   { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
       .btn-secondary { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
       .btn-push      { background: #166534; color: #bbf7d0; }
+      /* Submit is the final action — give it its own colour, not the grey secondary. */
+      .btn-submit    { background: #7c3aed; color: #f5f3ff; }
       .btn-login     { background: #24292e; color: #fff; padding: 9px 12px; }
 
       /* ── Score bars ── */
@@ -277,9 +281,44 @@
         vscode.postMessage({ command: 'refresh' });
       });
 
+      // Which ticket (assignmentId) has an action in flight, and which button
+      // was clicked — so we can grey out that card's buttons and label the
+      // active one while the command runs.
+      const busy = {};        // assignmentId -> 'clone' | 'push' | 'submit'
+      let lastAssignments = [];
+
       window.addEventListener('message', (event) => {
-        if (event.data.type === 'update') renderState(event.data.state);
+        const d = event.data;
+        if (d.type === 'update') renderState(d.state);
+        else if (d.type === 'actionBusy' && d.assignmentId) applyBusy();
+        else if (d.type === 'actionDone' && d.assignmentId) { delete busy[d.assignmentId]; applyBusy(); }
       });
+
+      const BTN_LABELS = {
+        clone:  '⬇ Fork &amp; Clone',
+        push:   '⬆ Push &amp; Create PR',
+        submit: '✦ Submit PR for Review',
+      };
+
+      function setBusy(assignmentId, kind) {
+        busy[assignmentId] = kind;
+        applyBusy();
+      }
+
+      // Reflects the busy map onto the rendered buttons. Called after every
+      // render too, so a mid-flight state refresh never clears the busy UI.
+      function applyBusy() {
+        lastAssignments.forEach((a, i) => {
+          const kind = busy[a.id];
+          const isBusy = !!kind;
+          ['clone', 'push', 'submit'].forEach((k) => {
+            const btn = document.getElementById('btn-' + k + '-' + i);
+            if (!btn) return;
+            btn.disabled = isBusy;
+            btn.innerHTML = (isBusy && k === kind) ? '⏳ Working…' : BTN_LABELS[k];
+          });
+        });
+      }
 
       function renderState(state) {
         const isLoggedIn = !!state.user;
@@ -298,6 +337,7 @@
 
         // Tickets
         const assignments = state.assignments || [];
+        lastAssignments = assignments;
         const ticketsList = document.getElementById('tickets-list');
         const noTicket = document.getElementById('section-no-ticket');
         const badge = document.getElementById('ticket-count-badge');
@@ -312,15 +352,19 @@
           badge.textContent = assignments.length;
           ticketsList.innerHTML = assignments.map((a, i) => buildTicketCard(a, i)).join('');
 
-          // Wire up per-ticket buttons
+          // Wire up per-ticket buttons. Each click greys out this ticket's
+          // buttons (via setBusy) so it can't be double-fired while it runs.
           assignments.forEach((a, i) => {
             const cloneBtn  = document.getElementById('btn-clone-' + i);
             const pushBtn   = document.getElementById('btn-push-' + i);
             const submitBtn = document.getElementById('btn-submit-' + i);
-            if (cloneBtn)  cloneBtn.addEventListener('click',  () => vscode.postMessage({ command: 'cloneCodebase',    assignmentId: a.id }));
-            if (pushBtn)   pushBtn.addEventListener('click',   () => vscode.postMessage({ command: 'pushAndCreatePR', assignmentId: a.id }));
-            if (submitBtn) submitBtn.addEventListener('click', () => vscode.postMessage({ command: 'submitPR',         assignmentId: a.id }));
+            if (cloneBtn)  cloneBtn.addEventListener('click',  () => { setBusy(a.id, 'clone');  vscode.postMessage({ command: 'cloneCodebase',    assignmentId: a.id }); });
+            if (pushBtn)   pushBtn.addEventListener('click',   () => { setBusy(a.id, 'push');   vscode.postMessage({ command: 'pushAndCreatePR', assignmentId: a.id }); });
+            if (submitBtn) submitBtn.addEventListener('click', () => { setBusy(a.id, 'submit'); vscode.postMessage({ command: 'submitPR',         assignmentId: a.id }); });
           });
+
+          // Re-assert busy styling after a fresh render.
+          applyBusy();
         }
 
         // Scores
@@ -356,7 +400,7 @@
             <div class="ticket-actions">
               <button class="btn-primary" id="btn-clone-${i}">⬇ Fork &amp; Clone</button>
               <button class="btn-push" id="btn-push-${i}">⬆ Push &amp; Create PR</button>
-              <button class="btn-secondary" id="btn-submit-${i}">✦ Submit PR for Review</button>
+              <button class="btn-submit" id="btn-submit-${i}">✦ Submit PR for Review</button>
             </div>
           </div>`;
       }

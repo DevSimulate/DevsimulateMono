@@ -8,7 +8,7 @@ import { pushAndCreatePRCommand } from "./commands/push";
 import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken, getHandoffCode } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
 import { getLatestReview } from "./services/review.service";
-import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest } from "./services/git.service";
+import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest, rememberCreatedPr } from "./services/git.service";
 import { openInBrowser } from "./services/browser.service";
 import { LoginResponse, TicketAssignment, Ticket, Codebase } from "./types";
 
@@ -230,6 +230,9 @@ async function handleCloneFromDeepLink(
             assignment.ticket.codebase.repoUrl,
             creds
           );
+          // Remember this PR for the branch so a later manual Submit reuses it
+          // rather than re-discovering (and possibly picking an old) PR.
+          await rememberCreatedPr(context, assignment.branchName, prUrl);
           // Attach a short-lived handoff code so the assessment opens signed-in
           // in whatever browser launches — no reliance on an existing session.
           const handoff = await getHandoffCode(context);

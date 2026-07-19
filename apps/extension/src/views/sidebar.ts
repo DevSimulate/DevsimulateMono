@@ -40,29 +40,46 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._buildHtml(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((message: { command: string }) => {
-      switch (message.command) {
-        case "ready":
-          // Webview JS has initialised — safe to push state now
-          this._pushState();
-          break;
-        case "login":
-          void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
-          break;
-        case "cloneCodebase":
-          vscode.commands.executeCommand("devsimulate.cloneCodebase");
-          break;
-        case "pushAndCreatePR":
-          vscode.commands.executeCommand("devsimulate.pushAndCreatePR");
-          break;
-        case "submitPR":
-          vscode.commands.executeCommand("devsimulate.submitPR");
-          break;
-        case "refresh":
-          vscode.commands.executeCommand("devsimulate.refresh");
-          break;
+    webviewView.webview.onDidReceiveMessage(
+      (message: { command: string; assignmentId?: string }) => {
+        switch (message.command) {
+          case "ready":
+            // Webview JS has initialised — safe to push state now
+            this._pushState();
+            break;
+          case "login":
+            void openInBrowser("https://www.devsimulate.com/auth/vscode-link");
+            break;
+          case "cloneCodebase":
+            void this._runAction("devsimulate.cloneCodebase", message.assignmentId);
+            break;
+          case "pushAndCreatePR":
+            void this._runAction("devsimulate.pushAndCreatePR", message.assignmentId);
+            break;
+          case "submitPR":
+            void this._runAction("devsimulate.submitPR", message.assignmentId);
+            break;
+          case "refresh":
+            vscode.commands.executeCommand("devsimulate.refresh");
+            break;
+        }
       }
-    });
+    );
+  }
+
+  /**
+   * Runs a ticket action command and brackets it with busy/done messages so the
+   * webview can grey out that ticket's buttons while the action is in flight,
+   * preventing double-clicks. `finally` guarantees the buttons are re-enabled
+   * even if the command throws.
+   */
+  private async _runAction(command: string, assignmentId?: string): Promise<void> {
+    this._view?.webview.postMessage({ type: "actionBusy", assignmentId });
+    try {
+      await vscode.commands.executeCommand(command);
+    } finally {
+      this._view?.webview.postMessage({ type: "actionDone", assignmentId });
+    }
   }
 
   public update(partial: Partial<SidebarState>): void {

@@ -102,6 +102,37 @@ function makeGit(baseDir?: string): SimpleGit {
 // A user-facing error whose message is safe to show directly in a prompt.
 export class FriendlyError extends Error {}
 
+// ── Created-PR cache ──────────────────────────────────────────────────────────
+// When "Push & Create PR" (or the auto-PR watcher) opens a pull request, we
+// already hold the exact PR URL for THIS ticket's branch. Remember it keyed by
+// branch so the later Submit step uses that authoritative value instead of
+// re-discovering a PR by scanning open PRs — which is what lets a previous
+// ticket's still-open PR get picked. Branch names are unique per ticket
+// (`ds/{ticketId8}-…`), so the key can never collide across tickets.
+const PR_CACHE_PREFIX = "ds_pr:";
+
+export function rememberCreatedPr(
+  context: vscode.ExtensionContext,
+  branchName: string,
+  prUrl: string
+): Thenable<void> {
+  return context.globalState.update(PR_CACHE_PREFIX + branchName, prUrl);
+}
+
+export function getCreatedPr(
+  context: vscode.ExtensionContext,
+  branchName: string
+): string | undefined {
+  return context.globalState.get<string>(PR_CACHE_PREFIX + branchName);
+}
+
+export function forgetCreatedPr(
+  context: vscode.ExtensionContext,
+  branchName: string
+): Thenable<void> {
+  return context.globalState.update(PR_CACHE_PREFIX + branchName, undefined);
+}
+
 const GH_API = "https://api.github.com";
 
 /** GitHub credentials provided by DevSimulate (captured at web sign-in). */

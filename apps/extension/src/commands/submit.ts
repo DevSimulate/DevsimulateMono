@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import axios from "axios";
 import { getToken, getApiUrl, getHandoffCode } from "../services/auth.service";
 import { getAssignedTickets } from "../services/ticket.service";
-import { getCurrentBranch, getRemoteUrl, scheduleLocalCloneWipe } from "../services/git.service";
+import { getCurrentBranch, getRemoteUrl, scheduleLocalCloneWipe, getCreatedPr, forgetCreatedPr } from "../services/git.service";
 import { openInBrowser } from "../services/browser.service";
 import { SidebarProvider } from "../views/sidebar";
 
@@ -107,78 +107,80 @@ export async function submitCommand(
       if (proceed !== "Submit Anyway") return;
     }
 
-    // --- Auto-detect PR ---
-    const remoteUrl = await getRemoteUrl();
-    const parsed = remoteUrl ? parseGitHubOwnerRepo(remoteUrl) : null;
+    // Prefer the PR we already created for THIS branch via "Push & Create PR".
+    // That URL is the authoritative one for this exact ticket, so we don't
+    // re-discover a PR — which is what could pick a previous ticket's still-open
+    // PR. Branch names are unique per ticket, so the cache can't cross tickets.
+    let prUrl = getCreatedPr(context, assignment.branchName);
 
-    if (!parsed) {
-      vscode.window.showErrorMessage(
-        "DevSimulate: Could not read git remote. Make sure you are inside the cloned repo."
-      );
-      return;
-    }
+    if (!prUrl) {
+      // --- Fallback: no cached PR (created manually, or a fresh install) ---
+      const remoteUrl = await getRemoteUrl();
+      const parsed = remoteUrl ? parseGitHubOwnerRepo(remoteUrl) : null;
 
-    const prs = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: "DevSimulate: Looking up your PR…",
-        cancellable: false,
-      },
-      () => findOpenPRs(token, parsed.owner, parsed.repo, assignment.branchName)
-    );
+      if (!parsed) {
+        vscode.window.showErrorMessage(
+          "DevSimulate: Could not read git remote. Make sure you are inside the cloned repo."
+        );
+        return;
+      }
 
-    let prUrl: string;
-
-    if (prs.length === 0) {
-      const pushReminder = await vscode.window.showInformationMessage(
-        `No open PR found for branch '${assignment.branchName}'. Push your commits first, then create a PR on GitHub.`,
-        "Open GitHub (create PR)",
-        "Cancel"
-      );
-
-      if (pushReminder !== "Open GitHub (create PR)") return;
-
-      // main...branch?expand=1 opens the PR form directly with base already set
-      const compareBranch = assignment.branchName.replace(/#/g, "%23");
-      await openInBrowser(
-        `https://github.com/${parsed.owner}/${parsed.repo}/compare/main...${compareBranch}?expand=1`
-      );
-
-      const prUrl = await vscode.window.showInputBox({
-        prompt: "Once your PR is open on GitHub, copy the URL and paste it here",
-        placeHolder: "https://github.com/you/novatech-crm/pull/1",
-        ignoreFocusOut: true,
-        validateInput: (v) => {
-          if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
-            return "Must be a valid GitHub PR URL (e.g. https://github.com/you/repo/pull/1)";
-          }
-          return undefined;
+      const prs = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "DevSimulate: Looking up your PR…",
+          cancellable: false,
         },
-      });
+        () => findOpenPRs(token, parsed.owner, parsed.repo, assignment.branchName)
+      );
 
-      if (!prUrl) return;
+      if (prs.length === 0) {
+        const pushReminder = await vscode.window.showInformationMessage(
+          `No open PR found for branch '${assignment.branchName}'. Push your commits first, then create a PR on GitHub.`,
+          "Open GitHub (create PR)",
+          "Cancel"
+        );
 
-      const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}${authParam}`;
-      await openInBrowser(submitUrl);
-      vscode.window.showInformationMessage("DevSimulate: Submission form opened in your browser.");
-      await wipeLocalCodebaseAfterSubmit();
-      return;
+        if (pushReminder !== "Open GitHub (create PR)") return;
+
+        // main...branch?expand=1 opens the PR form directly with base already set
+        const compareBranch = assignment.branchName.replace(/#/g, "%23");
+        await openInBrowser(
+          `https://github.com/${parsed.owner}/${parsed.repo}/compare/main...${compareBranch}?expand=1`
+        );
+
+        const pastedUrl = await vscode.window.showInputBox({
+          prompt: "Once your PR is open on GitHub, copy the URL and paste it here",
+          placeHolder: "https://github.com/you/novatech-crm/pull/1",
+          ignoreFocusOut: true,
+          validateInput: (v) => {
+            if (!v.startsWith("https://github.com/") || !v.includes("/pull/")) {
+              return "Must be a valid GitHub PR URL (e.g. https://github.com/you/repo/pull/1)";
+            }
+            return undefined;
+          },
+        });
+
+        if (!pastedUrl) return;
+        prUrl = pastedUrl;
+      } else if (prs.length === 1) {
+        prUrl = prs[0].url;
+      } else {
+        const items = prs.map((pr) => ({ label: `#${pr.number}: ${pr.title}`, url: pr.url }));
+        const choice = await vscode.window.showQuickPick(items, {
+          placeHolder: "Multiple open PRs found — select one",
+        });
+        if (!choice) return;
+        prUrl = choice.url;
+      }
     }
 
-    if (prs.length === 1) {
-      prUrl = prs[0].url;
-    } else {
-      const items = prs.map((pr) => ({ label: `#${pr.number}: ${pr.title}`, url: pr.url }));
-      const choice = await vscode.window.showQuickPick(items, {
-        placeHolder: "Multiple open PRs found — select one",
-      });
-      if (!choice) return;
-      prUrl = choice.url;
-    }
-
-    const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}&token=${encodeURIComponent(token)}`;
+    const submitUrl = `${WEB_URL}/submit?ticketId=${encodeURIComponent(assignment.ticketId)}&prUrl=${encodeURIComponent(prUrl)}&branchName=${encodeURIComponent(assignment.branchName)}${authParam}`;
 
     await openInBrowser(submitUrl);
+
+    // Consume the cached PR so nothing can reuse this branch's PR by accident.
+    await forgetCreatedPr(context, assignment.branchName);
 
     vscode.window.showInformationMessage(
       `DevSimulate: Opening submission form for PR — describe your fix and get your score.`
