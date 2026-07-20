@@ -12,6 +12,11 @@ import { generateInterviewQuestions } from "../services/review.service";
 
 const router = Router();
 
+// Shown when a disqualified candidate tries to apply/join again. The flag is
+// admin-reversible (clear user.disqualifiedAt/Reason to restore the account).
+const DISQUALIFIED_MSG =
+  "Your account has been disqualified from DevSimulate assessments for an integrity violation (repeated pasting during a timed assessment). If you believe this is a mistake, contact the event organiser.";
+
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
 }
@@ -281,6 +286,11 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
   const { userId } = (req as AuthenticatedRequest).user;
   const { fullName } = req.body as { fullName?: string };
   try {
+    const dq = await prisma.user.findUnique({ where: { id: userId }, select: { disqualifiedAt: true } });
+    if (dq?.disqualifiedAt) {
+      res.status(403).json({ error: DISQUALIFIED_MSG });
+      return;
+    }
     if (fullName?.trim()) {
       await prisma.user.update({ where: { id: userId }, data: { fullName: fullName.trim() } });
     }
@@ -363,6 +373,11 @@ router.post("/join", async (req: Request, res: Response): Promise<void> => {
   if (!slug) { res.status(400).json({ error: "slug is required" }); return; }
 
   try {
+    const dq = await prisma.user.findUnique({ where: { id: userId }, select: { disqualifiedAt: true } });
+    if (dq?.disqualifiedAt) {
+      res.status(403).json({ error: DISQUALIFIED_MSG });
+      return;
+    }
     const campaign = await prisma.campaign.findUnique({ where: { shareableSlug: slug } });
     if (!campaign || campaign.status !== CampaignStatus.ACTIVE) {
       res.status(404).json({ error: "Campaign not found or closed" });

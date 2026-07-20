@@ -167,6 +167,7 @@ function SubmitPageInner() {
   const [elapsed,      setElapsed]      = useState(0);
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
+  const [disqualified, setDisqualified] = useState(false);
   const [blurCount,    setBlurCount]    = useState(0);
   const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
@@ -193,14 +194,40 @@ function SubmitPageInner() {
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const writeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Paste check temporarily DISABLED. AI use is allowed, the block is trivially
-  // bypassable, and it over-flags honest candidates — judgment is measured by the
-  // rubric + follow-up instead. To re-enable, restore the body below.
-  function handleAnswerPaste(_e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    // e.preventDefault();
-    // setPasteCount((n) => n + 1);
-    // setPasteWarn(true);
-    // setTimeout(() => setPasteWarn(false), 4000);
+  // Kicks the candidate out on the 3rd paste: voids the submission and flags the
+  // account as disqualified (server-side), then locks the UI. The lock stands even
+  // if the network call fails — the client won't let them continue.
+  async function disqualifyAndKick() {
+    setDisqualified(true);
+    [timerRef, elapsedRef, writeRef, verbalTimerRef].forEach((r) => {
+      if (r.current) { clearInterval(r.current); r.current = null; }
+    });
+    try {
+      if (submissionId) {
+        await fetch(`${API_URL}/submissions/${submissionId}/disqualify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+          credentials: "include",
+          body: JSON.stringify({ reason: "Repeated paste attempts during the assessment" }),
+        });
+      }
+    } catch { /* UI is locked regardless of the network result */ }
+  }
+
+  // Pasting is blocked in the answer fields. Escalation:
+  //   1st attempt  → warning
+  //   2nd attempt  → stronger warning (recorded against integrity — advisory)
+  //   3rd attempt  → disqualified + kicked out (can't re-apply)
+  function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    const next = pasteCount + 1;
+    setPasteCount(next);
+    if (next >= 3) {
+      void disqualifyAndKick();
+    } else {
+      setPasteWarn(true);
+      setTimeout(() => setPasteWarn(false), 7000);
+    }
   }
 
 
@@ -800,6 +827,28 @@ function SubmitPageInner() {
     );
   }
 
+  if (disqualified) {
+    return (
+      <div className="min-h-screen bg-grid flex items-center justify-center px-6">
+        <div className="max-w-md w-full rounded-2xl border p-8 text-center"
+          style={{ background: "#FFFFFF", borderColor: "#FCA5A5" }}>
+          <div style={{ fontSize: 42, marginBottom: 12 }}>⛔</div>
+          <h1 className="text-xl font-bold mb-2" style={{ color: "#B42318" }}>
+            Assessment ended — disqualified
+          </h1>
+          <p className="text-sm mb-4" style={{ color: "#5A6472", lineHeight: 1.6 }}>
+            Pasting into the answer fields is not allowed. After two warnings, a third
+            paste attempt was detected, so this assessment has been voided and your entry
+            disqualified. You will not be able to re-apply.
+          </p>
+          <p className="text-xs" style={{ color: "#98A2B3" }}>
+            If you believe this is a mistake, contact the event organiser.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-grid">
 
@@ -895,7 +944,9 @@ function SubmitPageInner() {
             {pasteWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                 style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Pasting is disabled. Write your own explanation — paste attempts are recorded and lower your integrity score.
+                {pasteCount >= 2
+                  ? "Second warning — this paste attempt is recorded against your integrity score. One more paste will disqualify you and block you from re-applying."
+                  : "Pasting is disabled — first warning. Write your own explanation; paste attempts are recorded."}
               </div>
             )}
             <div className="flex items-center justify-between mb-5">

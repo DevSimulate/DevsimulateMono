@@ -200,6 +200,48 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * POST /submissions/:id/disqualify
+ * Body: { reason? }
+ * Called by the assessment UI when a candidate hits the paste limit (3rd attempt).
+ * Voids the submission and flags the user as disqualified so they can't re-apply.
+ * Admin-reversible — clearing user.disqualifiedAt/Reason restores the account.
+ */
+router.post("/:id/disqualify", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { reason } = req.body as { reason?: string };
+  try {
+    const submission = await prisma.submission.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true },
+    });
+    if (!submission) {
+      res.status(404).json({ error: "Submission not found" });
+      return;
+    }
+
+    const disqReason = reason?.trim() || "Repeated paste attempts during the assessment";
+    await prisma.$transaction([
+      prisma.submission.update({
+        where: { id: submission.id },
+        data: { status: "VOID", riskScore: 100 },
+      }),
+      // Only set the flag once — don't overwrite an earlier disqualification time.
+      prisma.user.updateMany({
+        where: { id: userId, disqualifiedAt: null },
+        data: { disqualifiedAt: new Date(), disqualifiedReason: disqReason },
+      }),
+    ]);
+
+    console.log(`[submissions] user ${userId} disqualified (submission ${submission.id}): ${disqReason}`);
+    res.json({ data: { disqualified: true } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to disqualify";
+    console.error("[submissions] disqualify error:", message);
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * GET /submissions/history?limit=20
  * Returns recent submissions for charting score progress over time.
  */

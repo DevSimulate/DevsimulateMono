@@ -55,6 +55,11 @@ model User {
   subscriptionTier    SubscriptionTier    @default(FREE)
   skillScore          Int                 @default(0)
   githubAccessToken   String?
+  // Integrity disqualification — set when a candidate is kicked out for repeated
+  // paste attempts during an assessment. Blocks re-applying. Admin-reversible:
+  // clear both fields to restore the account.
+  disqualifiedAt      DateTime?
+  disqualifiedReason  String?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   submissions         Submission[]
