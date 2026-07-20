@@ -168,6 +168,7 @@ function SubmitPageInner() {
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
   const [disqualified, setDisqualified] = useState(false);
+  const [dqCause,      setDqCause]      = useState<"paste" | "leave" | null>(null);
   const [blurCount,    setBlurCount]    = useState(0);
   const [leaveCount,   setLeaveCount]   = useState(0);   // times they left the assessment (2 warns → disqualify)
   const [isFs,         setIsFs]         = useState(false);
@@ -203,18 +204,22 @@ function SubmitPageInner() {
   // Kicks the candidate out on the 3rd paste: voids the submission and flags the
   // account as disqualified (server-side), then locks the UI. The lock stands even
   // if the network call fails — the client won't let them continue.
-  async function disqualifyAndKick() {
+  async function disqualifyAndKick(cause: "paste" | "leave") {
     setDisqualified(true);
+    setDqCause(cause);
     [timerRef, elapsedRef, writeRef, verbalTimerRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
+    const reason = cause === "leave"
+      ? "Repeatedly left the assessment (app/tab switching or exiting fullscreen) during the timed questions"
+      : "Repeated paste attempts during the assessment";
     try {
       if (submissionId) {
         await fetch(`${API_URL}/submissions/${submissionId}/disqualify`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
           credentials: "include",
-          body: JSON.stringify({ reason: "Repeated paste attempts during the assessment" }),
+          body: JSON.stringify({ reason }),
         });
       }
     } catch { /* UI is locked regardless of the network result */ }
@@ -229,7 +234,7 @@ function SubmitPageInner() {
     const next = pasteCount + 1;
     setPasteCount(next);
     if (next >= 3) {
-      void disqualifyAndKick();
+      void disqualifyAndKick("paste");
     } else {
       setPasteWarn(true);
       setTimeout(() => setPasteWarn(false), 7000);
@@ -361,7 +366,7 @@ function SubmitPageInner() {
 
   // 3rd leave → disqualify + kick out (reuses the paste disqualification flow).
   useEffect(() => {
-    if (leaveCount >= 3 && !disqualified) void disqualifyAndKick();
+    if (leaveCount >= 3 && !disqualified) void disqualifyAndKick("leave");
   }, [leaveCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Elapsed timer — active during analysing stage
@@ -883,9 +888,9 @@ function SubmitPageInner() {
             Assessment ended — disqualified
           </h1>
           <p className="text-sm mb-4" style={{ color: "#5A6472", lineHeight: 1.6 }}>
-            Pasting into the answer fields is not allowed. After two warnings, a third
-            paste attempt was detected, so this assessment has been voided and your entry
-            disqualified. You will not be able to re-apply.
+            {dqCause === "leave"
+              ? "Leaving the assessment — switching to another app or tab, or exiting fullscreen — is not allowed during the timed questions. After two warnings, you left a third time, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
+              : "Pasting into the answer fields is not allowed. After two warnings, a third paste attempt was detected, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."}
           </p>
           <p className="text-xs" style={{ color: "#98A2B3" }}>
             If you believe this is a mistake, contact the event organiser.
