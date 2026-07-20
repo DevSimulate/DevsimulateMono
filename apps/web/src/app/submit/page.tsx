@@ -169,6 +169,12 @@ function SubmitPageInner() {
   const [pasteWarn,    setPasteWarn]    = useState(false);
   const [disqualified, setDisqualified] = useState(false);
   const [blurCount,    setBlurCount]    = useState(0);
+  const [leaveCount,   setLeaveCount]   = useState(0);   // times they left the assessment (2 warns → disqualify)
+  const [isFs,         setIsFs]         = useState(false);
+  const [away,         setAway]         = useState(false);
+  const isFsRef        = useRef(false);
+  const enteredFsRef   = useRef(false);
+  const lastLeaveRef   = useRef(0);
   const [username,     setUsername]     = useState<string>("");
   const [writeTimeLeft, setWriteTimeLeft] = useState(0);
   // Verbal explanation step (camera on for presence; live text via Web Speech, or
@@ -227,6 +233,17 @@ function SubmitPageInner() {
     } else {
       setPasteWarn(true);
       setTimeout(() => setPasteWarn(false), 7000);
+    }
+  }
+
+  // Enters fullscreen for the assessment (needs a user gesture — the overlay button).
+  function enterAssessmentFullscreen() {
+    setAway(false);
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(() => { enteredFsRef.current = true; }).catch(() => { /* user declined — stays gated */ });
+    } else {
+      enteredFsRef.current = true; // fullscreen unsupported — don't hard-block
     }
   }
 
@@ -307,16 +324,45 @@ function SubmitPageInner() {
       .catch(() => null);
   }, [sessionReady]);
 
-  // Tab-switch / focus-loss counter — active while writing or answering.
-  // Leaving the tab during a timed assessment is recorded as an integrity signal
-  // (e.g. switching to an AI tool or to take a screenshot).
+  // Leave-guard — while writing/answering, the step runs in fullscreen. Switching
+  // to another app (e.g. VS Code + an AI assistant), hiding the tab, or exiting
+  // fullscreen is a "leave". 2 warnings, then the 3rd disqualifies (voids the
+  // submission + blocks re-applying — same flow as pasting).
+  const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2"];
   useEffect(() => {
-    const watched = ["describe", "sd_write", "q1", "q2"];
-    if (!watched.includes(stage)) return;
-    const onHidden = () => { if (document.hidden) setBlurCount((n) => n + 1); };
-    document.addEventListener("visibilitychange", onHidden);
-    return () => document.removeEventListener("visibilitychange", onHidden);
-  }, [stage]);
+    const active = WATCHED_STAGES.includes(stage) && !disqualified;
+
+    const recordLeave = () => {
+      const now = Date.now();
+      if (now - lastLeaveRef.current < 800) return; // dedupe blur+visibility for one switch
+      lastLeaveRef.current = now;
+      setBlurCount((n) => n + 1);   // keep advisory tab-switch count
+      setAway(true);
+      setLeaveCount((n) => n + 1);
+    };
+    const onFs = () => {
+      const fs = !!document.fullscreenElement;
+      isFsRef.current = fs;
+      setIsFs(fs);
+      if (active && !fs && enteredFsRef.current) recordLeave(); // exited fullscreen after entering
+    };
+    const onVis = () => { if (active && document.hidden && isFsRef.current) recordLeave(); };
+    const onBlur = () => { if (active && isFsRef.current) recordLeave(); };
+
+    document.addEventListener("fullscreenchange", onFs);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [stage, disqualified]);
+
+  // 3rd leave → disqualify + kick out (reuses the paste disqualification flow).
+  useEffect(() => {
+    if (leaveCount >= 3 && !disqualified) void disqualifyAndKick();
+  }, [leaveCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Elapsed timer — active during analysing stage
   useEffect(() => {
@@ -849,8 +895,33 @@ function SubmitPageInner() {
     );
   }
 
+  const showGuard = WATCHED_STAGES.includes(stage) && !disqualified && (!isFs || away);
+
   return (
     <div className="min-h-screen bg-grid">
+
+      {/* Stay-on-screen / fullscreen guard — blocks the timed steps unless focused */}
+      {showGuard && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6"
+          style={{ background: "rgba(12,20,30,0.92)", backdropFilter: "blur(6px)" }}>
+          <div className="max-w-md w-full rounded-2xl border p-8 text-center"
+            style={{ background: "#FFFFFF", borderColor: leaveCount > 0 ? "#FCA5A5" : "#E4E2DD" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>{leaveCount > 0 ? "⚠️" : "🖥️"}</div>
+            <h2 className="text-lg font-bold mb-2" style={{ color: leaveCount > 0 ? "#B42318" : "#1A1A1A" }}>
+              {leaveCount > 0 ? `Stay on the assessment — warning ${leaveCount} of 2` : "Fullscreen required"}
+            </h2>
+            <p className="text-sm mb-5" style={{ color: "#5A6472", lineHeight: 1.6 }}>
+              {leaveCount > 0
+                ? "Leaving the assessment — switching apps or tabs, or exiting fullscreen — is not allowed during the timed questions. One more time and you will be disqualified and unable to re-apply."
+                : "This step runs in fullscreen so you stay focused on the assessment. Do not switch to other apps (including your editor) while answering."}
+            </p>
+            <button onClick={enterAssessmentFullscreen}
+              className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: "#7C3AED" }}>
+              {leaveCount > 0 ? "Return to assessment" : "Enter fullscreen & begin"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
