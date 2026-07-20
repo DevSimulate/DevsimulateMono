@@ -19,6 +19,7 @@ import waitlistRouter from "./routes/waitlist";
 import feedbackRouter from "./routes/feedback";
 import graderRouter from "./routes/grader";
 import certificatesRouter from "./routes/certificates";
+import receiptsRouter from "./routes/receipts";
 import devfestRouter from "./routes/devfest";
 import { startReviewWorker } from "./lib/queue";
 
@@ -88,6 +89,7 @@ app.use("/feedback", feedbackRouter);
 app.use("/grader", graderRouter);
 app.use("/employer/campaigns", campaignsRouter);
 app.use("/certificates", certificatesRouter);
+app.use("/receipts", receiptsRouter);
 app.use("/devfest", devfestRouter);
 app.use("/employer", employerPortalRouter);
 app.use("/", employerDemoRouter);
