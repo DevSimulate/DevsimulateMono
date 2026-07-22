@@ -350,3 +350,36 @@ model CandidateDecision {
 
   @@index([candidateId])
 }
+
+// Participant feedback survey (DevFest / assessments). Public — a candidate opens
+// the shareable /feedback link (optionally tagged with ?event=) and submits. Not
+// tied to a user row so responses can stay anonymous.
+model SurveyResponse {
+  id                String   @id @default(uuid())
+  event             String?  // e.g. "LMKR-DEVFEST-2026" — from the ?event= link param
+  overallRating     Int?     // Q1  overall experience 1–5
+  nps               Int?     // Q2  recommend 0–10
+  vsTraditional     String?  // Q3  vs traditional assessments
+  vsTraditionalWhy  String?  @db.Text
+  ticketClear       Int?     // Q4  ticket clear 1–5
+  ticketRealistic   Int?     // Q4  ticket realistic 1–5
+  ticketChallenging Int?     // Q4  ticket appropriately challenging 1–5
+  difficulty        String?  // Q5
+  timeGiven         String?  // Q6
+  instructionsClear String?  // Q7
+  instructionsIssue String?  @db.Text
+  aiFeel            String?  // Q8
+  aiComments        String?  @db.Text
+  verbalFeel        String?  // Q9
+  verbalComments    String?  @db.Text
+  fairChance        String?  // Q10
+  technicalIssues   String[] // Q11 multi-select
+  issueResolution   String?  // Q12
+  bestPart          String?  @db.Text
+  improve           String?  @db.Text
+  contact           String?  // Q15 optional name/email
+  userAgent         String?
+  createdAt         DateTime @default(now())
+
+  @@index([event])
+}
