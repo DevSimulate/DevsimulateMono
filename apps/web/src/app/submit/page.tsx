@@ -225,20 +225,22 @@ function SubmitPageInner() {
     } catch { /* UI is locked regardless of the network result */ }
   }
 
-  // Pasting is blocked in the answer fields. Escalation:
+  // Paste check DISABLED — pasting is now allowed in the answer fields.
+  // (Left as a no-op so the onPaste handlers on the textareas keep compiling.)
   //   1st attempt  → warning
   //   2nd attempt  → stronger warning (recorded against integrity — advisory)
   //   3rd attempt  → disqualified + kicked out (can't re-apply)
-  function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    e.preventDefault();
-    const next = pasteCount + 1;
-    setPasteCount(next);
-    if (next >= 3) {
-      void disqualifyAndKick("paste");
-    } else {
-      setPasteWarn(true);
-      setTimeout(() => setPasteWarn(false), 7000);
-    }
+  function handleAnswerPaste(_e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    // no-op: paste check commented out
+    // e.preventDefault();
+    // const next = pasteCount + 1;
+    // setPasteCount(next);
+    // if (next >= 3) {
+    //   void disqualifyAndKick("paste");
+    // } else {
+    //   setPasteWarn(true);
+    //   setTimeout(() => setPasteWarn(false), 7000);
+    // }
   }
 
   // Enters fullscreen for the assessment (needs a user gesture — the overlay button).
