@@ -69,8 +69,23 @@ export default function FeedbackPage() {
 
   const submit = async () => {
     setError(null);
-    if (a.overallRating == null || a.nps == null || !a.vsTraditional) {
-      setError("Please answer the first three questions (they're required).");
+    const missing: number[] = [];
+    if (a.overallRating == null) missing.push(1);
+    if (a.nps == null) missing.push(2);
+    if (!a.vsTraditional) missing.push(3);
+    if (a.ticketClear == null || a.ticketRealistic == null || a.ticketChallenging == null) missing.push(4);
+    if (!a.difficulty) missing.push(5);
+    if (!a.timeGiven) missing.push(6);
+    if (!a.instructionsClear) missing.push(7);
+    if (!a.aiFeel) missing.push(8);
+    if (!a.verbalFeel) missing.push(9);
+    if (!a.fairChance) missing.push(10);
+    if (a.technicalIssues.length === 0) missing.push(11);
+    if (!a.issueResolution) missing.push(12);
+    if (!a.bestPart?.trim()) missing.push(13);
+    if (!a.improve?.trim()) missing.push(14);
+    if (missing.length) {
+      setError(`Please answer all required questions — missing: ${missing.map((n) => `Q${n}`).join(", ")}.`);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -158,7 +173,7 @@ export default function FeedbackPage() {
           {/* Section B */}
           <SectionLabel>The assessment itself</SectionLabel>
 
-          <Q n={4} label="The ticket/problem I worked on was…">
+          <Q n={4} label="The ticket/problem I worked on was…" required>
             <Likert rows={[
               { key: "ticketClear", text: "Clear and well-explained" },
               { key: "ticketRealistic", text: "Realistic (felt like a real bug/task)" },
@@ -166,15 +181,15 @@ export default function FeedbackPage() {
             ]} values={a} onChange={(k, v) => set(k as keyof Answers, v)} />
           </Q>
 
-          <Q n={5} label="The difficulty level was:">
+          <Q n={5} label="The difficulty level was:" required>
             <Choice options={["Too easy", "Slightly easy", "Just right", "Slightly hard", "Too hard"]} value={a.difficulty} onChange={(v) => set("difficulty", v)} />
           </Q>
 
-          <Q n={6} label="The time given for the assessment was:">
+          <Q n={6} label="The time given for the assessment was:" required>
             <Choice options={["Too short", "Slightly short", "Just right", "More than enough"]} value={a.timeGiven} onChange={(v) => set("timeGiven", v)} />
           </Q>
 
-          <Q n={7} label="Were the instructions for getting started (repo, setup, submitting your PR) clear?">
+          <Q n={7} label="Were the instructions for getting started (repo, setup, submitting your PR) clear?" required>
             <Choice options={["Yes, smooth", "Mostly, minor confusion", "No, I struggled"]} value={a.instructionsClear} onChange={(v) => set("instructionsClear", v)} />
             <TextArea placeholder="What tripped you up? (optional)" value={a.instructionsIssue} onChange={(v) => set("instructionsIssue", v)} />
           </Q>
@@ -182,7 +197,7 @@ export default function FeedbackPage() {
           {/* Section C */}
           <SectionLabel>Format: AI &amp; verbal defense</SectionLabel>
 
-          <Q n={8} label="You were allowed to use AI while coding. How did that feel?">
+          <Q n={8} label="You were allowed to use AI while coding. How did that feel?" required>
             <Choice
               options={[
                 "Great — it reflects how I actually work",
@@ -196,7 +211,7 @@ export default function FeedbackPage() {
             <TextArea placeholder="Comments (optional)" value={a.aiComments} onChange={(v) => set("aiComments", v)} />
           </Q>
 
-          <Q n={9} label="The follow-up questions / verbal defense (explaining your solution) were:">
+          <Q n={9} label="The follow-up questions / verbal defense (explaining your solution) were:" required>
             <Choice
               options={[
                 "Fair and a good test of understanding",
@@ -210,14 +225,14 @@ export default function FeedbackPage() {
             <TextArea placeholder="Comments (optional)" value={a.verbalComments} onChange={(v) => set("verbalComments", v)} />
           </Q>
 
-          <Q n={10} label="Did the assessment give you a fair chance to show your real engineering ability?">
+          <Q n={10} label="Did the assessment give you a fair chance to show your real engineering ability?" required>
             <Choice options={["Definitely yes", "Mostly", "Somewhat", "Not really"]} value={a.fairChance} onChange={(v) => set("fairChance", v)} />
           </Q>
 
           {/* Section D */}
           <SectionLabel>Platform &amp; technical</SectionLabel>
 
-          <Q n={11} label="Did you hit any technical issues during the assessment? (select all that apply)">
+          <Q n={11} label="Did you hit any technical issues during the assessment? (select all that apply)" required>
             <Multi
               options={[
                 "No issues",
@@ -232,18 +247,18 @@ export default function FeedbackPage() {
             />
           </Q>
 
-          <Q n={12} label="If you hit an issue, how well was it resolved?">
+          <Q n={12} label="If you hit an issue, how well was it resolved?" required>
             <Choice options={["Resolved quickly", "Resolved eventually", "Not resolved", "N/A"]} value={a.issueResolution} onChange={(v) => set("issueResolution", v)} />
           </Q>
 
           {/* Section E */}
           <SectionLabel>Open feedback</SectionLabel>
 
-          <Q n={13} label="What was the best part of the DevFest assessment?">
+          <Q n={13} label="What was the best part of the DevFest assessment?" required>
             <TextArea placeholder="Your answer" value={a.bestPart} onChange={(v) => set("bestPart", v)} rows={3} />
           </Q>
 
-          <Q n={14} label="What's the one thing you'd most want us to improve?">
+          <Q n={14} label="What's the one thing you'd most want us to improve?" required>
             <TextArea placeholder="Your answer" value={a.improve} onChange={(v) => set("improve", v)} rows={3} />
           </Q>
 
