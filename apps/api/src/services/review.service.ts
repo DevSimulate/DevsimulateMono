@@ -192,6 +192,13 @@ ${ticket.description}
           {
             type: "text",
             text: `## PR Description (written by the developer)
+The developer answered four guided prompts — Root cause, How I found it, Why this fix,
+and How I verified it — and was explicitly instructed to be SHORT AND PRECISE (2-4
+sentences per section). Judge the QUALITY and SPECIFICITY of the reasoning, not the
+length. A tight, concrete answer must score at least as well as a long one; do not
+reward padding, and do not penalise brevity where the reasoning is sound and complete.
+A missing or empty section, however, is a genuine gap — score it as such.
+
 ${prDescription || "(no description provided)"}
 
 ## PR Diff

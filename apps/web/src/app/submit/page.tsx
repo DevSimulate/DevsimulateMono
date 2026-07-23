@@ -136,6 +136,40 @@ function ScoreBar({ label, value, max }: { label: string; value: number | null; 
 }
 
 
+// The write-up is split into four explicit sections so candidates know exactly
+// what each one is asking for, instead of guessing from a blank box. The four
+// answers are composed back into one markdown PR description on submit.
+const DESCRIBE_FIELDS = [
+  {
+    key: "rootCause",
+    label: "1. Root cause",
+    heading: "Root cause",
+    help: "What was actually broken, and why did it happen? Name the specific cause — not the symptom.",
+    placeholder: "e.g. The discount factor used the raw percentage instead of a fraction, so…",
+  },
+  {
+    key: "investigation",
+    label: "2. How you found it",
+    heading: "How I found it",
+    help: "How did you track it down? Mention what you read, ran, or tested to confirm it.",
+    placeholder: "e.g. Traced the value from the API into the calculation and reproduced it by…",
+  },
+  {
+    key: "whyFix",
+    label: "3. Why this fix",
+    heading: "Why this fix",
+    help: "Why this approach over the alternatives? Note any trade-off you accepted.",
+    placeholder: "e.g. Fixed it at the source rather than the caller because…",
+  },
+  {
+    key: "verification",
+    label: "4. How you verified it",
+    heading: "How I verified it",
+    help: "What did you run or observe that proves it works now? Be concrete.",
+    placeholder: "e.g. Re-ran the scenario and confirmed the value is now…",
+  },
+] as const;
+
 function SubmitPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -151,6 +185,10 @@ function SubmitPageInner() {
   const [stage,        setStage]        = useState<Stage>("loading");
   const [ticket,       setTicket]       = useState<Ticket | null>(null);
   const [description,  setDescription]  = useState("");
+  // Per-section answers for the describe stage (composed into `description`).
+  const [fields,       setFields]       = useState<Record<string, string>>({
+    rootCause: "", investigation: "", whyFix: "", verification: "",
+  });
   const [designDoc,    setDesignDoc]    = useState("");
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [question1,    setQuestion1]    = useState("");
@@ -347,6 +385,16 @@ function SubmitPageInner() {
   // to another app (e.g. VS Code + an AI assistant), hiding the tab, or exiting
   // fullscreen is a "leave". 2 warnings, then the 3rd disqualifies (voids the
   // submission + blocks re-applying — same flow as pasting).
+  // Compose the four section answers into the markdown PR description that gets
+  // submitted and reviewed. Empty sections are omitted.
+  useEffect(() => {
+    const composed = DESCRIBE_FIELDS
+      .filter((f) => fields[f.key]?.trim())
+      .map((f) => `## ${f.heading}\n${fields[f.key].trim()}`)
+      .join("\n\n");
+    setDescription(composed);
+  }, [fields]);
+
   const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2"];
   useEffect(() => {
     const active = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified;
@@ -1022,19 +1070,28 @@ function SubmitPageInner() {
         {stage === "describe" && (
           <div className="card p-6 fade-in-up">
             <div className="section-label mb-1">Your Approach</div>
-            <p className="text-sm mb-5" style={{ color: "#6B6B6B" }}>
-              Explain your fix — root cause, how you found it, why you chose this solution.
-              Be specific — this is what the review scores.
+            <p className="text-sm mb-5" style={{ color: "#6B6B6B", lineHeight: 1.7 }}>
+              Answer each section below. <strong style={{ color: "#1A1A1A" }}>Be short and precise — 2–4 sentences each.</strong>{" "}
+              We score the quality of your reasoning, not the length. Vague or padded answers score lower than a tight, specific one.
             </p>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onPaste={handleAnswerPaste}
-              placeholder={"## What was the root cause?\n\n## How did you investigate?\n\n## Why did you choose this solution?\n\n## How do you know it works?"}
-              rows={12}
-              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
-              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
-            />
+
+            {DESCRIBE_FIELDS.map((f) => (
+              <div key={f.key} className="mb-5">
+                <label className="block text-sm font-bold mb-1" style={{ color: "#1A1A1A" }}>
+                  {f.label}
+                </label>
+                <p className="text-xs mb-2" style={{ color: "#6B6B6B", lineHeight: 1.6 }}>{f.help}</p>
+                <textarea
+                  value={fields[f.key] ?? ""}
+                  onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  onPaste={handleAnswerPaste}
+                  placeholder={f.placeholder}
+                  rows={3}
+                  className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none"
+                  style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+                />
+              </div>
+            ))}
             {pasteWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                 style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
