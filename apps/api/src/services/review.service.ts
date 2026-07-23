@@ -5,34 +5,105 @@ import { Ticket, Codebase } from "@prisma/client";
 
 type TicketWithCodebase = Ticket & { codebase: Codebase };
 
+const MAX_DIFF_CHARS = 12_000;
+
+// Vendored / generated / binary paths we never want to review. Candidates who
+// forget a .gitignore commit these (node_modules, dist, …), which balloons the
+// PR to the point GitHub refuses to generate a diff and the review would VOID.
+const IGNORED_DIR = /(^|\/)(node_modules|dist|build|coverage|out-tsc|\.angular|\.next|vendor|\.cache|bin|obj)\//i;
+const IGNORED_FILE = /(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/i;
+const BINARY_EXT = /\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|pdf|zip|gz|tgz|mp4|mov|map|min\.js|min\.css)$/i;
+
+function isVendored(path: string): boolean {
+  return IGNORED_DIR.test(path) || IGNORED_FILE.test(path) || BINARY_EXT.test(path);
+}
+
 /**
- * Fetches the unified diff for a pull request from GitHub.
- * Returns the raw diff text (limited to 12,000 characters to stay within
- * the context budget while preserving meaningful signal).
+ * Fetches the unified diff for a pull request from GitHub (capped at 12k chars).
+ *
+ * Fast path: the whole-PR unified diff — works for normal, clean PRs.
+ * Fallback: if GitHub refuses the diff (too large / 406) or it's oversized, we
+ * rebuild a *source-only* diff from the per-file patch list, skipping vendored,
+ * generated and binary files. This keeps a candidate who accidentally committed
+ * build output (missing .gitignore) from silently VOIDing their review — they
+ * still get scored on their actual code change.
  */
 export async function fetchPrDiff(
   owner: string,
   repo: string,
   prNumber: number
 ): Promise<string> {
-  const response = await octokit.pulls.get({
-    owner,
-    repo,
-    pull_number: prNumber,
-    mediaType: { format: "diff" },
-  });
-
-  const diff = response.data as unknown as string;
-  const MAX_DIFF_CHARS = 12_000;
-
-  if (diff.length > MAX_DIFF_CHARS) {
-    return (
-      diff.slice(0, MAX_DIFF_CHARS) +
-      "\n\n[diff truncated — showing first 12,000 characters]"
+  try {
+    const response = await octokit.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+      mediaType: { format: "diff" },
+    });
+    const diff = response.data as unknown as string;
+    if (diff.length <= MAX_DIFF_CHARS) return diff;
+    // Oversized — fall through so we don't send 12k of vendored junk to the reviewer.
+  } catch (err) {
+    console.warn(
+      `[review] full diff unavailable for ${owner}/${repo}#${prNumber}, falling back to per-file source diff:`,
+      err instanceof Error ? err.message : err
     );
   }
+  return fetchSourceOnlyDiff(owner, repo, prNumber);
+}
 
-  return diff;
+/**
+ * Rebuilds a diff from the PR's per-file patches, keeping only reviewable source
+ * files. Paginates defensively (build-artifact PRs can list thousands of files)
+ * and stops once the char budget is filled.
+ */
+async function fetchSourceOnlyDiff(
+  owner: string,
+  repo: string,
+  prNumber: number
+): Promise<string> {
+  const parts: string[] = [];
+  let budget = MAX_DIFF_CHARS;
+  let skippedVendored = 0;
+  let truncated = false;
+  const PAGE_CAP = 20; // scan up to ~2,000 files
+
+  for (let page = 1; page <= PAGE_CAP && budget > 0; page++) {
+    const { data: files } = await octokit.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: 100,
+      page,
+    });
+    if (files.length === 0) break;
+
+    for (const f of files) {
+      if (isVendored(f.filename)) { skippedVendored++; continue; }
+      if (!f.patch) continue; // binary or patch omitted by GitHub
+      const block = `diff --git a/${f.filename} b/${f.filename}\n${f.patch}\n`;
+      if (block.length >= budget) {
+        parts.push(block.slice(0, budget));
+        budget = 0;
+        truncated = true;
+        break;
+      }
+      parts.push(block);
+      budget -= block.length;
+    }
+    if (files.length < 100) break; // last page
+  }
+
+  let out = parts.join("\n").trim();
+  if (!out) {
+    out =
+      "[No reviewable source changes found — the PR appears to contain only build " +
+      "artifacts / vendored files (e.g. node_modules, dist). Ensure the fix is committed " +
+      "to source files and that build output is gitignored.]";
+  }
+  if (truncated) out += "\n\n[diff truncated to fit the review budget]";
+  if (skippedVendored > 0) out += `\n\n[${skippedVendored} vendored/build/binary file(s) omitted from review]`;
+  return out;
 }
 
 /**
