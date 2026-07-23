@@ -100,6 +100,7 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
  * Returns a single ticket by id.
  */
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
   try {
     const ticket = await getTicketById(req.params.id);
 
@@ -108,7 +109,22 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ data: ticket });
+    // Effective proctoring policy = the candidate's campaign for this ticket.
+    // Falls back to strict if they aren't in a campaign that scopes this ticket,
+    // so an assessment never runs unproctored by accident.
+    const candidacy = await prisma.campaignCandidate.findFirst({
+      where: { userId, campaign: { ticketIds: { has: ticket.id } } },
+      orderBy: { joinedAt: "desc" },
+      select: { campaign: { select: { blockPaste: true, requireFullscreen: true } } },
+    });
+    const proctoring = candidacy?.campaign
+      ? {
+          blockPaste: candidacy.campaign.blockPaste,
+          requireFullscreen: candidacy.campaign.requireFullscreen,
+        }
+      : { blockPaste: true, requireFullscreen: true };
+
+    res.json({ data: ticket, proctoring });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch ticket";
     res.status(500).json({ error: message });

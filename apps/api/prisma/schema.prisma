@@ -297,6 +297,11 @@ model Campaign {
   type           CampaignType        @default(HIRING)
   status         CampaignStatus      @default(ACTIVE)
   devFestTag     String?
+  // Proctoring policy for assessments run under this campaign. Admin-toggleable
+  // via a simple UPDATE — the assessment page reads these at runtime instead of
+  // hardcoding the behavior. Default strict.
+  blockPaste        Boolean          @default(true)
+  requireFullscreen Boolean          @default(true)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   org            Organisation        @relation(fields: [orgId], references: [id])

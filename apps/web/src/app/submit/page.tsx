@@ -167,6 +167,8 @@ function SubmitPageInner() {
   const [elapsed,      setElapsed]      = useState(0);
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
+  // Proctoring policy — loaded from the ticket's campaign. Default strict until it loads.
+  const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
   const [disqualified, setDisqualified] = useState(false);
   const [dqCause,      setDqCause]      = useState<"paste" | "leave" | null>(null);
   const [blurCount,    setBlurCount]    = useState(0);
@@ -225,22 +227,22 @@ function SubmitPageInner() {
     } catch { /* UI is locked regardless of the network result */ }
   }
 
-  // Paste check DISABLED — pasting is now allowed in the answer fields.
-  // (Left as a no-op so the onPaste handlers on the textareas keep compiling.)
+  // Pasting is blocked in the answer fields WHEN the campaign policy says so
+  // (proctoring.blockPaste). Escalation:
   //   1st attempt  → warning
   //   2nd attempt  → stronger warning (recorded against integrity — advisory)
   //   3rd attempt  → disqualified + kicked out (can't re-apply)
-  function handleAnswerPaste(_e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    // no-op: paste check commented out
-    // e.preventDefault();
-    // const next = pasteCount + 1;
-    // setPasteCount(next);
-    // if (next >= 3) {
-    //   void disqualifyAndKick("paste");
-    // } else {
-    //   setPasteWarn(true);
-    //   setTimeout(() => setPasteWarn(false), 7000);
-    // }
+  function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (!proctoring.blockPaste) return; // campaign allows paste — no-op
+    e.preventDefault();
+    const next = pasteCount + 1;
+    setPasteCount(next);
+    if (next >= 3) {
+      void disqualifyAndKick("paste");
+    } else {
+      setPasteWarn(true);
+      setTimeout(() => setPasteWarn(false), 7000);
+    }
   }
 
   // Enters fullscreen for the assessment (needs a user gesture — the overlay button).
@@ -310,6 +312,7 @@ function SubmitPageInner() {
     })
       .then((r) => r.json())
       .then((data) => {
+        if (data.proctoring) setProctoring(data.proctoring);
         if (data.data) {
           setTicket(data.data);
           setStage(data.data.stack === "SYSTEM_DESIGN" ? "sd_write" : "describe");
@@ -337,7 +340,7 @@ function SubmitPageInner() {
   // submission + blocks re-applying — same flow as pasting).
   const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2"];
   useEffect(() => {
-    const active = WATCHED_STAGES.includes(stage) && !disqualified;
+    const active = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified;
 
     const recordLeave = () => {
       const now = Date.now();
@@ -364,7 +367,7 @@ function SubmitPageInner() {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("blur", onBlur);
     };
-  }, [stage, disqualified]);
+  }, [stage, disqualified, proctoring.requireFullscreen]);
 
   // 3rd leave → disqualify + kick out (reuses the paste disqualification flow).
   useEffect(() => {
@@ -902,7 +905,7 @@ function SubmitPageInner() {
     );
   }
 
-  const showGuard = WATCHED_STAGES.includes(stage) && !disqualified && (!isFs || away);
+  const showGuard = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified && (!isFs || away);
 
   return (
     <div className="min-h-screen bg-grid">
@@ -1164,7 +1167,7 @@ function SubmitPageInner() {
               value={answer1}
               onChange={(e) => setAnswer1(e.target.value)}
               onPaste={handleAnswerPaste}
-              placeholder="Type your answer — pasting is disabled…"
+              placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
               disabled={timeLeft === 0}
               className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
@@ -1222,7 +1225,7 @@ function SubmitPageInner() {
               value={answer2}
               onChange={(e) => setAnswer2(e.target.value)}
               onPaste={handleAnswerPaste}
-              placeholder="Type your answer — pasting is disabled…"
+              placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
               disabled={timeLeft === 0}
               className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
