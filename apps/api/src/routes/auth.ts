@@ -139,12 +139,19 @@ router.get(
     try {
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { githubAccessToken: true, githubUsername: true },
+        select: {
+          githubAccessToken: true,
+          githubUsername: true,
+          disqualifiedAt: true,
+          disqualifiedReason: true,
+        },
       });
       res.json({
         data: {
           token: user?.githubAccessToken ?? null,
           githubUsername: user?.githubUsername ?? null,
+          disqualifiedAt: user?.disqualifiedAt ?? null,
+          disqualifiedReason: user?.disqualifiedReason ?? null,
         },
       });
     } catch {

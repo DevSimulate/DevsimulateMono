@@ -170,7 +170,8 @@ function SubmitPageInner() {
   // Proctoring policy — loaded from the ticket's campaign. Default strict until it loads.
   const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
   const [disqualified, setDisqualified] = useState(false);
-  const [dqCause,      setDqCause]      = useState<"paste" | "leave" | null>(null);
+  const [dqCause,      setDqCause]      = useState<"paste" | "leave" | "loaded" | null>(null);
+  const [dqReason,     setDqReason]     = useState<string | null>(null);
   const [blurCount,    setBlurCount]    = useState(0);
   const [leaveCount,   setLeaveCount]   = useState(0);   // times they left the assessment (2 warns → disqualify)
   const [isFs,         setIsFs]         = useState(false);
@@ -330,7 +331,15 @@ function SubmitPageInner() {
     if (!token) return;
     fetch(`${API_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
-      .then((j) => { if (j.data?.githubUsername) setUsername(j.data.githubUsername); })
+      .then((j) => {
+        if (j.data?.githubUsername) setUsername(j.data.githubUsername);
+        // Persisted disqualification — re-lock on refresh instead of re-showing the assessment.
+        if (j.data?.disqualifiedAt) {
+          setDisqualified(true);
+          setDqCause("loaded");
+          setDqReason(j.data.disqualifiedReason ?? null);
+        }
+      })
       .catch(() => null);
   }, [sessionReady]);
 
@@ -895,10 +904,14 @@ function SubmitPageInner() {
           <p className="text-sm mb-4" style={{ color: "#5A6472", lineHeight: 1.6 }}>
             {dqCause === "leave"
               ? "Leaving the assessment — switching to another app or tab, or exiting fullscreen — is not allowed during the timed questions. After two warnings, you left a third time, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
-              : "Pasting into the answer fields is not allowed. After two warnings, a third paste attempt was detected, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."}
+              : dqCause === "paste"
+              ? "Pasting into the answer fields is not allowed. After two warnings, a third paste attempt was detected, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
+              : dqReason
+              ? `You have been disqualified from this assessment: ${dqReason} You cannot re-take it on this account.`
+              : "You have been disqualified from this assessment and cannot re-take it on this account."}
           </p>
           <p className="text-xs" style={{ color: "#98A2B3" }}>
-            If you believe this is a mistake, contact the event organiser.
+            If you believe this is a mistake, contact the administrator so it can be reviewed.
           </p>
         </div>
       </div>
