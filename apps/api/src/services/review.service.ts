@@ -432,6 +432,14 @@ ${ticket.description}
           {
             type: "text",
             text: `## Candidate's System Design Answer
+The candidate answered six guided prompts — Requirements & Scale, Architecture Overview,
+API Design, Data Model & Storage, Key Trade-offs, and Scaling Strategy — and was explicitly
+instructed to be SHORT AND PRECISE (a few sentences or tight bullets per section). Judge the
+QUALITY and SPECIFICITY of the reasoning and trade-offs, not the length. A tight, concrete
+design must score at least as well as a verbose one; do not reward padding, and do not
+penalise brevity where the reasoning is sound. A missing or empty section, however, is a
+genuine gap — score it as such.
+
 ${designDoc}
 
 Please score this system design now. Return ONLY the JSON object.`,

@@ -170,6 +170,53 @@ const DESCRIBE_FIELDS = [
   },
 ] as const;
 
+// Same idea for the system design answer — explicit sections so candidates know
+// what each part is asking for. Composed back into one markdown design document.
+const DESIGN_FIELDS = [
+  {
+    key: "requirements",
+    label: "1. Requirements & scale",
+    heading: "Requirements & Scale",
+    help: "What is in scope, and what numbers are you designing for? State your assumptions (users, requests/sec, data volume) — don't leave them implicit.",
+    placeholder: "e.g. ~50k daily users, 500 req/s peak, 2 TB of stored events. Out of scope: billing…",
+  },
+  {
+    key: "architecture",
+    label: "2. Architecture overview",
+    heading: "Architecture Overview",
+    help: "What are the main components and how does a request flow through them? Name the actual technologies.",
+    placeholder: "e.g. Client → API gateway → service → Postgres, with Redis for caching and…",
+  },
+  {
+    key: "api",
+    label: "3. API design",
+    heading: "API Design",
+    help: "The key endpoints or interfaces: what they take, what they return, and why shaped that way.",
+    placeholder: "e.g. POST /orders — takes …, returns …; paginated because…",
+  },
+  {
+    key: "dataModel",
+    label: "4. Data model & storage",
+    heading: "Data Model & Storage",
+    help: "The core entities, how they're stored, and why that store. Mention indexing or partitioning if it matters.",
+    placeholder: "e.g. Orders keyed by (tenantId, orderId) in Postgres; indexed on … because…",
+  },
+  {
+    key: "tradeoffs",
+    label: "5. Key trade-offs",
+    heading: "Key Trade-offs",
+    help: "What did you deliberately choose against, and what does your choice cost you? This is the strongest signal in the whole answer.",
+    placeholder: "e.g. Chose eventual consistency for reads, accepting stale data up to 2s, because…",
+  },
+  {
+    key: "scaling",
+    label: "6. Scaling & failure",
+    heading: "Scaling Strategy",
+    help: "What breaks first as load grows, and how do you handle it? Include the main failure mode and your mitigation.",
+    placeholder: "e.g. The write path saturates first; shard by tenantId and add a queue for…",
+  },
+] as const;
+
 function SubmitPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -190,6 +237,10 @@ function SubmitPageInner() {
     rootCause: "", investigation: "", whyFix: "", verification: "",
   });
   const [designDoc,    setDesignDoc]    = useState("");
+  // Per-section answers for the system design stage (composed into `designDoc`).
+  const [designFields, setDesignFields] = useState<Record<string, string>>({
+    requirements: "", architecture: "", api: "", dataModel: "", tradeoffs: "", scaling: "",
+  });
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [question1,    setQuestion1]    = useState("");
   const [question2,    setQuestion2]    = useState("");
@@ -394,6 +445,15 @@ function SubmitPageInner() {
       .join("\n\n");
     setDescription(composed);
   }, [fields]);
+
+  // Same for the system design document.
+  useEffect(() => {
+    const composed = DESIGN_FIELDS
+      .filter((f) => designFields[f.key]?.trim())
+      .map((f) => `## ${f.heading}\n${designFields[f.key].trim()}`)
+      .join("\n\n");
+    setDesignDoc(composed);
+  }, [designFields]);
 
   const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2"];
   useEffect(() => {
@@ -1140,19 +1200,29 @@ function SubmitPageInner() {
 
             <div className="card p-6">
               <div className="section-label mb-1">Your Design</div>
-              <p className="text-sm mb-4" style={{ color: "#6B6B6B" }}>
-                Write your complete system design answer. Cover all required components.
-                Be specific — name technologies, describe data flows, justify your choices.
+              <p className="text-sm mb-5" style={{ color: "#6B6B6B", lineHeight: 1.7 }}>
+                Answer each section below. <strong style={{ color: "#1A1A1A" }}>Be short and precise — a few sentences or tight bullets each.</strong>{" "}
+                Name actual technologies, state your assumptions, and justify your choices. We score the
+                quality of your reasoning and trade-offs, not the length.
               </p>
-              <textarea
-                value={designDoc}
-                onChange={(e) => setDesignDoc(e.target.value)}
-                onPaste={handleAnswerPaste}
-                placeholder={"## Requirements & Scale\n\n## Architecture Overview\n\n## API Design\n\n## Data Model & Storage\n\n## Key Trade-offs\n\n## Scaling Strategy"}
-                rows={20}
-                className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3 font-mono"
-                style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
-              />
+
+              {DESIGN_FIELDS.map((f) => (
+                <div key={f.key} className="mb-5">
+                  <label className="block text-sm font-bold mb-1" style={{ color: "#1A1A1A" }}>
+                    {f.label}
+                  </label>
+                  <p className="text-xs mb-2" style={{ color: "#6B6B6B", lineHeight: 1.6 }}>{f.help}</p>
+                  <textarea
+                    value={designFields[f.key] ?? ""}
+                    onChange={(e) => setDesignFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    onPaste={handleAnswerPaste}
+                    placeholder={f.placeholder}
+                    rows={3}
+                    className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none"
+                    style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+                  />
+                </div>
+              ))}
               {pasteWarn && (
                 <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                   style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
