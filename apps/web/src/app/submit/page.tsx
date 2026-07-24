@@ -266,6 +266,7 @@ function SubmitPageInner() {
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
   const [pasteFlagged, setPasteFlagged] = useState(false);  // recorded for review, not a sanction
+  const [pendingReview, setPendingReview] = useState<string | null>(null); // awaiting a human, no penalty
   // Proctoring policy — loaded from the ticket's campaign. Default strict until it loads.
   const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
   const [disqualified, setDisqualified] = useState(false);
@@ -1009,6 +1010,19 @@ function SubmitPageInner() {
         setStage("verbal_review");
         return;
       }
+      // The audio wasn't clear enough to score. Not the candidate's fault and
+      // not their answer's fault — say so neutrally and let them move on rather
+      // than looping them through re-records their microphone will keep failing.
+      if (d.data.lowConfidence) {
+        setVerbalBusy(false);
+        setError(null);
+        setPendingReview(
+          "Your response was recorded and is being reviewed. Audio quality was too low for automatic " +
+          "scoring, so no marks were deducted — a reviewer will confirm your result."
+        );
+        setStage("score");
+        return;
+      }
       if (d.data.score === null || d.data.score === undefined) {
         setVerbalBusy(false);
         setError("Your answer was too short to score — please re-record a fuller explanation.");
@@ -1619,6 +1633,13 @@ function SubmitPageInner() {
         {/* ── Stage: Score ── */}
         {stage === "score" && result && (
           <div className="space-y-5 fade-in-up">
+
+            {pendingReview && (
+              <div className="rounded-xl px-4 py-3 text-sm"
+                style={{ background: "#F0F7FF", border: "1px solid #BFDBFE", color: "#1E40AF", lineHeight: 1.6 }}>
+                {pendingReview}
+              </div>
+            )}
 
             {ticket && (
               <div className="text-center mb-2">

@@ -7,6 +7,7 @@ import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer, generateVerbalQuestionForDesign, scoreVerbalAnswerForDesign } from "../services/review.service";
 import { recomputeUserSkillScore, finalizeSubmission } from "../services/score.service";
 import { consensusVerbal, gatherRuns, SCORING_RUNS } from "../services/consensus";
+import { isLowConfidence, MIN_CONFIDENCE } from "../services/transcript-confidence";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
 
@@ -848,6 +849,17 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
 });
 
 /**
+ * Raises a submission for manual review WITHOUT publishing or penalising it.
+ * The admin needs-attention queue (and the stuck-assessment sweep) picks it up.
+ */
+async function flagForHumanReview(submissionId: string, reason: string): Promise<void> {
+  await prisma.submission.updateMany({
+    where: { id: submissionId, finalized: false },
+    data: { needsAttention: true, needsAttentionReason: reason },
+  });
+}
+
+/**
  * Shared verbal scoring: given a transcript (from Whisper or browser STT), compare
  * it to the written answers + code via Claude and apply the graduated penalty.
  */
@@ -877,7 +889,43 @@ async function processVerbal(
         verbalNote: "No spoken answer captured — not scored; flag for review.",
       },
     });
+    await flagForHumanReview(sub.id, "No spoken answer captured — verbal step needs manual review");
     return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
+  }
+
+  // The transcript came back but the AUDIO was unreliable — noise, a poor mic,
+  // or an accent Whisper struggled with. Scoring it would charge a hardware
+  // problem to the candidate at up to -20, so route it to a human instead and
+  // apply nothing. This is explicitly NOT about the answer being short: a clear
+  // "I don't know" has high confidence and is still scored as failing below.
+  const confidence = sub.followUp.verbalConfidence;
+  if (isLowConfidence(confidence)) {
+    await prisma.followUpQuestion.update({
+      where: { id: sub.followUp.id },
+      data: {
+        verbalTranscript: transcript,
+        verbalScore: null,
+        verbalNote:
+          `Audio quality too low to score reliably (confidence ${(confidence as number).toFixed(2)} < ${MIN_CONFIDENCE}). ` +
+          `Transcript retained for manual review; no penalty applied.`,
+      },
+    });
+    await flagForHumanReview(sub.id, "low-confidence transcript");
+    console.log(`[verbal] ${sub.id} routed to human review — confidence ${confidence}`);
+
+    return {
+      status: 200,
+      body: {
+        data: {
+          score: null,
+          consistent: null,
+          lowConfidence: true,
+          note: "Your response was recorded and is being reviewed.",
+          penalty: 0,
+          newScoreTotal: sub.scoreTotal ?? 0,
+        },
+      },
+    };
   }
 
   // The verbal evaluation can cost 20 points, so it gets the same consensus
@@ -981,12 +1029,29 @@ router.post(
   "/:id/verbal-transcribe",
   raw({ type: () => true, limit: "25mb" }),
   async (req: Request, res: Response): Promise<void> => {
+    const { userId } = (req as AuthenticatedRequest).user;
     try {
       const audio = req.body as Buffer;
       if (!audio || !audio.length) { res.status(400).json({ error: "No audio received" }); return; }
       const mime = (req.headers["content-type"] as string) || "audio/webm";
-      const transcript = await transcribeAudio(audio, mime);
-      res.json({ data: { transcript } });
+      const { text, confidence, source } = await transcribeAudio(audio, mime);
+
+      // Persist the confidence server-side rather than round-tripping it through
+      // the client, so the decision to skip scoring can't be influenced from the
+      // browser. Scoped to the caller's own submission.
+      const owned = await prisma.submission.findFirst({
+        where: { id: req.params.id, userId },
+        select: { id: true },
+      });
+      if (owned) {
+        await prisma.followUpQuestion.updateMany({
+          where: { submissionId: owned.id },
+          data: { verbalConfidence: confidence },
+        });
+      }
+      console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source})`);
+
+      res.json({ data: { transcript: text, confidence } });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Failed to transcribe audio" });
     }
@@ -1007,8 +1072,21 @@ router.post(
       const audio = req.body as Buffer;
       if (!audio || !audio.length) { res.status(400).json({ error: "No audio received" }); return; }
       const mime = (req.headers["content-type"] as string) || "audio/webm";
-      const transcript = await transcribeAudio(audio, mime);
-      const r = await processVerbal(req.params.id, userId, question, transcript);
+      const { text, confidence } = await transcribeAudio(audio, mime);
+
+      // Record confidence before scoring — processVerbal reads it to decide
+      // whether this transcript is trustworthy enough to score at all.
+      const owned = await prisma.submission.findFirst({
+        where: { id: req.params.id, userId }, select: { id: true },
+      });
+      if (owned) {
+        await prisma.followUpQuestion.updateMany({
+          where: { submissionId: owned.id },
+          data: { verbalConfidence: confidence },
+        });
+      }
+
+      const r = await processVerbal(req.params.id, userId, question, text);
       res.status(r.status).json(r.body);
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Failed to transcribe/score audio" });

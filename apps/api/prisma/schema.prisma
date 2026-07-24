@@ -215,6 +215,10 @@ model FollowUpQuestion {
   // after the pinned model exhausted its retries (rate limit / overload).
   // Questions may degrade to keep a candidate moving; scores never do.
   usedFallbackModel   Boolean               @default(false)
+  // 0-1 trust in the Whisper transcript. Below the threshold the spoken answer
+  // is NOT scored and no penalty is applied — bad audio is not a bad answer.
+  // Null means no signal (e.g. browser speech recognition), which scores normally.
+  verbalConfidence    Float?
   answeredAt          DateTime?
   createdAt           DateTime              @default(now())
 }

@@ -722,6 +722,8 @@ Score 0-10:
 
 Set "consistent" to false if the spoken answer contradicts the written answers or the actual fix, or if no real explanation was given.
 
+Judge technical substance strictly, but do NOT penalise grammar, accent-related transcription artifacts, or non-native phrasing. A candidate explaining the right thing in broken English understands their fix; a candidate explaining the wrong thing in fluent English does not.
+
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
   const response = await claudeCall({
@@ -799,6 +801,8 @@ Score 0-10:
 - LOW: vague, generic, contradicts their written answers or the design, or sounds read/scripted rather than understood.
 
 Set "consistent" to false if the spoken answer contradicts the written answers or the design document, or if no real explanation was given.
+
+Judge technical substance strictly, but do NOT penalise grammar, accent-related transcription artifacts, or non-native phrasing. A candidate explaining the right thing in broken English understands their design; a candidate explaining the wrong thing in fluent English does not.
 
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
