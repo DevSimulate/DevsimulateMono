@@ -13,15 +13,31 @@ import {
   LogOut,
   Megaphone,
   CreditCard,
+  Trophy,
+  Mail,
 } from "lucide-react";
 
+// Hiring and DevFest are separate flows: hiring is private and invite-only,
+// DevFest is a public contest with a leaderboard.
 const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: typeof Users }[] }[] = [
   {
     label: "Hiring",
     items: [
-      { href: "/employer/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
-      { href: "/employer/campaigns",  label: "Campaigns",  icon: Megaphone },
-      { href: "/employer/candidates", label: "Candidates", icon: Users },
+      { href: "/employer/dashboard",  label: "Dashboard",   icon: LayoutDashboard },
+      { href: "/employer/hiring",     label: "Roles",       icon: Megaphone },
+      { href: "/employer/candidates", label: "Candidates",  icon: Users },
+    ],
+  },
+  {
+    label: "DevFest",
+    items: [
+      { href: "/employer/devfest",   label: "Events",       icon: Trophy },
+    ],
+  },
+  {
+    label: "All",
+    items: [
+      { href: "/employer/campaigns", label: "All campaigns", icon: Mail },
     ],
   },
   {

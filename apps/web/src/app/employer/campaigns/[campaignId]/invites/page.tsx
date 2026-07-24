@@ -46,6 +46,25 @@ export default function CampaignInvitesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  /** Loads a dropped/selected CSV into the list. */
+  async function readFile(file?: File | null) {
+    if (!file) return;
+    setError(null); setMsg(null);
+    try {
+      const text = await file.text();
+      if (!parseCandidates(text).length) {
+        setError(`No email addresses found in "${file.name}". Make sure it's a CSV with an email column.`);
+        return;
+      }
+      setRaw(text);
+      setFileName(file.name);
+    } catch {
+      setError("Couldn't read that file. Please upload a .csv file.");
+    }
+  }
 
   const load = useCallback(async () => {
     const token = getToken();
@@ -79,6 +98,7 @@ export default function CampaignInvitesPage() {
       const d = j.data;
       setMsg(`Sent ${d.emailed} of ${d.total} — ${d.created} new, ${d.skipped} skipped, ${d.failed} failed.`);
       setRaw("");
+      setFileName(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to send invitations");
@@ -122,13 +142,60 @@ export default function CampaignInvitesPage() {
       {msg && <Banner tone="ok">{msg}</Banner>}
 
       <div style={card}>
-        <textarea
-          value={raw}
-          onChange={(e) => setRaw(e.target.value)}
-          rows={7}
-          placeholder={"Ali Raza, ali@example.com\nSara Khan, sara@example.com\nomar@example.com"}
-          style={{ width: "100%", boxSizing: "border-box", border: "1.5px solid #E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, fontFamily: "monospace", resize: "vertical" }}
-        />
+        {/* Drop zone / file picker — the primary way to load candidates. */}
+        <label
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); void readFile(e.dataTransfer.files?.[0]); }}
+          style={{
+            display: "block", border: `2px dashed ${dragging ? "#4F46E5" : "#CBD5E1"}`,
+            background: dragging ? "#EEF0FF" : "#F8FAFC", borderRadius: 12,
+            padding: "26px 18px", textAlign: "center", cursor: "pointer",
+          }}
+        >
+          <input
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            style={{ display: "none" }}
+            onChange={(e) => { void readFile(e.target.files?.[0]); e.currentTarget.value = ""; }}
+          />
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+            {fileName ? `📄 ${fileName}` : "Upload your candidate file"}
+          </div>
+          <div style={{ fontSize: 12.5, color: "#6B7280" }}>
+            Click to choose a <strong>.csv</strong> file, or drag it here.<br />
+            In Excel: <em>File → Save As → CSV</em>. Columns: name, email (a header row is fine).
+          </div>
+        </label>
+
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ fontSize: 12.5, color: "#6B7280", cursor: "pointer" }}>
+            or paste the list manually
+          </summary>
+          <textarea
+            value={raw}
+            onChange={(e) => { setRaw(e.target.value); setFileName(null); }}
+            rows={6}
+            placeholder={"Ali Raza, ali@example.com\nSara Khan, sara@example.com\nomar@example.com"}
+            style={{ width: "100%", boxSizing: "border-box", marginTop: 8, border: "1.5px solid #E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, fontFamily: "monospace", resize: "vertical" }}
+          />
+        </details>
+
+        {parsed.length > 0 && (
+          <div style={{ marginTop: 12, background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 12px", maxHeight: 132, overflowY: "auto" }}>
+            {parsed.slice(0, 5).map((c, i) => (
+              <div key={i} style={{ fontSize: 12.5, color: "#475569" }}>
+                {c.name ? `${c.name} — ` : ""}{c.email}
+              </div>
+            ))}
+            {parsed.length > 5 && (
+              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
+                …and {parsed.length - 5} more
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
           <span style={{ fontSize: 13, color: "#6B7280" }}>
             {parsed.length} valid {parsed.length === 1 ? "address" : "addresses"} detected

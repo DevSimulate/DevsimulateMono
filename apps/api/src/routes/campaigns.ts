@@ -266,6 +266,10 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         ticketIds: Array.isArray(ticketIds) ? ticketIds : [],
         type: type === "CONTEST" ? CampaignType.CONTEST : CampaignType.HIRING,
         status: CampaignStatus.ACTIVE,
+        // Proctoring defaults follow the flow: a live DevFest is invigilated,
+        // a remote hiring screen is not. Both remain admin-toggleable afterwards.
+        blockPaste: type === "CONTEST",
+        requireFullscreen: type === "CONTEST",
       },
       include: { codebase: true },
     });
@@ -962,6 +966,23 @@ async function ownedCampaign(campaignId: string, userId: string) {
   });
 }
 
+/**
+ * Emailed invitations belong to the HIRING flow only. A DevFest (CONTEST) is
+ * entered through its public shareable link, not by inviting individuals.
+ */
+function rejectIfNotHiring(
+  campaign: { type: CampaignType },
+  res: Response
+): boolean {
+  if (campaign.type !== CampaignType.HIRING) {
+    res.status(400).json({
+      error: "Invitations apply to hiring campaigns only. DevFest events use their public share link.",
+    });
+    return true;
+  }
+  return false;
+}
+
 /** Builds the branded invite email + personal link for one invite. */
 async function buildInvite(
   campaign: Awaited<ReturnType<typeof ownedCampaign>>,
@@ -1001,6 +1022,7 @@ router.post("/:id/invites", async (req: Request, res: Response): Promise<void> =
   try {
     const campaign = await ownedCampaign(req.params.id, userId);
     if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+    if (rejectIfNotHiring(campaign, res)) return;
 
     const ticket = await prisma.ticket.findFirst({
       where: campaign.ticketIds.length
@@ -1099,6 +1121,7 @@ router.post("/:id/invites/remind", async (req: Request, res: Response): Promise<
   try {
     const campaign = await ownedCampaign(req.params.id, userId);
     if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+    if (rejectIfNotHiring(campaign, res)) return;
 
     const pending = await prisma.campaignInvite.findMany({
       where: { campaignId: campaign.id, userId: null },

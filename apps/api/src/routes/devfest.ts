@@ -38,8 +38,10 @@ router.get("/:tag", async (req: Request, res: Response): Promise<void> => {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // CONTEST only. A hiring campaign must never surface on a public leaderboard,
+    // even if someone sets a devFestTag on it by mistake.
     const campaigns: any[] = await (prisma.campaign.findMany as any)({
-      where: { devFestTag: tag },
+      where: { devFestTag: tag, type: "CONTEST" },
       include: {
         codebase:   { select: { name: true } },
         org:        { select: { logoUrl: true, primaryColor: true, accentColor: true, brandName: true } },
