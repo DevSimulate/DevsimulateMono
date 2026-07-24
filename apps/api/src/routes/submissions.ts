@@ -6,6 +6,7 @@ import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer, generateVerbalQuestionForDesign, scoreVerbalAnswerForDesign } from "../services/review.service";
 import { recomputeUserSkillScore } from "../services/score.service";
+import { consensusVerbal, gatherRuns, SCORING_RUNS } from "../services/consensus";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
 
@@ -732,18 +733,35 @@ async function processVerbal(
     return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
   }
 
+  // The verbal evaluation can cost 20 points, so it gets the same consensus
+  // treatment as the PR score: N runs in parallel, median verbal score, and a
+  // majority vote on `consistent` (ties resolve in the candidate's favour).
+  // The graduated penalty logic below is unchanged.
   let scored: Awaited<ReturnType<typeof scoreVerbalAnswer>>;
   if (sub.designDoc) {
-    scored = await scoreVerbalAnswerForDesign(
-      question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", sub.designDoc
+    const designDoc = sub.designDoc;
+    const runs = await gatherRuns(
+      SCORING_RUNS,
+      () => scoreVerbalAnswerForDesign(
+        question, transcript, sub.followUp!.answer1 ?? "", sub.followUp!.answer2 ?? "", designDoc
+      ),
+      `verbal-sd ${sub.id}`
     );
+    if (runs.length === 0) return { status: 502, body: { error: "Verbal scoring is temporarily unavailable — please try again in a moment." } };
+    scored = consensusVerbal(runs).result;
   } else {
     const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
     if (!m) return { status: 400, body: { error: "No valid PR on this submission" } };
     const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
-    scored = await scoreVerbalAnswer(
-      question, transcript, sub.followUp.answer1 ?? "", sub.followUp.answer2 ?? "", diff
+    const runs = await gatherRuns(
+      SCORING_RUNS,
+      () => scoreVerbalAnswer(
+        question, transcript, sub.followUp!.answer1 ?? "", sub.followUp!.answer2 ?? "", diff
+      ),
+      `verbal-pr ${sub.id}`
     );
+    if (runs.length === 0) return { status: 502, body: { error: "Verbal scoring is temporarily unavailable — please try again in a moment." } };
+    scored = consensusVerbal(runs).result;
   }
 
   // Graduated penalty — >=7: no change. Can't defend it aloud / inconsistent: full -20.

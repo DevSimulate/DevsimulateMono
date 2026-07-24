@@ -6,8 +6,10 @@ import {
   reviewSystemDesign, generateFirstQuestionFromDesign,
 } from "../services/review.service";
 import { saveReviewResult, calculateRiskScore } from "../services/score.service";
+import { consensusReview, gatherRuns, SCORING_RUNS } from "../services/consensus";
 import { reviewEvents } from "./review-events";
 import prisma from "./prisma";
+import { ClaudeReviewResult } from "../types/index";
 
 const QUEUE_NAME = "pr-review";
 
@@ -47,21 +49,33 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
         include: { codebase: true },
       });
 
-      let review;
+      let review: ClaudeReviewResult;
       let q1Context: string;
 
       if (submissionType === "SYSTEM_DESIGN") {
         // ── System design review path ────────────────────────────────────────
         const designDoc = job.data.designDoc ?? "";
-        review = await reviewSystemDesign(ticket, designDoc);
+
+        // Score N times in PARALLEL and take the per-dimension median, so one
+        // outlier run can't decide the candidate's score. Latency is that of a
+        // single call, not N× it.
+        const runs = await gatherRuns(
+          SCORING_RUNS,
+          () => reviewSystemDesign(ticket, designDoc),
+          `sd-scoring ${submissionId}`
+        );
+        if (runs.length === 0) throw new Error("All system-design scoring runs failed");
+        const { result, meta } = consensusReview(runs);
+        review = result;
         q1Context = designDoc;
+        console.log(`[review-worker] SD consensus for ${submissionId}: ${meta.runCount}/${SCORING_RUNS} runs → ${review.scoreTotal}${meta.lowConfidenceScoring ? " (LOW CONFIDENCE)" : ""}`);
 
         const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } });
         const riskScore = calculateRiskScore(designDoc, submission.submittedAt, ticket.expectedMinutes);
         await prisma.submission.update({ where: { id: submissionId }, data: { riskScore } });
 
         const [, q1Result] = await Promise.allSettled([
-          saveReviewResult(submissionId, review),
+          saveReviewResult(submissionId, review, { scoringRuns: runs, lowConfidenceScoring: meta.lowConfidenceScoring }),
           generateFirstQuestionFromDesign(ticket, q1Context, review),
         ]);
 
@@ -78,14 +92,25 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
         const { prDescription = "", repoOwner = "", repoName = "", prNumber = 0 } = job.data;
 
         const prDiff = await fetchPrDiff(repoOwner, repoName, prNumber);
-        review = await reviewPullRequest(ticket, prDiff, prDescription);
+
+        // Score N times in PARALLEL and take the per-dimension median — see
+        // consensus.ts. The diff is fetched once and shared across runs.
+        const runs = await gatherRuns(
+          SCORING_RUNS,
+          () => reviewPullRequest(ticket, prDiff, prDescription),
+          `pr-scoring ${submissionId}`
+        );
+        if (runs.length === 0) throw new Error("All PR scoring runs failed");
+        const { result, meta } = consensusReview(runs);
+        review = result;
+        console.log(`[review-worker] PR consensus for ${submissionId}: ${meta.runCount}/${SCORING_RUNS} runs → ${review.scoreTotal}${meta.lowConfidenceScoring ? " (LOW CONFIDENCE)" : ""}`);
 
         const submission = await prisma.submission.findUniqueOrThrow({ where: { id: submissionId } });
         const riskScore = calculateRiskScore(prDescription, submission.submittedAt, ticket.expectedMinutes);
         await prisma.submission.update({ where: { id: submissionId }, data: { riskScore } });
 
         const [, q1Result] = await Promise.allSettled([
-          saveReviewResult(submissionId, review),
+          saveReviewResult(submissionId, review, { scoringRuns: runs, lowConfidenceScoring: meta.lowConfidenceScoring }),
           generateFirstQuestion(ticket, prDiff, review),
         ]);
 

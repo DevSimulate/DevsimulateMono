@@ -168,6 +168,9 @@ model Submission {
   // from different rubric versions are never silently compared like-for-like.
   modelUsed          String?
   rubricVersion      String?
+  // True when only ONE scoring run survived, so the median cross-check could
+  // not happen. Surfaced to admins — the score stands, but it is unverified.
+  lowConfidenceScoring Boolean           @default(false)
   verbalPenalty      Int                 @default(0)
   hiddenTestPenalty  Int                 @default(0)
   riskScore          Int                 @default(0)

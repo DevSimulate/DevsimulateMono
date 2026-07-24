@@ -15,7 +15,13 @@ import { SCORING_MODEL, RUBRIC_VERSION } from "../config/scoring";
  */
 export async function saveReviewResult(
   submissionId: string,
-  review: ClaudeReviewResult
+  review: ClaudeReviewResult,
+  scoring?: {
+    /** Every raw scoring run, kept verbatim for audit. */
+    scoringRuns?: ClaudeReviewResult[];
+    /** True when only one run survived and no median cross-check happened. */
+    lowConfidenceScoring?: boolean;
+  }
 ): Promise<Submission> {
   const existing = await prisma.submission.findUnique({ where: { id: submissionId } });
   if (!existing) throw new Error(`Submission ${submissionId} no longer exists — skipping review save`);
@@ -24,13 +30,20 @@ export async function saveReviewResult(
     where: { id: submissionId },
     data: {
       status: "REVIEWED",
+      // `review` is the CONSENSUS result — scorePrBase keeps its existing
+      // meaning (the raw pre-deduction score), it is just now a median.
       scoreTotal: review.scoreTotal,
       scorePrBase: review.scoreTotal,
       scoreDiagnosis: review.scoreDiagnosis,
       scoreDesign: review.scoreDesign,
       scoreCommunication: review.scoreCommunication,
       scoreExecution: review.scoreExecution,
-      claudeReview: review as object,
+      lowConfidenceScoring: scoring?.lowConfidenceScoring ?? false,
+      claudeReview: {
+        ...review,
+        ...(scoring?.scoringRuns ? { scoringRuns: scoring.scoringRuns } : {}),
+        ...(scoring?.lowConfidenceScoring ? { lowConfidenceScoring: true } : {}),
+      } as object,
       // Provenance — pin every score to the judge that produced it.
       modelUsed: SCORING_MODEL,
       rubricVersion: RUBRIC_VERSION,
