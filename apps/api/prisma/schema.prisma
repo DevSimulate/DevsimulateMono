@@ -179,6 +179,13 @@ model Submission {
   // so a pre-verbal score never appears.
   finalized          Boolean             @default(false)
   pasteAttempts      Int                 @default(0)
+  // Stuck-assessment recovery. A submission that was reviewed but never
+  // finalized is one step from completion and publishes nothing — usually a
+  // failed mic or a closed tab at the verbal step. The sweeper nudges the
+  // candidate once (staleNotifiedAt dedupes) and raises it for an admin.
+  staleNotifiedAt    DateTime?
+  needsAttention     Boolean             @default(false)
+  needsAttentionReason String?
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
   user               User                @relation(fields: [userId], references: [id])

@@ -5,7 +5,7 @@ import { AuthenticatedRequest, ReviewJobData } from "../types/index";
 import prisma from "../lib/prisma";
 import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer, generateVerbalQuestionForDesign, scoreVerbalAnswerForDesign } from "../services/review.service";
-import { recomputeUserSkillScore } from "../services/score.service";
+import { recomputeUserSkillScore, finalizeSubmission } from "../services/score.service";
 import { consensusVerbal, gatherRuns, SCORING_RUNS } from "../services/consensus";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
@@ -409,6 +409,69 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /submissions/:id/resume
+ *
+ * Can this candidate pick up an unfinished assessment? Used when they return
+ * from a stuck-assessment email, or simply reopen the tab after a mic failure.
+ *
+ * Resumption is safe because the verbal question is generated on the spot at
+ * entry, so returning does not hand them back a question they already saw and
+ * had time to prepare for.
+ */
+router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const submission = await prisma.submission.findFirst({
+      where: { id: req.params.id, userId },
+      include: {
+        followUp: { select: { answeredAt: true } },
+        ticket: { select: { id: true, title: true, stack: true } },
+      },
+    });
+    if (!submission) {
+      res.status(404).json({ error: "Submission not found" });
+      return;
+    }
+
+    const deny = (reason: string) => res.json({ data: { resumable: false, reason } });
+
+    if (submission.finalized) return void deny("This assessment is already complete.");
+    if (submission.status !== "REVIEWED") return void deny("This assessment is still being reviewed.");
+    if (!submission.followUp?.answeredAt) {
+      return void deny("The written follow-up questions were never completed, so there is nothing to resume.");
+    }
+
+    // Resumption stops at the campaign deadline — reopening a closed assessment
+    // would let a late finisher onto a board that has already been published.
+    const candidacy = await prisma.campaignCandidate.findFirst({
+      where: { userId, campaign: { ticketIds: { has: submission.ticketId } } },
+      orderBy: { joinedAt: "desc" },
+      select: { campaign: { select: { deadline: true, roleName: true } } },
+    });
+    const deadline = candidacy?.campaign.deadline ?? null;
+    if (deadline && deadline < new Date()) {
+      return void deny(
+        `“${candidacy?.campaign.roleName}” closed on ${deadline.toDateString()}. Contact the administrator to have your result reviewed manually.`
+      );
+    }
+
+    res.json({
+      data: {
+        resumable: true,
+        stage: "verbal",
+        ticketId: submission.ticket.id,
+        ticketTitle: submission.ticket.title,
+        stack: submission.ticket.stack,
+        deadline,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to check resumability";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * GET /submissions/:id/followup
  * Returns follow-up questions for a submission (if generated).
  */
@@ -737,7 +800,7 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
       if (!m) {
         // No PR to ask about → verbal doesn't apply. Finalize now so the score
         // isn't stuck hidden waiting for a verbal step that can't happen.
-        await prisma.submission.update({ where: { id: sub.id }, data: { finalized: true } });
+        await finalizeSubmission(sub.id);
         res.status(400).json({ error: "No valid PR on this submission" });
         return;
       }
@@ -838,22 +901,18 @@ async function processVerbal(
   const newDesign = curDesign - designCut;
   const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - actualPenalty);
 
-  // Verbal is scored — the assessment is now complete, so publish it.
-  await prisma.submission.update({
-    where: { id: sub.id },
-    data: {
-      scoreTotal: newScoreTotal,
-      scoreDiagnosis: newDiag,
-      scoreDesign: newDesign,
-      verbalPenalty: actualPenalty,
-      finalized: true,
-    },
+  // Verbal is scored — the assessment is now complete, so publish it through
+  // the shared finalization path (also recomputes Skill Score post-deduction).
+  await finalizeSubmission(sub.id, {
+    scoreTotal: newScoreTotal,
+    scoreDiagnosis: newDiag,
+    scoreDesign: newDesign,
+    verbalPenalty: actualPenalty,
   });
   await prisma.followUpQuestion.update({
     where: { id: sub.followUp.id },
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
   });
-  await recomputeUserSkillScore(sub.userId); // reflect the verbal deduction in Skill Score
 
   return {
     status: 200,

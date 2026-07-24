@@ -59,6 +59,42 @@ export async function saveReviewResult(
 }
 
 /**
+ * THE publication path. Setting `finalized` is what makes a score real —
+ * leaderboards, employer results and certificates all filter on it — so every
+ * route that completes an assessment must go through here rather than writing
+ * the flag itself. Forking this logic is how a score ends up published without
+ * its skill-score recompute, or recomputed without being published.
+ *
+ * Idempotent: finalizing an already-finalized submission is a no-op recompute.
+ *
+ * @param scores optional score adjustments applied atomically with the flag
+ *               (the verbal deduction uses this).
+ */
+export async function finalizeSubmission(
+  submissionId: string,
+  scores: {
+    scoreTotal?: number;
+    scoreDiagnosis?: number;
+    scoreDesign?: number;
+    verbalPenalty?: number;
+  } = {}
+): Promise<void> {
+  const submission = await prisma.submission.update({
+    where: { id: submissionId },
+    data: {
+      ...scores,
+      finalized: true,
+      // Completing the assessment clears any stuck-assessment flag.
+      needsAttention: false,
+      needsAttentionReason: null,
+    },
+    select: { userId: true },
+  });
+
+  await recomputeUserSkillScore(submission.userId);
+}
+
+/**
  * Recalculates and persists the user's skill score using an exponential
  * moving average weighted toward recent performance.
  */

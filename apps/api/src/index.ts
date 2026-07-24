@@ -22,7 +22,9 @@ import graderRouter from "./routes/grader";
 import certificatesRouter from "./routes/certificates";
 import receiptsRouter from "./routes/receipts";
 import devfestRouter from "./routes/devfest";
+import adminRouter from "./routes/admin";
 import { startReviewWorker } from "./lib/queue";
+import { startStaleSweepWorker } from "./lib/stale-sweep";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 3001);
@@ -93,6 +95,7 @@ app.use("/employer/campaigns", campaignsRouter);
 app.use("/certificates", certificatesRouter);
 app.use("/receipts", receiptsRouter);
 app.use("/devfest", devfestRouter);
+app.use("/admin", adminRouter);
 app.use("/employer", employerPortalRouter);
 app.use("/", employerDemoRouter);
 app.use("/", employerRouter);
@@ -124,7 +127,8 @@ app.listen(PORT, () => {
 // Start background review worker only when Redis is available
 if (process.env.REDIS_URL || process.env.NODE_ENV === "production") {
   startReviewWorker();
-  console.log("[queue] PR review worker started");
+  startStaleSweepWorker();
+  console.log("[queue] PR review worker + stuck-assessment sweep started");
 } else {
   // Try to connect; log a single warning if Redis isn't running
   import("ioredis").then(({ default: IORedis }) => {

@@ -110,6 +110,58 @@ export function assessmentInviteEmail(opts: {
 }
 
 /**
+ * Nudge for a candidate whose assessment was reviewed but never completed —
+ * almost always a failed mic or a closed tab at the verbal step.
+ *
+ * Tone matters here: they have already done the hard part and their score is
+ * sitting unpublished through no fault of their own. This must read as "you're
+ * one step away", never as a warning or a deadline threat.
+ */
+export function stuckAssessmentEmail(opts: {
+  candidateName: string | null;
+  ticketTitle: string;
+  resumeLink: string;
+  deadline: Date | null;
+}): { subject: string; html: string } {
+  const { candidateName, ticketTitle, resumeLink, deadline } = opts;
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const subject = "Your assessment is one step from complete";
+
+  const deadlineLine = deadline
+    ? `<p style="font-size:13px;color:#666;line-height:1.6;">Please finish by <strong>${deadline.toDateString()}</strong>, when this assessment closes.</p>`
+    : "";
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="font-weight:800;font-size:18px;margin-bottom:24px;color:#5B5BD6;">DevSimulate</div>
+    <h1 style="font-size:22px;margin:0 0 16px;">You're one step from finishing</h1>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      Hi ${greeting},<br><br>
+      Your work on <strong>${ticketTitle}</strong> has been reviewed, but the final
+      spoken-explanation step wasn't completed — usually a microphone or browser
+      issue rather than anything you did.
+    </p>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      Your result stays unpublished until that last step is done. It takes about
+      two minutes, and you'll get a new question when you open the link.
+    </p>
+    <div style="margin:24px 0;">
+      <a href="${resumeLink}" style="display:inline-block;background:#5B5BD6;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">
+        Finish your assessment →
+      </a>
+    </div>
+    ${deadlineLine}
+    <p style="font-size:12px;color:#888;line-height:1.6;">
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${resumeLink}</span><br><br>
+      If your microphone still won't work, reply to this email and we'll have it reviewed manually.
+    </p>
+  </div>`;
+
+  return { subject, html };
+}
+
+/**
  * Builds the interview-invite email for a shortlisted candidate.
  */
 export function interviewInviteEmail(opts: {

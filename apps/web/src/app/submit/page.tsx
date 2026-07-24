@@ -224,6 +224,9 @@ function SubmitPageInner() {
   const ticketId   = params.get("ticketId")   ?? "";
   const prUrl      = params.get("prUrl")      ?? "";
   const branchName = params.get("branchName") ?? "";
+  // Set when returning to an assessment that was reviewed but never finished —
+  // typically from the "one step from complete" email after a mic failure.
+  const resumeId   = params.get("resume")     ?? "";
 
   // Session is established from the URL in an effect below (handoff code → cookie
   // + token). `sessionReady` gates the auth-dependent effects until that's done.
@@ -404,6 +407,47 @@ function SubmitPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Resuming an unfinished assessment: skip straight to the verbal step with a
+  // freshly generated question. Safe to re-enter — the question is generated on
+  // the spot, so returning never hands back one they already saw.
+  useEffect(() => {
+    if (!sessionReady || !resumeId) return;
+    const token = getToken();
+    if (!token) return; // the auth effect below redirects to sign-in
+
+    (async () => {
+      try {
+        const r = await fetch(`${API_URL}/submissions/${resumeId}/resume`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const j = await r.json();
+        if (!r.ok || !j.data?.resumable) {
+          setError(j.data?.reason ?? j.error ?? "This assessment can no longer be resumed.");
+          setStage("describe");
+          return;
+        }
+
+        setSubmissionId(resumeId);
+
+        const vq = await fetch(`${API_URL}/submissions/${resumeId}/verbal-question`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}` },
+        });
+        const vqd = await vq.json();
+        if (vq.ok && vqd.data?.question) {
+          setVerbalQuestion(vqd.data.question);
+          setStage("verbal");
+        } else {
+          setError("Couldn't load the final question. Please refresh, or contact the administrator.");
+          setStage("describe");
+        }
+      } catch {
+        setError("Couldn't reach the server to resume your assessment. Please try again.");
+        setStage("describe");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionReady, resumeId]);
+
   // Auth check + ticket fetch
   useEffect(() => {
     if (!sessionReady) return;
@@ -413,6 +457,7 @@ function SubmitPageInner() {
       window.location.href = GITHUB_AUTH_URL;
       return;
     }
+    if (resumeId) return; // the resume effect above owns the stage
     if (!ticketId) {
       setError("Missing ticket information. Please re-submit from the VS Code extension.");
       setStage("describe");
@@ -432,7 +477,7 @@ function SubmitPageInner() {
         }
       })
       .catch(() => setStage("describe"));
-  }, [ticketId, router, sessionReady]);
+  }, [ticketId, router, sessionReady, resumeId]);
 
   // Fetch the candidate's GitHub username for the integrity watermark
   useEffect(() => {
