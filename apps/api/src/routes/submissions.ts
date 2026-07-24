@@ -201,11 +201,63 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * POST /submissions/:id/flag
+ * Body: { reason? }
+ *
+ * Records a proctoring concern against the candidate WITHOUT sanctioning them.
+ * The assessment continues; a human decides what the flag means.
+ *
+ * This replaced the automatic paste disqualification. Ctrl+V is muscle memory —
+ * banning an honest candidate for a reflex was a false positive we were paying
+ * for in support tickets and goodwill. The attempt is still blocked, still
+ * counted, and still feeds the risk score; it just no longer ends the run.
+ */
+router.post("/:id/flag", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { reason } = req.body as { reason?: string };
+  try {
+    const submission = await prisma.submission.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true, ticketId: true },
+    });
+    if (!submission) {
+      res.status(404).json({ error: "Submission not found" });
+      return;
+    }
+
+    const flagReason = reason?.trim() || "paste attempts";
+
+    // Flag the candidacy for whichever campaign scopes this ticket. Only set it
+    // once so the first occurrence keeps its timestamp.
+    const { count } = await prisma.campaignCandidate.updateMany({
+      where: {
+        userId,
+        flaggedForReview: false,
+        campaign: { ticketIds: { has: submission.ticketId } },
+      },
+      data: { flaggedForReview: true, flaggedReason: flagReason, flaggedAt: new Date() },
+    });
+
+    console.log(`[submissions] flagged user ${userId} on ${count} candidacy row(s) — ${flagReason}`);
+    res.json({ data: { flagged: true } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to flag";
+    console.error("[submissions] flag error:", message);
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
  * POST /submissions/:id/disqualify
  * Body: { reason? }
- * Called by the assessment UI when a candidate hits the paste limit (3rd attempt).
- * Voids the submission and flags the user as disqualified so they can't re-apply.
- * Admin-reversible — clearing user.disqualifiedAt/Reason restores the account.
+ *
+ * Hard disqualification: voids the submission and blocks the account from
+ * re-applying. Admin-reversible — clearing user.disqualifiedAt/Reason restores
+ * the account.
+ *
+ * NOTE: this is NO LONGER triggered automatically by paste attempts (see
+ * /flag above). It remains in place for repeated assessment-abandonment and
+ * for manual admin action.
  */
 router.post("/:id/disqualify", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;

@@ -256,10 +256,13 @@ function SubmitPageInner() {
   const [elapsed,      setElapsed]      = useState(0);
   const [pasteCount,   setPasteCount]   = useState(0);
   const [pasteWarn,    setPasteWarn]    = useState(false);
+  const [pasteFlagged, setPasteFlagged] = useState(false);  // recorded for review, not a sanction
   // Proctoring policy — loaded from the ticket's campaign. Default strict until it loads.
   const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
   const [disqualified, setDisqualified] = useState(false);
-  const [dqCause,      setDqCause]      = useState<"paste" | "leave" | "loaded" | null>(null);
+  // "paste" is deliberately absent — paste attempts flag for review, they no
+  // longer disqualify. Only repeated assessment-abandonment ends a run.
+  const [dqCause,      setDqCause]      = useState<"leave" | "loaded" | null>(null);
   const [dqReason,     setDqReason]     = useState<string | null>(null);
   const [blurCount,    setBlurCount]    = useState(0);
   const [leaveCount,   setLeaveCount]   = useState(0);   // times they left the assessment (2 warns → disqualify)
@@ -289,22 +292,23 @@ function SubmitPageInner() {
   const recorderRef    = useRef<MediaRecorder | null>(null);
   const chunksRef      = useRef<Blob[]>([]);
   const verbalTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const flaggedRef = useRef(false);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const writeRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Kicks the candidate out on the 3rd paste: voids the submission and flags the
-  // account as disqualified (server-side), then locks the UI. The lock stands even
-  // if the network call fails — the client won't let them continue.
-  async function disqualifyAndKick(cause: "paste" | "leave") {
+  // Hard stop: voids the submission and flags the account as disqualified
+  // (server-side), then locks the UI. The lock stands even if the network call
+  // fails — the client won't let them continue.
+  // Only reached by repeated assessment-abandonment; paste attempts flag instead.
+  async function disqualifyAndKick(cause: "leave") {
     setDisqualified(true);
     setDqCause(cause);
     [timerRef, elapsedRef, writeRef, verbalTimerRef].forEach((r) => {
       if (r.current) { clearInterval(r.current); r.current = null; }
     });
-    const reason = cause === "leave"
-      ? "Repeatedly left the assessment (app/tab switching or exiting fullscreen) during the timed questions"
-      : "Repeated paste attempts during the assessment";
+    const reason =
+      "Repeatedly left the assessment (app/tab switching or exiting fullscreen) during the timed questions";
     try {
       if (submissionId) {
         await fetch(`${API_URL}/submissions/${submissionId}/disqualify`, {
@@ -317,22 +321,39 @@ function SubmitPageInner() {
     } catch { /* UI is locked regardless of the network result */ }
   }
 
+  // Records a proctoring concern server-side WITHOUT ending the assessment.
+  // Fire-and-forget: a failed call must never interrupt the candidate.
+  async function flagForReview(reason: string) {
+    if (!submissionId || flaggedRef.current) return;
+    flaggedRef.current = true;   // once per session — don't spam on every paste
+    setPasteFlagged(true);
+    try {
+      await fetch(`${API_URL}/submissions/${submissionId}/flag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
+        credentials: "include",
+        body: JSON.stringify({ reason }),
+      });
+    } catch { /* the candidate continues regardless */ }
+  }
+
   // Pasting is blocked in the answer fields WHEN the campaign policy says so
   // (proctoring.blockPaste). Escalation:
   //   1st attempt  → warning
   //   2nd attempt  → stronger warning (recorded against integrity — advisory)
-  //   3rd attempt  → disqualified + kicked out (can't re-apply)
+  //   3rd+ attempt → flagged for human review; the assessment CONTINUES
+  //
+  // Deliberately no auto-disqualification. Ctrl+V is muscle memory, and banning
+  // an honest candidate for a reflex is a false positive we can't take back.
+  // The paste is still blocked, still counted, and still raises the risk score.
   function handleAnswerPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     if (!proctoring.blockPaste) return; // campaign allows paste — no-op
     e.preventDefault();
     const next = pasteCount + 1;
     setPasteCount(next);
-    if (next >= 3) {
-      void disqualifyAndKick("paste");
-    } else {
-      setPasteWarn(true);
-      setTimeout(() => setPasteWarn(false), 7000);
-    }
+    if (next >= 3) void flagForReview("paste attempts");
+    setPasteWarn(true);
+    setTimeout(() => setPasteWarn(false), 7000);
   }
 
   // Enters fullscreen for the assessment (needs a user gesture — the overlay button).
@@ -989,6 +1010,11 @@ function SubmitPageInner() {
   const mins      = Math.floor(timeLeft / 60).toString().padStart(2, "0");
   const secs      = (timeLeft % 60).toString().padStart(2, "0");
   const si         = stepIndex(stage);
+  // Firm but neutral. No threat of disqualification — repeated attempts are
+  // recorded for a human to look at, and the candidate carries on.
+  const pasteNotice = pasteFlagged
+    ? "Pasting is disabled during this phase. Your attempts have been recorded and will be reviewed — please continue in your own words."
+    : "Pasting is disabled during this phase. Repeated attempts are recorded and reviewed.";
   const isDesign   = ticket?.stack === "SYSTEM_DESIGN";
   const STEP_LABELS = isDesign ? STEP_LABELS_DESIGN : STEP_LABELS_CODE;
 
@@ -1012,8 +1038,6 @@ function SubmitPageInner() {
           <p className="text-sm mb-4" style={{ color: "#5A6472", lineHeight: 1.6 }}>
             {dqCause === "leave"
               ? "Leaving the assessment — switching to another app or tab, or exiting fullscreen — is not allowed during the timed questions. After two warnings, you left a third time, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
-              : dqCause === "paste"
-              ? "Pasting into the answer fields is not allowed. After two warnings, a third paste attempt was detected, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
               : dqReason
               ? `You have been disqualified from this assessment: ${dqReason} You cannot re-take it on this account.`
               : "You have been disqualified from this assessment and cannot re-take it on this account."}
@@ -1155,9 +1179,7 @@ function SubmitPageInner() {
             {pasteWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                 style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                {pasteCount >= 2
-                  ? "Second warning — this paste attempt is recorded against your integrity score. One more paste will disqualify you and block you from re-applying."
-                  : "Pasting is disabled — first warning. Write your own explanation; paste attempts are recorded."}
+                {pasteNotice}
               </div>
             )}
             <div className="flex items-center justify-between mb-5">
@@ -1226,7 +1248,7 @@ function SubmitPageInner() {
               {pasteWarn && (
                 <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                   style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                  Pasting is disabled. Write your own design — paste attempts are recorded and lower your integrity score.
+                  {pasteNotice}
                 </div>
               )}
               <div className="flex items-center justify-between mb-5">
@@ -1316,7 +1338,7 @@ function SubmitPageInner() {
             {pasteWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                 style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Pasting is disabled. Write your own understanding — paste attempts are recorded and lower your integrity score.
+                {pasteNotice}
               </div>
             )}
             <div className="mb-3" />
@@ -1374,7 +1396,7 @@ function SubmitPageInner() {
             {pasteWarn && (
               <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
                 style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
-                Pasting is disabled. Write your own understanding — paste attempts are recorded and lower your integrity score.
+                {pasteNotice}
               </div>
             )}
             <div className="mb-3" />

@@ -31,6 +31,10 @@ interface CandidateDetail {
   candidate: {
     id: string;
     status: string;
+    // Proctoring flag — advisory, raised during the assessment. Never a sanction.
+    flaggedForReview?: boolean;
+    flaggedReason?: string | null;
+    flaggedAt?: string | null;
     user: { githubUsername: string; email: string | null; skillScore: number };
     submission: {
       prUrl: string | null;
@@ -175,7 +179,8 @@ export default function CandidateDetailPage() {
           };
           const gc = g ? gMap[g] : undefined;
           const pastes = s.pasteAttempts ?? 0;
-          if (gap <= 0 && !gc && pastes === 0) return null;
+          const proctorFlag = data.candidate.flaggedForReview === true;
+          if (gap <= 0 && !gc && pastes === 0 && !proctorFlag) return null;
           return (
             <div className="space-y-2">
               {gap > 0 && (
@@ -189,6 +194,17 @@ export default function CandidateDetailPage() {
               {pastes > 0 && (
                 <div className="rounded-lg px-4 py-2 text-xs font-semibold" style={{ background: "#fff8ec", color: "#b54708" }}>
                   ⚠ {pastes} paste attempt{pastes > 1 ? "s" : ""} into answer fields (advisory)
+                </div>
+              )}
+              {proctorFlag && (
+                <div className="rounded-lg px-4 py-2 text-xs" style={{ background: "#fff8ec", color: "#b54708" }}>
+                  <span className="font-bold">
+                    🚩 Flagged for review{data.candidate.flaggedReason ? ` — ${data.candidate.flaggedReason}` : ""}
+                  </span>
+                  <span className="block mt-0.5" style={{ opacity: 0.85 }}>
+                    Recorded during the assessment. The candidate was not stopped and no points were
+                    deducted — this is for you to judge.
+                  </span>
                 </div>
               )}
             </div>

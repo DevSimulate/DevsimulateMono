@@ -357,6 +357,12 @@ model CampaignCandidate {
   status       CandidateStatus @default(NEW)
   invitedAt    DateTime?
   joinedAt     DateTime        @default(now())
+  // Proctoring signal for HUMAN review — never an automatic sanction. Repeated
+  // paste attempts flag the candidate here and the assessment continues; a
+  // reviewer decides what it means. Ctrl+V is muscle memory, not intent.
+  flaggedForReview Boolean     @default(false)
+  flaggedReason    String?
+  flaggedAt        DateTime?
   campaign     Campaign        @relation(fields: [campaignId], references: [id])
   user         User            @relation(fields: [userId], references: [id])
   submission   Submission?     @relation(fields: [submissionId], references: [id])
