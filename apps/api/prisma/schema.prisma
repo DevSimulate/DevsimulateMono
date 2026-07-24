@@ -163,6 +163,11 @@ model Submission {
   claudeReview       Json?
   graderResult       Json?               // hidden-test outcome from the CI grader: { ticketId, passed, at }
   scorePrBase        Int?                // raw Claude PR score before any deductions — never mutated after initial save
+  // Scoring provenance — which judge produced this score. Lets any historical
+  // score be traced to the exact model + rubric that generated it, so scores
+  // from different rubric versions are never silently compared like-for-like.
+  modelUsed          String?
+  rubricVersion      String?
   verbalPenalty      Int                 @default(0)
   hiddenTestPenalty  Int                 @default(0)
   riskScore          Int                 @default(0)

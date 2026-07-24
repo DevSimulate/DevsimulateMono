@@ -1,5 +1,6 @@
 import anthropic from "../lib/anthropic";
 import octokit from "../lib/github";
+import { SCORING_CALL, QUESTION_CALL } from "../config/scoring";
 import { ClaudeReviewResult, FollowUpQuestionsResult, FollowUpScoreResult } from "../types/index";
 import { Ticket, Codebase } from "@prisma/client";
 
@@ -176,7 +177,7 @@ ${ticket.description}
 **Execution criteria:** ${rubric.execution}`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...SCORING_CALL,
     max_tokens: 2048,
     system: systemPrompt,
     messages: [
@@ -288,7 +289,7 @@ Respond with ONLY valid JSON:
 { "question1": "<your specific question referencing exact code from the diff>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -341,7 +342,7 @@ Respond with ONLY valid JSON:
 { "question2": "<your follow-up question based on their A1 answer>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -417,7 +418,7 @@ ${ticket.description}
 **Completeness (0-10):** ${rubric.execution}`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...SCORING_CALL,
     max_tokens: 2048,
     system: systemPrompt,
     messages: [
@@ -496,7 +497,7 @@ Respond with ONLY valid JSON:
 { "question1": "<your specific question referencing a decision from their design>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -543,7 +544,7 @@ Respond with ONLY valid JSON:
 { "question2": "<your follow-up question based on their A1 answer>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -623,7 +624,7 @@ Respond with ONLY valid JSON:
 }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...SCORING_CALL,
     max_tokens: 768,
     messages: [{ role: "user", content: prompt }],
   });
@@ -667,7 +668,7 @@ Generate ONE question that:
 Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact code>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -718,7 +719,7 @@ Set "consistent" to false if the spoken answer contradicts the written answers o
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...SCORING_CALL,
     max_tokens: 400,
     system: "You are a JSON-only API. You must respond with a single valid JSON object and nothing else — no prose, no markdown, no explanation before or after.",
     messages: [{ role: "user", content: prompt }],
@@ -758,7 +759,7 @@ Generate ONE question that:
 Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact design>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
@@ -796,7 +797,7 @@ Set "consistent" to false if the spoken answer contradicts the written answers o
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...SCORING_CALL,
     max_tokens: 400,
     messages: [{ role: "user", content: prompt }],
   });
@@ -838,7 +839,7 @@ Each question must:
 Respond with ONLY valid JSON: { "questions": ["<q1>", "<q2>", "<q3>"] }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    ...QUESTION_CALL,
     max_tokens: 600,
     system: "You are a JSON-only API. Respond with a single valid JSON object and nothing else.",
     messages: [{ role: "user", content: prompt }],

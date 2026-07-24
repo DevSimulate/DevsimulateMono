@@ -1,6 +1,7 @@
 import prisma from "../lib/prisma";
 import { ClaudeReviewResult } from "../types/index";
 import { Submission } from "@prisma/client";
+import { SCORING_MODEL, RUBRIC_VERSION } from "../config/scoring";
 
 /**
  * Persists the Claude review result to the Submission record and updates
@@ -30,6 +31,9 @@ export async function saveReviewResult(
       scoreCommunication: review.scoreCommunication,
       scoreExecution: review.scoreExecution,
       claudeReview: review as object,
+      // Provenance — pin every score to the judge that produced it.
+      modelUsed: SCORING_MODEL,
+      rubricVersion: RUBRIC_VERSION,
       reviewedAt: new Date(),
     },
     include: { user: true },
