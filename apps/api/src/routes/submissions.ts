@@ -693,12 +693,25 @@ router.get("/:id/stream", async (req: Request, res: Response): Promise<void> => 
     }
   };
 
+  // Review gave up after every retry (usually a sustained rate limit). Tell the
+  // client explicitly so it can show "delayed" instead of spinning until the
+  // 8-minute timeout.
+  const onFailed = (id: string) => {
+    if (id === subId) {
+      res.write("data: failed\n\n");
+      res.end();
+      cleanup();
+    }
+  };
+
   const cleanup = () => {
     reviewEvents.off("reviewed", onReviewed);
+    reviewEvents.off("failed", onFailed);
     clearInterval(heartbeat);
   };
 
   reviewEvents.on("reviewed", onReviewed);
+  reviewEvents.on("failed", onFailed);
   req.on("close", cleanup);
 });
 
@@ -745,6 +758,7 @@ router.post("/:id/followup/answer1", async (req: Request, res: Response): Promis
 
     // Generate Q2 from A1 — route by submission type
     let question2: string;
+    let usedFallbackModel = false;
     if (submission.designDoc) {
       const result = await generateQ2FromA1ForDesign(
         submission.ticket as any,
@@ -753,6 +767,7 @@ router.post("/:id/followup/answer1", async (req: Request, res: Response): Promis
         answer1
       );
       question2 = result.question2;
+      usedFallbackModel = result.usedFallbackModel;
     } else {
       const prUrlMatch = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(submission.prUrl ?? "");
       if (!prUrlMatch) {
@@ -763,11 +778,18 @@ router.post("/:id/followup/answer1", async (req: Request, res: Response): Promis
       const prDiff = await fetchPrDiff(repoOwner, repoName, parseInt(prNumberStr, 10));
       const result = await generateQ2FromA1(submission.ticket as any, prDiff, followUp.question1, answer1);
       question2 = result.question2;
+      usedFallbackModel = result.usedFallbackModel;
     }
 
     await prisma.followUpQuestion.update({
       where: { id: followUp.id },
-      data: { answer1, question2: question2 },
+      data: {
+        answer1,
+        question2: question2,
+        // Sticky: once any question in this assessment came from the fallback
+        // model, the record says so.
+        ...(usedFallbackModel ? { usedFallbackModel: true } : {}),
+      },
     });
 
     res.json({ data: { question2: question2 } });
@@ -792,9 +814,11 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
     if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
 
     let question: string;
+    let usedFallbackModel = false;
     if (sub.designDoc) {
       const result = await generateVerbalQuestionForDesign(sub.ticket as never, sub.designDoc);
       question = result.question;
+      usedFallbackModel = result.usedFallbackModel;
     } else {
       const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
       if (!m) {
@@ -807,6 +831,14 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
       const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
       const result = await generateVerbalQuestion(sub.ticket as never, diff);
       question = result.question;
+      usedFallbackModel = result.usedFallbackModel;
+    }
+
+    if (usedFallbackModel) {
+      await prisma.followUpQuestion.updateMany({
+        where: { submissionId: sub.id },
+        data: { usedFallbackModel: true },
+      });
     }
 
     res.json({ data: { question } });

@@ -211,6 +211,10 @@ model FollowUpQuestion {
   verbalTranscript    String?               @db.Text  // spoken explanation, transcribed (audio not stored)
   verbalScore         Int?                            // 0-10 verbal understanding
   verbalNote          String?               @db.Text  // employer-facing note on spoken vs written
+  // True when a question had to be generated on the cheaper fallback model
+  // after the pinned model exhausted its retries (rate limit / overload).
+  // Questions may degrade to keep a candidate moving; scores never do.
+  usedFallbackModel   Boolean               @default(false)
   answeredAt          DateTime?
   createdAt           DateTime              @default(now())
 }

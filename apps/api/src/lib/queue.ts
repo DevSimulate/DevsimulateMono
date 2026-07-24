@@ -10,6 +10,7 @@ import { consensusReview, gatherRuns, SCORING_RUNS } from "../services/consensus
 import { reviewEvents } from "./review-events";
 import prisma from "./prisma";
 import { ClaudeReviewResult } from "../types/index";
+import { ANTHROPIC_RPM, ANTHROPIC_CONCURRENCY } from "../config/scoring";
 
 const QUEUE_NAME = "pr-review";
 
@@ -81,7 +82,12 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
 
         if (q1Result.status === "fulfilled") {
           await prisma.followUpQuestion.create({
-            data: { submissionId, question1: q1Result.value.question1, question2: "" },
+            data: {
+              submissionId,
+              question1: q1Result.value.question1,
+              question2: "",
+              usedFallbackModel: q1Result.value.usedFallbackModel,
+            },
           });
           console.log(`[review-worker] SD review done for ${submissionId} — score ${review.scoreTotal}`);
         } else {
@@ -116,7 +122,12 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
 
         if (q1Result.status === "fulfilled") {
           await prisma.followUpQuestion.create({
-            data: { submissionId, question1: q1Result.value.question1, question2: "" },
+            data: {
+              submissionId,
+              question1: q1Result.value.question1,
+              question2: "",
+              usedFallbackModel: q1Result.value.usedFallbackModel,
+            },
           });
           console.log(`[review-worker] Code review done for ${submissionId} — score ${review.scoreTotal}`);
         } else {
@@ -129,7 +140,12 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
     },
     {
       connection: redisConnection,
-      concurrency: 2,
+      // Throughput is capped against the Anthropic tier, not guessed. Each job
+      // now issues SCORING_RUNS parallel scoring calls plus question
+      // generation, so unbounded concurrency is what exhausted the account
+      // limit during DevFest and killed question generation mid-assessment.
+      concurrency: ANTHROPIC_CONCURRENCY,
+      limiter: { max: Math.max(1, Math.floor(ANTHROPIC_RPM / SCORING_RUNS)), duration: 60_000 },
       drainDelay: 60_000,      // poll empty queue every 60s (default: 5s) — saves ~90% idle requests
       stalledInterval: 300_000, // check stalled jobs every 5 min (default: 30s)
       lockDuration: 600_000,   // 10 min lock — Claude reviews can be slow
@@ -137,17 +153,30 @@ export function startReviewWorker(): Worker<ReviewJobData, void, string> {
   );
 
   worker.on("failed", async (job, err) => {
-    console.error(`[review-worker] Job ${job?.id} failed after ${job?.attemptsMade} attempts:`, err.message);
-    // Mark submission VOID so the web client stops polling immediately
-    if (job?.data?.submissionId) {
-      try {
-        await prisma.submission.update({
-          where: { id: job.data.submissionId },
-          data: { status: "VOID" },
-        });
-        reviewEvents.emit("reviewed", job.data.submissionId); // unblock SSE clients
-      } catch { /* best-effort */ }
-    }
+    const attempts = job?.attemptsMade ?? 0;
+    const exhausted = attempts >= (job?.opts?.attempts ?? 3);
+    console.error(`[review-worker] Job ${job?.id} failed (attempt ${attempts}):`, err.message);
+
+    // Intermediate failures are left alone — BullMQ's own backoff will retry,
+    // and marking the submission VOID here would strand a job that is about to
+    // succeed. Only act once every attempt is spent.
+    if (!exhausted || !job?.data?.submissionId) return;
+
+    try {
+      await prisma.submission.update({
+        where: { id: job.data.submissionId },
+        data: {
+          status: "VOID",
+          // Never a dead end: this surfaces in the admin needs-attention list
+          // so a human can requeue or finalize it. A rate-limit blip must not
+          // silently cost a candidate their assessment.
+          needsAttention: true,
+          needsAttentionReason: `AI review failed after ${attempts} attempts: ${err.message.slice(0, 200)}`,
+        },
+      });
+      // Tell the browser the review stalled so it stops spinning forever.
+      reviewEvents.emit("failed", job.data.submissionId);
+    } catch { /* best-effort */ }
   });
 
   return worker;

@@ -82,6 +82,12 @@ type Stage =
   | "score"
   | "upgrade";
 
+// Shown when AI review exhausted its retries (sustained rate limit / outage).
+// The work is safe — say that plainly instead of leaving them on a spinner.
+const REVIEW_DELAYED_MSG =
+  "Your submission is saved, but our review service is busy right now and couldn't finish. " +
+  "Nothing you did is lost — we'll email you as soon as it completes.";
+
 const STEP_LABELS_CODE   = ["Describe", "Review", "Q1", "Q2", "Speak", "Score"];
 const STEP_LABELS_DESIGN = ["Write",    "Review", "Q1", "Q2", "Speak", "Score"];
 
@@ -684,30 +690,33 @@ function SubmitPageInner() {
     const deadline = Date.now() + 8 * 60 * 1000;
 
     // Attempt SSE first
-    const sseOk = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 8 * 60 * 1000);
+    const sseResult = await new Promise<"reviewed" | "failed" | "closed">((resolve) => {
+      const timeout = setTimeout(() => resolve("closed"), 8 * 60 * 1000);
 
       fetch(`${API_URL}/submissions/${sid}/stream`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(async (response) => {
-          if (!response.body) { clearTimeout(timeout); resolve(false); return; }
+          if (!response.body) { clearTimeout(timeout); resolve("closed"); return; }
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
           while (true) {
             const { done, value } = await reader.read();
-            if (done) { clearTimeout(timeout); resolve(false); return; }
-            if (decoder.decode(value, { stream: true }).includes("reviewed")) {
-              clearTimeout(timeout);
-              resolve(true);
-              return;
-            }
+            if (done) { clearTimeout(timeout); resolve("closed"); return; }
+            const chunk = decoder.decode(value, { stream: true });
+            // Check "failed" first — "reviewed" never appears in a failure frame,
+            // but ordering makes the intent explicit.
+            if (chunk.includes("failed"))   { clearTimeout(timeout); resolve("failed");   return; }
+            if (chunk.includes("reviewed")) { clearTimeout(timeout); resolve("reviewed"); return; }
           }
         })
-        .catch(() => { clearTimeout(timeout); resolve(false); });
+        .catch(() => { clearTimeout(timeout); resolve("closed"); });
     });
 
-    if (sseOk) return;
+    if (sseResult === "reviewed") return;
+    // The review gave up after every retry — usually a sustained rate limit.
+    // Say so plainly rather than leaving them watching a spinner.
+    if (sseResult === "failed") throw new Error(REVIEW_DELAYED_MSG);
 
     // SSE stream closed early (Railway nginx) — fall back to polling
     while (Date.now() < deadline) {
@@ -719,7 +728,7 @@ function SubmitPageInner() {
         if (r.ok) {
           const data = await r.json();
           if (data.data?.status === "REVIEWED") return;
-          if (data.data?.status === "VOID") throw new Error("Review failed on the server. Please try again.");
+          if (data.data?.status === "VOID") throw new Error(REVIEW_DELAYED_MSG);
         }
       } catch (pollErr) {
         if (pollErr instanceof Error && pollErr.message.includes("Review failed")) throw pollErr;

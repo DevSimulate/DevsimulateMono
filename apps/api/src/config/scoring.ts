@@ -50,6 +50,31 @@ export const QUESTION_MODEL = process.env.QUESTION_MODEL ?? SCORING_MODEL;
  */
 export const RUBRIC_VERSION = "v1";
 
+/**
+ * Cheaper model used ONLY when question generation has exhausted its retries.
+ *
+ * Scoring never falls back. A score produced by an unpinned model would be
+ * incomparable to every other score and invisible in the audit trail, so a
+ * scoring call retries and then fails loudly instead. Questions are different:
+ * a slightly weaker question still lets the candidate finish, and losing the
+ * whole assessment to a rate limit is far worse than a cheaper question.
+ */
+export const FALLBACK_MODEL = process.env.FALLBACK_MODEL ?? "claude-haiku-4-5-20251001";
+
+/**
+ * Throughput ceiling for Anthropic calls, enforced by the BullMQ worker.
+ * Set ANTHROPIC_RPM to match your API tier — during DevFest the queue happily
+ * saturated the account limit and question generation started failing.
+ *
+ * Note each submission now issues SCORING_RUNS parallel scoring calls, so the
+ * effective request rate is roughly 3× the job rate. Defaults are conservative.
+ */
+export const ANTHROPIC_RPM = Number(process.env.ANTHROPIC_RPM ?? 20);
+export const ANTHROPIC_CONCURRENCY = Number(process.env.ANTHROPIC_CONCURRENCY ?? 2);
+
+/** Max attempts for a single Anthropic call before it gives up. */
+export const ANTHROPIC_MAX_RETRIES = Number(process.env.ANTHROPIC_MAX_RETRIES ?? 5);
+
 /** Spread into a scoring `messages.create` call: `{ ...SCORING_CALL, max_tokens }`. */
 export const SCORING_CALL = {
   model: SCORING_MODEL,

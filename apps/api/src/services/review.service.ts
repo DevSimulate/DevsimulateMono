@@ -1,5 +1,5 @@
-import anthropic from "../lib/anthropic";
 import octokit from "../lib/github";
+import { claudeCall, textOf } from "../lib/claude";
 import { SCORING_CALL, QUESTION_CALL } from "../config/scoring";
 import { calibrationBlock, logCalibrationBlockOnce } from "../prompts/anchors";
 import { ClaudeReviewResult, FollowUpQuestionsResult, FollowUpScoreResult } from "../types/index";
@@ -181,7 +181,8 @@ ${ticket.description}
 **Communication criteria:** ${rubric.communication}
 **Execution criteria:** ${rubric.execution}`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "scoring", label: "reviewPullRequest",
     ...SCORING_CALL,
     max_tokens: 2048,
     system: systemPrompt,
@@ -219,11 +220,7 @@ Please score this pull request now. Return ONLY the JSON object.`,
     ],
   });
 
-  const content = response.content[0];
-
-  if (content.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
-  }
+  const content = { text: textOf(response) };
 
   let parsed: ClaudeReviewResult;
 
@@ -268,8 +265,8 @@ export async function generateFirstQuestion(
   ticket: TicketWithCodebase,
   prDiff: string,
   review: ClaudeReviewResult
-): Promise<{ question1: string }> {
-  if (ticket.id === DEMO_TICKET_ID) return { question1: DEMO_Q1 };
+): Promise<{ question1: string; usedFallbackModel: boolean }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question1: DEMO_Q1, usedFallbackModel: false };
   const prompt = `You are a senior engineering interviewer. A developer fixed a bug and you need to ask them ONE targeted follow-up question.
 
 Ticket: ${ticket.title}
@@ -293,18 +290,19 @@ Good example: "You added Lock() before calling ProcessInvoice() on line 34 — h
 Respond with ONLY valid JSON:
 { "question1": "<your specific question referencing exact code from the diff>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateFirstQuestion",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
 
   try {
     const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(clean) as { question1: string };
+    const parsed = JSON.parse(clean) as { question1: string };
+    return { ...parsed, usedFallbackModel: response.usedFallbackModel };
   } catch {
     throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
   }
@@ -320,8 +318,8 @@ export async function generateQ2FromA1(
   prDiff: string,
   question1: string,
   answer1: string
-): Promise<{ question2: string }> {
-  if (ticket.id === DEMO_TICKET_ID) return { question2: DEMO_Q2 };
+): Promise<{ question2: string; usedFallbackModel: boolean }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question2: DEMO_Q2, usedFallbackModel: false };
   const prompt = `You are a senior engineering interviewer conducting a technical debrief.
 
 Ticket: ${ticket.title}
@@ -346,18 +344,19 @@ Do NOT ask a generic second question. Q2 must feel like a natural continuation o
 Respond with ONLY valid JSON:
 { "question2": "<your follow-up question based on their A1 answer>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateQ2FromA1",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
 
   try {
     const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(clean) as { question2: string };
+    const parsed = JSON.parse(clean) as { question2: string };
+    return { ...parsed, usedFallbackModel: response.usedFallbackModel };
   } catch {
     throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
   }
@@ -422,7 +421,8 @@ ${ticket.description}
 **Communication & Trade-offs (0-20):** ${rubric.communication}
 **Completeness (0-10):** ${rubric.execution}`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "scoring", label: "reviewSystemDesign",
     ...SCORING_CALL,
     max_tokens: 2048,
     system: systemPrompt,
@@ -455,8 +455,7 @@ Please score this system design now. Return ONLY the JSON object.`,
     ],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response type from Claude");
+  const content = { text: textOf(response) };
 
   let parsed: ClaudeReviewResult;
   try {
@@ -479,7 +478,7 @@ export async function generateFirstQuestionFromDesign(
   ticket: TicketWithCodebase,
   designDoc: string,
   review: ClaudeReviewResult
-): Promise<{ question1: string }> {
+): Promise<{ question1: string; usedFallbackModel: boolean }> {
   const prompt = `You are a senior engineering interviewer. A candidate answered a system design question and you need to ask them ONE targeted follow-up question.
 
 Problem: ${ticket.title}
@@ -501,18 +500,19 @@ Good example: "You chose Redis for your hot URL cache — what happens to your c
 Respond with ONLY valid JSON:
 { "question1": "<your specific question referencing a decision from their design>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateFirstQuestionFromDesign",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
 
   try {
     const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(clean) as { question1: string };
+    const parsed = JSON.parse(clean) as { question1: string };
+    return { ...parsed, usedFallbackModel: response.usedFallbackModel };
   } catch {
     throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
   }
@@ -526,7 +526,7 @@ export async function generateQ2FromA1ForDesign(
   designDoc: string,
   question1: string,
   answer1: string
-): Promise<{ question2: string }> {
+): Promise<{ question2: string; usedFallbackModel: boolean }> {
   const prompt = `You are a senior engineering interviewer conducting a system design debrief.
 
 Problem: ${ticket.title}
@@ -548,18 +548,19 @@ Do NOT ask a generic second question. Q2 must feel like a natural continuation o
 Respond with ONLY valid JSON:
 { "question2": "<your follow-up question based on their A1 answer>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateQ2FromA1ForDesign",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
 
   try {
     const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(clean) as { question2: string };
+    const parsed = JSON.parse(clean) as { question2: string };
+    return { ...parsed, usedFallbackModel: response.usedFallbackModel };
   } catch {
     throw new Error(`Claude returned non-JSON: ${content.text.slice(0, 200)}`);
   }
@@ -628,14 +629,14 @@ Respond with ONLY valid JSON:
   "employerSummary": "<1-3 sentence Verification Quality note for employer — did they interrogate their solution or accept it uncritically>"
 }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "scoring", label: "scoreFollowUpAnswers",
     ...SCORING_CALL,
     max_tokens: 768,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
 
   try {
     const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -655,8 +656,8 @@ Respond with ONLY valid JSON:
 export async function generateVerbalQuestion(
   ticket: TicketWithCodebase,
   prDiff: string
-): Promise<{ question: string }> {
-  if (ticket.id === DEMO_TICKET_ID) return { question: DEMO_VERBAL };
+): Promise<{ question: string; usedFallbackModel: boolean }> {
+  if (ticket.id === DEMO_TICKET_ID) return { question: DEMO_VERBAL, usedFallbackModel: false };
   const prompt = `You are a senior engineering interviewer. The candidate will answer your question OUT LOUD on camera, in their own words, in 90 seconds — they cannot prepare or paste it.
 
 Ticket: ${ticket.title}
@@ -672,15 +673,15 @@ Generate ONE question that:
 
 Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact code>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateVerbalQuestion",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  return JSON.parse(clean) as { question: string };
+  return { ...(JSON.parse(clean) as { question: string }), usedFallbackModel: response.usedFallbackModel };
 }
 
 export interface VerbalScoreResult {
@@ -723,14 +724,14 @@ Set "consistent" to false if the spoken answer contradicts the written answers o
 
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "scoring", label: "scoreVerbalAnswer",
     ...SCORING_CALL,
     max_tokens: 400,
     system: "You are a JSON-only API. You must respond with a single valid JSON object and nothing else — no prose, no markdown, no explanation before or after.",
     messages: [{ role: "user", content: prompt }],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   try {
     return JSON.parse(clean) as VerbalScoreResult;
@@ -749,7 +750,7 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
 export async function generateVerbalQuestionForDesign(
   ticket: TicketWithCodebase,
   designDoc: string
-): Promise<{ question: string }> {
+): Promise<{ question: string; usedFallbackModel: boolean }> {
   const prompt = `You are a senior engineering interviewer. The candidate will answer your question OUT LOUD on camera, in their own words, in 90 seconds — they cannot prepare or paste it.
 
 Ticket: ${ticket.title}
@@ -763,15 +764,15 @@ Generate ONE question that:
 
 Respond with ONLY valid JSON: { "question": "<your spoken-answer question referencing their exact design>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateVerbalQuestionForDesign",
     ...QUESTION_CALL,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  return JSON.parse(clean) as { question: string };
+  return { ...(JSON.parse(clean) as { question: string }), usedFallbackModel: response.usedFallbackModel };
 }
 
 /** System-design variant of scoreVerbalAnswer — uses design doc as context. */
@@ -801,13 +802,13 @@ Set "consistent" to false if the spoken answer contradicts the written answers o
 
 Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|false>, "note": "<1-2 sentence employer note on verbal understanding>" }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "scoring", label: "scoreVerbalAnswerForDesign",
     ...SCORING_CALL,
     max_tokens: 400,
     messages: [{ role: "user", content: prompt }],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   return JSON.parse(clean) as VerbalScoreResult;
 }
@@ -843,14 +844,14 @@ Each question must:
 
 Respond with ONLY valid JSON: { "questions": ["<q1>", "<q2>", "<q3>"] }`;
 
-  const response = await anthropic.messages.create({
+  const response = await claudeCall({
+    kind: "question", label: "generateInterviewQuestions",
     ...QUESTION_CALL,
     max_tokens: 600,
     system: "You are a JSON-only API. Respond with a single valid JSON object and nothing else.",
     messages: [{ role: "user", content: prompt }],
   });
-  const content = response.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response from Claude");
+  const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   try {
     const parsed = JSON.parse(clean) as { questions?: string[] };
