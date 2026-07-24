@@ -1,6 +1,7 @@
 import anthropic from "../lib/anthropic";
 import octokit from "../lib/github";
 import { SCORING_CALL, QUESTION_CALL } from "../config/scoring";
+import { calibrationBlock, logCalibrationBlockOnce } from "../prompts/anchors";
 import { ClaudeReviewResult, FollowUpQuestionsResult, FollowUpScoreResult } from "../types/index";
 import { Ticket, Codebase } from "@prisma/client";
 
@@ -155,7 +156,11 @@ scoreTotal must equal the sum of the four dimension scores.
 
 Cosmetic hygiene issues (a leftover commented-out line, minor formatting, a stray blank line) are worth at most a 1–2 point deduction total and a brief note — do NOT treat them as evidence the candidate cannot verify their work, and do NOT let them bleed across multiple dimensions. Reserve the verification/trust penalty for cases where the actual logic is wrong, untested, or the candidate presents unverified assumptions as fact. Judge the substance of the fix, not tidiness.
 
-Be direct and specific. Name the specific code, pattern, or reasoning that earned or lost points. Never be vague.`;
+Be direct and specific. Name the specific code, pattern, or reasoning that earned or lost points. Never be vague.
+
+${calibrationBlock()}`;
+
+  logCalibrationBlockOnce();
 
   const codebaseContext = `## Codebase: ${ticket.codebase.name}
 
