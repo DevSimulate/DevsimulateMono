@@ -70,6 +70,7 @@ model User {
   applications        Application[]
   campaignCandidates  CampaignCandidate[]
   certificates        Certificate[]
+  invites             CampaignInvite[]
 }
 
 model Codebase {
@@ -283,6 +284,34 @@ enum CandidateStatus {
   REJECTED
 }
 
+enum InviteStatus {
+  INVITED
+  STARTED
+  COMPLETED
+  EXPIRED
+}
+
+// An emailed assessment invitation. Exists BEFORE the candidate has an account —
+// recruiters upload a list of names/emails, each gets a unique tokenised link.
+// When they sign in through that link the invite is bound to their User.
+model CampaignInvite {
+  id         String       @id @default(uuid())
+  campaignId String
+  name       String?
+  email      String
+  token      String       @unique
+  status     InviteStatus @default(INVITED)
+  invitedAt  DateTime     @default(now())
+  remindedAt DateTime?
+  acceptedAt DateTime?
+  userId     String?
+  campaign   Campaign     @relation(fields: [campaignId], references: [id])
+  user       User?        @relation(fields: [userId], references: [id])
+
+  @@unique([campaignId, email])
+  @@index([token])
+}
+
 model Campaign {
   id             String              @id @default(cuid())
   orgId          String
@@ -309,6 +338,7 @@ model Campaign {
   codebase       Codebase            @relation(fields: [codebaseId], references: [id])
   candidates     CampaignCandidate[]
   certificates   Certificate[]
+  invites        CampaignInvite[]
 }
 
 model CampaignCandidate {

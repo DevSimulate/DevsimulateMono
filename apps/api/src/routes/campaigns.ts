@@ -2,10 +2,10 @@ import { Router, Request, Response } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
-import { Difficulty, CampaignStatus, CandidateStatus, CampaignType } from "@prisma/client";
+import { Difficulty, CampaignStatus, CandidateStatus, CampaignType, InviteStatus } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
-import { sendEmail, interviewInviteEmail } from "../lib/email";
+import { sendEmail, interviewInviteEmail, assessmentInviteEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { computeHiringSignals } from "../lib/hiring-signals";
 import { generateInterviewQuestions } from "../services/review.service";
@@ -284,7 +284,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
  */
 router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { fullName } = req.body as { fullName?: string };
+  const { fullName, inviteToken } = req.body as { fullName?: string; inviteToken?: string };
   try {
     const dq = await prisma.user.findUnique({ where: { id: userId }, select: { disqualifiedAt: true } });
     if (dq?.disqualifiedAt) {
@@ -338,6 +338,16 @@ router.post("/apply/:slug", async (req: Request, res: Response): Promise<void> =
     if (!existing) {
       await prisma.campaignCandidate.create({
         data: { campaignId: campaign.id, userId },
+      });
+    }
+
+    // Bind the emailed invitation to this account so the recruiter can match the
+    // candidate back to their row in the uploaded list. Best-effort: an unknown
+    // or already-used token must never block joining.
+    if (inviteToken) {
+      await prisma.campaignInvite.updateMany({
+        where: { token: inviteToken, campaignId: campaign.id },
+        data: { userId, acceptedAt: new Date(), status: InviteStatus.STARTED },
       });
     }
 
@@ -944,6 +954,180 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
  * POST /campaigns/:id/invite
  * Send interview invites to selected candidates.
  */
+/** Resolves the campaign only if the caller is a member of its org. */
+async function ownedCampaign(campaignId: string, userId: string) {
+  return prisma.campaign.findFirst({
+    where: { id: campaignId, org: { members: { some: { userId } } } },
+    include: { org: { select: { logoUrl: true, primaryColor: true, brandName: true } } },
+  });
+}
+
+/** Builds the branded invite email + personal link for one invite. */
+async function buildInvite(
+  campaign: Awaited<ReturnType<typeof ownedCampaign>>,
+  invite: { token: string; name: string | null },
+  expectedMinutes: number | null
+) {
+  const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+  const brandName = campaign!.org.brandName || campaign!.companyName;
+  const link = `${appUrl}/apply/${campaign!.shareableSlug}?invite=${invite.token}`;
+  return assessmentInviteEmail({
+    candidateName: invite.name,
+    brandName,
+    logoUrl: campaign!.org.logoUrl,
+    primaryColor: campaign!.org.primaryColor,
+    roleName: campaign!.roleName,
+    link,
+    deadline: campaign!.deadline,
+    expectedMinutes,
+  });
+}
+
+/**
+ * POST /campaigns/:id/invites
+ * Body: { candidates: [{ name?, email }] }
+ * Creates a tokenised invitation per candidate and emails each their personal
+ * assessment link, branded with the hiring org's logo and colour.
+ */
+router.post("/:id/invites", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { candidates } = req.body as { candidates?: { name?: string; email?: string }[] };
+
+  if (!candidates?.length) {
+    res.status(400).json({ error: "No candidates provided" });
+    return;
+  }
+
+  try {
+    const campaign = await ownedCampaign(req.params.id, userId);
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const ticket = await prisma.ticket.findFirst({
+      where: campaign.ticketIds.length
+        ? { id: { in: campaign.ticketIds } }
+        : { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
+      select: { expectedMinutes: true },
+    });
+
+    let created = 0, emailed = 0, skipped = 0, failed = 0;
+
+    for (const c of candidates) {
+      const email = c.email?.trim().toLowerCase();
+      if (!email || !email.includes("@")) { skipped++; continue; }
+
+      const freshToken = crypto.randomBytes(24).toString("hex");
+      const invite = await prisma.campaignInvite.upsert({
+        where: { campaignId_email: { campaignId: campaign.id, email } },
+        create: { campaignId: campaign.id, email, name: c.name?.trim() || null, token: freshToken },
+        update: { name: c.name?.trim() || undefined },
+      });
+      if (invite.token === freshToken) created++;
+
+      const { subject, html } = await buildInvite(campaign, invite, ticket?.expectedMinutes ?? null);
+      const ok = await sendEmail({ to: email, subject, html });
+      if (ok) emailed++; else failed++;
+    }
+
+    res.json({ data: { total: candidates.length, created, emailed, skipped, failed } });
+  } catch (err) {
+    console.error("[campaigns] invites error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to send invitations" });
+  }
+});
+
+/**
+ * GET /campaigns/:id/invites
+ * Invitation list with live status: INVITED → STARTED → COMPLETED (or EXPIRED).
+ */
+router.get("/:id/invites", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await ownedCampaign(req.params.id, userId);
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const invites = await prisma.campaignInvite.findMany({
+      where: { campaignId: campaign.id },
+      orderBy: { invitedAt: "desc" },
+      include: { user: { select: { githubUsername: true } } },
+    });
+
+    // Best finalized score per joined candidate, scoped to this campaign.
+    const joinedIds = invites.map((i) => i.userId).filter((v): v is string => !!v);
+    const subs = joinedIds.length
+      ? await prisma.submission.findMany({
+          where: {
+            userId: { in: joinedIds }, status: "REVIEWED", finalized: true,
+            ...campaignSubmissionScope(campaign),
+          },
+          select: { userId: true, scoreTotal: true },
+          orderBy: { scoreTotal: "desc" },
+        })
+      : [];
+    const best = new Map<string, number>();
+    for (const s of subs) if (!best.has(s.userId)) best.set(s.userId, s.scoreTotal ?? 0);
+
+    const expired = !!campaign.deadline && campaign.deadline < new Date();
+
+    res.json({
+      data: invites.map((i) => {
+        const done = i.userId ? best.has(i.userId) : false;
+        const status = done ? "COMPLETED" : i.userId ? "STARTED" : expired ? "EXPIRED" : "INVITED";
+        return {
+          id: i.id,
+          name: i.name,
+          email: i.email,
+          githubUsername: i.user?.githubUsername ?? null,
+          status,
+          score: i.userId ? best.get(i.userId) ?? null : null,
+          invitedAt: i.invitedAt,
+          remindedAt: i.remindedAt,
+          acceptedAt: i.acceptedAt,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load invitations" });
+  }
+});
+
+/**
+ * POST /campaigns/:id/invites/remind
+ * Re-sends the invitation to everyone who hasn't started yet.
+ */
+router.post("/:id/invites/remind", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const campaign = await ownedCampaign(req.params.id, userId);
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    const pending = await prisma.campaignInvite.findMany({
+      where: { campaignId: campaign.id, userId: null },
+    });
+    const ticket = await prisma.ticket.findFirst({
+      where: campaign.ticketIds.length
+        ? { id: { in: campaign.ticketIds } }
+        : { codebaseId: campaign.codebaseId, difficulty: campaign.difficulty },
+      select: { expectedMinutes: true },
+    });
+
+    let reminded = 0;
+    for (const invite of pending) {
+      const { subject, html } = await buildInvite(campaign, invite, ticket?.expectedMinutes ?? null);
+      if (await sendEmail({ to: invite.email, subject, html })) {
+        await prisma.campaignInvite.update({
+          where: { id: invite.id },
+          data: { remindedAt: new Date() },
+        });
+        reminded++;
+      }
+    }
+
+    res.json({ data: { pending: pending.length, reminded } });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to send reminders" });
+  }
+});
+
 router.post("/:id/invite", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
   const { candidateIds } = req.body as { candidateIds: string[] };

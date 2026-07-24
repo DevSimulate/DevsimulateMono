@@ -10,9 +10,12 @@ export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
+  /** Where candidate replies should go (e.g. the recruiter's own address). */
+  replyTo?: string;
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM ?? "DevSimulate <onboarding@resend.dev>";
+  const replyTo = opts.replyTo ?? process.env.EMAIL_REPLY_TO;
 
   if (!apiKey) {
     console.warn("[email] RESEND_API_KEY not set — skipping send to", opts.to);
@@ -22,7 +25,13 @@ export async function sendEmail(opts: {
   try {
     await axios.post(
       "https://api.resend.com/emails",
-      { from, to: opts.to, subject: opts.subject, html: opts.html },
+      {
+        from,
+        to: opts.to,
+        subject: opts.subject,
+        html: opts.html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      },
       { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" } }
     );
     return true;
@@ -31,6 +40,73 @@ export async function sendEmail(opts: {
     console.error("[email] Failed to send to", opts.to, detail);
     return false;
   }
+}
+
+/**
+ * Builds the ASSESSMENT invitation email — sent to a candidate list before
+ * anyone has an account. Rendered in the hiring organisation's branding
+ * (logo, brand name, colour), falling back to DevSimulate's if unset.
+ */
+export function assessmentInviteEmail(opts: {
+  candidateName: string | null;
+  brandName: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  roleName: string;
+  link: string;
+  deadline: Date | null;
+  expectedMinutes: number | null;
+}): { subject: string; html: string } {
+  const {
+    candidateName, brandName, logoUrl, primaryColor,
+    roleName, link, deadline, expectedMinutes,
+  } = opts;
+
+  const accent = primaryColor || "#6366f1";
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const subject = `Your technical assessment — ${roleName} at ${brandName}`;
+
+  const header = logoUrl
+    ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;display:block;margin-bottom:24px;">`
+    : `<div style="font-weight:800;font-size:18px;margin-bottom:24px;color:${accent};">${brandName}</div>`;
+
+  const deadlineLine = deadline
+    ? `<li style="margin-bottom:6px;">Complete it by <strong>${deadline.toDateString()}</strong></li>`
+    : "";
+  const timeLine = expectedMinutes
+    ? `<li style="margin-bottom:6px;">Takes about <strong>${expectedMinutes} minutes</strong></li>`
+    : "";
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    ${header}
+    <h1 style="font-size:22px;margin:0 0 16px;">You're invited to a technical assessment</h1>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      Hi ${greeting},<br><br>
+      As the next step for the <strong>${roleName}</strong> role at <strong>${brandName}</strong>,
+      we'd like you to complete a short hands-on assessment. You'll diagnose and fix a real issue
+      in a working codebase — not a quiz.
+    </p>
+    <ul style="font-size:14px;line-height:1.6;color:#333;padding-left:20px;margin:16px 0;">
+      ${timeLine}
+      ${deadlineLine}
+      <li style="margin-bottom:6px;">You may use AI tools — we care how you work in reality</li>
+    </ul>
+    <div style="margin:24px 0;">
+      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">
+        Start your assessment →
+      </a>
+    </div>
+    <p style="font-size:12px;color:#888;line-height:1.6;">
+      This link is personal to you — please don't share it.<br>
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${link}</span>
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#aaa;">Sent via DevSimulate on behalf of ${brandName}.</p>
+  </div>`;
+
+  return { subject, html };
 }
 
 /**

@@ -69,6 +69,14 @@ export default function ApplyPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  // Capture the emailed invitation token up front. GitHub OAuth round-trips and
+  // drops the query string, so it's stashed locally and replayed on join — that's
+  // what ties this person back to their row in the recruiter's candidate list.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("invite");
+    if (t) localStorage.setItem(`ds_invite:${slug}`, t);
+  }, [slug]);
+
   function signIn() {
     localStorage.setItem("ds_submit_return", `/apply/${slug}`);
     window.location.href = GITHUB_AUTH_URL;
@@ -79,14 +87,19 @@ export default function ApplyPage() {
     setJoining(true);
     setError(null);
     const token = getToken();
+    const inviteToken = localStorage.getItem(`ds_invite:${slug}`);
     try {
       const res = await fetch(`${API}/employer/campaigns/apply/${slug}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: fullName.trim() }),
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          ...(inviteToken ? { inviteToken } : {}),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to join");
+      localStorage.removeItem(`ds_invite:${slug}`);
       setTicket(json.data.ticket);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to join campaign");
