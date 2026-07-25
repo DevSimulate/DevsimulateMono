@@ -1,0 +1,34 @@
+/**
+ * DevSimulate design tokens — "Precision Instrument".
+ *
+ * Single source of truth. tailwind.config.ts reads these same variables
+ * (via var(--x) references) rather than duplicating hex values, so changing
+ * a color here changes it everywhere — Tailwind utilities and raw CSS alike.
+ *
+ * Light theme only for this pass — do not add a dark-mode branch here.
+ */
+:root {
+  /* Core surfaces */
+  --ink: #10182b;      /* primary text, dark surfaces */
+  --paper: #fbfbf8;    /* app background */
+  --surface: #ffffff;  /* cards/panels on paper */
+  --hairline: #d8dad3; /* borders, rules, dividers */
+  --muted: #5e6673;    /* secondary text */
+
+  /* The one accent */
+  --emerald: #0b7a5e;
+  --emerald-weak: #e6f3ef; /* emerald tinted background, e.g. success chips */
+
+  /* Advisory signals — used sparingly, never decoratively */
+  --signal-amber: #b7791f;
+  --signal-amber-weak: #fbf1e1;
+  --signal-red: #b3372f;
+  --signal-red-weak: #fbeceb;
+
+  /* Shape */
+  --radius: 6px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration: 180ms;
+}

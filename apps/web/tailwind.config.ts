@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+// Colors reference the CSS variables in src/styles/tokens.css directly
+// (not duplicated hex) so that file stays the single source of truth.
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,22 +11,51 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: "#f0f4ff",
-          100: "#dde6ff",
-          200: "#c2d1ff",
-          300: "#97b2ff",
-          400: "#6585ff",
-          500: "#3d5aff",
-          600: "#2337f5",
-          700: "#1b26e1",
-          800: "#1c22b5",
-          900: "#1d228e",
-          950: "#121454",
+        ink: "var(--ink)",
+        paper: "var(--paper)",
+        surface: "var(--surface)",
+        hairline: "var(--hairline)",
+        muted: "var(--muted)",
+        emerald: {
+          DEFAULT: "var(--emerald)",
+          weak: "var(--emerald-weak)",
+        },
+        amber: {
+          DEFAULT: "var(--signal-amber)",
+          weak: "var(--signal-amber-weak)",
+        },
+        red: {
+          DEFAULT: "var(--signal-red)",
+          weak: "var(--signal-red-weak)",
         },
       },
       fontFamily: {
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui"],
+        sans: ["var(--font-body)", "ui-sans-serif", "system-ui"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      borderRadius: {
+        DEFAULT: "6px",
+        sm: "4px",
+        md: "6px",
+        lg: "6px",   // instruments have edges, not pillows — 6px is the ceiling
+        xl: "6px",
+        "2xl": "6px",
+        full: "9999px", // pills/chips are the one deliberate exception
+      },
+      boxShadow: {
+        // Hairline borders carry the weight; shadow is reserved for true
+        // overlays (modals, popovers) floating above the page.
+        overlay: "0 12px 32px rgba(16, 24, 43, 0.14)",
+      },
+      spacing: {
+        18: "4.5rem",
+      },
+      transitionDuration: {
+        DEFAULT: "180ms",
+      },
+      transitionTimingFunction: {
+        DEFAULT: "cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },
