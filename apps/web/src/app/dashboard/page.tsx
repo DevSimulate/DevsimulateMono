@@ -319,7 +319,6 @@ export default function DashboardPage() {
     { label: "Skill Score",    value: user.skillScore,                               unit: "pts" },
     { label: "Tickets solved", value: reviewed.length,                               unit: "" },
     { label: "Avg score",      value: avgScore !== null ? avgScore : "—",            unit: avgScore !== null ? "/100" : "" },
-    { label: "Plan",           value: user.subscriptionTier,                         unit: "" },
   ];
 
   return (
@@ -405,7 +404,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Stats ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
           {stats.map(({ label, value, unit }) => (
             <div key={label} className="card shine p-5">
               <div className="text-2xl font-black" style={{ color: "#1A1A1A" }}>

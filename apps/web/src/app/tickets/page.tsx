@@ -115,7 +115,7 @@ function TicketsList(): React.ReactElement {
       const error = err as { response?: { data?: { error?: string } } };
       const code = error.response?.data?.error;
       if (code === "FREE_TIER_LIMIT") {
-        setMsg({ id: ticketId, text: "Free tier limit reached (2 tickets). Upgrade to Pro.", ok: false });
+        setMsg({ id: ticketId, text: "You've used your 2 assessments this month — resets on the 1st.", ok: false });
       } else {
         setMsg({ id: ticketId, text: "Failed to assign ticket.", ok: false });
       }
@@ -172,19 +172,15 @@ function TicketsList(): React.ReactElement {
           }`}>
             <div>
               <p className="text-sm font-bold text-white">
-                {usage.used} of {usage.limit} free submissions used this month
+                {usage.used} of {usage.limit} assessments used this month
               </p>
               {usage.used >= usage.limit && (
-                <p className="text-xs text-slate-400 mt-0.5">You&apos;ve hit the free limit. Upgrade to Pro for unlimited tickets.</p>
+                <p className="text-xs text-slate-400 mt-0.5">You&apos;ve used your monthly limit — resets on the 1st.</p>
               )}
             </div>
-            {usage.used >= usage.limit ? (
-              <Link href="/pricing" className="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 text-sm transition-colors">
-                Upgrade → $9/mo
-              </Link>
-            ) : (
-              <span className="shrink-0 text-xs text-slate-500">{usage.limit - usage.used} remaining</span>
-            )}
+            <span className="shrink-0 text-xs text-slate-500">
+              {usage.used >= usage.limit ? "0 remaining" : `${usage.limit - usage.used} remaining`}
+            </span>
           </div>
         )}
 

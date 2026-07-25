@@ -75,7 +75,7 @@ export default function TicketDetailPage(): React.ReactElement {
       const e = err as { response?: { data?: { error?: string } } };
       const code = e.response?.data?.error;
       setError(code === "FREE_TIER_LIMIT"
-        ? "Free tier limit reached (2 tickets). Upgrade to Pro to continue."
+        ? "You've used your 2 assessments this month — resets on the 1st."
         : "Failed to assign ticket. You may already have it assigned."
       );
     } finally {

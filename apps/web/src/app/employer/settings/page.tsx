@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getToken } from "@/lib/auth";
-import { Check, Building2, Users, Megaphone, CreditCard, Palette } from "lucide-react";
+import { Check, Building2, Users, Megaphone, Palette } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -170,11 +170,10 @@ export default function SettingsPage() {
         </div>
 
         {/* At a glance */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           {[
             { icon: Megaphone, label: "Campaigns", value: data?.campaignCount ?? 0, accent: "#4338ca" },
             { icon: Users,     label: "Team members", value: data?.memberCount ?? 0, accent: "#067647" },
-            { icon: CreditCard, label: "Plan", value: data?.plan ?? "—",            accent: "#b54708" },
           ].map(({ icon: Icon, label, value, accent }) => (
             <div key={label} className="rounded-xl p-4" style={{ background: "#ffffff", border: "1px solid #222" }}>
               <Icon size={15} style={{ color: accent }} className="mb-2" />
@@ -182,14 +181,6 @@ export default function SettingsPage() {
               <div className="text-xs" style={{ color: "#5a6472" }}>{label}</div>
             </div>
           ))}
-        </div>
-
-        {/* Billing */}
-        <div className="rounded-xl p-6" style={{ background: "#ffffff", border: "1px solid #222" }}>
-          <div className="text-sm font-bold text-[#131722] mb-2 flex items-center gap-2"><CreditCard size={15} /> Billing</div>
-          <p className="text-sm" style={{ color: "#5a6472" }}>
-            Current plan: <span className="font-bold text-[#131722]">{data?.plan ?? "HIRING"}</span>. Manage billing and seats from your account.
-          </p>
         </div>
       </main>
     </div>

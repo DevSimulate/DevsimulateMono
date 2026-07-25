@@ -6,6 +6,9 @@ import { getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
 import { EdgeBanner } from "@/components/EdgeBanner";
 import { Check, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -43,10 +46,12 @@ interface AssignedTicket {
 
 const DEFAULT_BRANDING: Branding = {
   logoUrl: null,
-  primaryColor: "#5B5BD6",
-  accentColor: "#5B5BD6",
+  primaryColor: "#0B7A5E",
+  accentColor: "#0B7A5E",
   brandName: "DevSimulate",
 };
+
+const STAGES = ["Work", "Write-up", "Follow-up", "Verbal defence", "Result"];
 
 export default function ApplyPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -108,16 +113,18 @@ export default function ApplyPage() {
     }
   }
 
+  const totalMinutes = campaign?.difficulty === "SENIOR" ? 90 : 45;
+
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a", color: "#888" }}>Loading…</div>;
+    return <div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">Loading…</div>;
   }
 
   if (error && !campaign) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-center px-6" style={{ background: "#0a0a0a" }}>
+      <div className="min-h-screen bg-paper flex items-center justify-center text-center px-6">
         <div>
-          <div className="text-lg font-bold text-white mb-2">Campaign unavailable</div>
-          <div className="text-sm" style={{ color: "#888" }}>{error}</div>
+          <div className="font-display text-lg font-bold text-ink mb-2">Campaign unavailable</div>
+          <div className="text-sm text-muted">{error}</div>
         </div>
       </div>
     );
@@ -126,24 +133,24 @@ export default function ApplyPage() {
   // Ticket assigned confirmation
   if (ticket) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
-        <div className="max-w-md w-full rounded-2xl p-8 text-center" style={{ background: "#111111", border: "1px solid #222222" }}>
-          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#052e16" }}>
-            <Check size={28} style={{ color: "#4ade80" }} />
+      <div className="min-h-screen bg-paper flex items-center justify-center px-6">
+        <div className="max-w-md w-full rounded border border-hairline bg-surface p-8 text-center">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-emerald-weak">
+            <Check size={28} className="text-emerald" />
           </div>
-          <h1 className="text-xl font-black text-white mb-1">You&apos;re in!</h1>
-          <p className="text-sm mb-6" style={{ color: "#888" }}>
+          <h1 className="font-display text-xl font-bold text-ink mb-1">You&apos;re in</h1>
+          <p className="text-sm mb-6 text-muted">
             Your ticket for {campaign?.companyName} is assigned. Open it in VS Code to start.
           </p>
-          <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-            <div className="text-xs uppercase tracking-widest mb-1.5" style={{ color: "#555" }}>Your Ticket</div>
-            <div className="text-sm font-bold text-white mb-1">{ticket.title}</div>
-            <div className="text-xs" style={{ color: "#888" }}>{ticket.difficulty} · ~{ticket.expectedMinutes} min</div>
+          <div className="rounded border border-hairline bg-paper p-4 mb-6 text-left">
+            <div className="text-xs uppercase tracking-wide mb-1.5 text-muted">Your ticket</div>
+            <div className="text-sm font-semibold text-ink mb-1">{ticket.title}</div>
+            <div className="text-xs font-mono text-muted">{ticket.difficulty} · ~{ticket.expectedMinutes} min</div>
           </div>
-          <a href="/dashboard"
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white"
-            style={{ background: branding.primaryColor }}>
-            Go to Dashboard <ArrowRight size={15} />
+          <a href="/dashboard" className="block">
+            <Button variant="primary" size="lg" className="w-full" style={{ background: branding.primaryColor, borderColor: branding.primaryColor }}>
+              Go to dashboard <ArrowRight size={15} className="ml-1" />
+            </Button>
           </a>
         </div>
       </div>
@@ -152,34 +159,37 @@ export default function ApplyPage() {
 
   // Campaign landing
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen bg-paper flex items-center justify-center px-6 py-10">
       <EdgeBanner />
       <div className="max-w-md w-full">
-        <div className="rounded-2xl p-8" style={{ background: "#111111", border: "1px solid #222222" }}>
+        <div className="rounded border border-hairline bg-surface p-8">
           {/* Logo + status badge */}
           <div className="flex items-center justify-between mb-6">
             {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.brandName} className="h-14 w-14 rounded-xl object-contain" style={{ background: "#1a1a1a" }} />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={branding.logoUrl} alt={branding.brandName} className="h-14 w-14 rounded object-contain bg-paper" />
             ) : (
-              <div className="w-16 h-16 rounded-xl flex items-center justify-center text-lg font-black"
-                style={{ background: branding.primaryColor + "22", border: `1px solid ${branding.primaryColor}44`, color: branding.primaryColor }}>
+              <div
+                className="w-16 h-16 rounded flex items-center justify-center text-lg font-display font-bold border"
+                style={{ background: branding.primaryColor + "14", borderColor: branding.primaryColor + "40", color: branding.primaryColor }}
+              >
                 {campaign?.companyName?.slice(0, 4).toUpperCase()}
               </div>
             )}
-            <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full"
-              style={{ background: "#052e16", color: "#4ade80", border: "1px solid #166534" }}>
-              <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#4ade80" }} />
-              {campaign?.type === "CONTEST" ? "Contest is Live" : "Now Accepting Candidates"}
-            </span>
+            <Badge tone="good">
+              {campaign?.type === "CONTEST" ? "Contest is live" : "Now accepting candidates"}
+            </Badge>
           </div>
 
-          <div className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-3"
-            style={{ background: branding.primaryColor + "22", color: branding.primaryColor }}>
+          <div
+            className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-3"
+            style={{ background: branding.primaryColor + "14", color: branding.primaryColor }}
+          >
             {campaign?.type === "CONTEST" ? `${campaign?.companyName} DevFest` : `${campaign?.companyName} is hiring`}
           </div>
 
-          <h1 className="text-2xl font-black text-white mb-2">{campaign?.roleName}</h1>
-          <p className="text-sm leading-relaxed mb-5" style={{ color: "#aaaaaa" }}>
+          <h1 className="font-display text-2xl font-bold text-ink mb-2">{campaign?.roleName}</h1>
+          <p className="text-sm leading-relaxed mb-5 text-muted">
             {campaign?.type === "CONTEST" ? (
               <>Solve a real coding challenge, get AI-scored, and climb the live leaderboard. Top of your stack wins.</>
             ) : (
@@ -187,65 +197,84 @@ export default function ApplyPage() {
             )}
           </p>
 
-          {/* Ticket preview */}
-          <div className="rounded-lg p-4 mb-5" style={{ background: "#0d0d0d", border: "1px solid #1e1e1e" }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs uppercase tracking-widest" style={{ color: "#555" }}>You&apos;ll Solve</div>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                style={{
-                  background: campaign?.difficulty === "SENIOR" ? "#450a0a" : campaign?.difficulty === "MID" ? "#451a03" : "#052e16",
-                  color: campaign?.difficulty === "SENIOR" ? "#f87171" : campaign?.difficulty === "MID" ? "#fbbf24" : "#4ade80",
-                }}>
-                {campaign?.difficulty}
-              </span>
+          {/* The fairness promise — the hero of this page */}
+          <div className="rounded border border-emerald bg-emerald-weak px-5 py-4 mb-5 text-center">
+            <p className="font-display text-lg font-semibold leading-snug text-emerald">
+              A tooling failure never costs you points.
+            </p>
+          </div>
+
+          {/* Stages ahead */}
+          <div className="mb-5">
+            <div className="text-xs uppercase tracking-wide text-muted mb-2">What&apos;s ahead</div>
+            <div className="flex items-center flex-wrap gap-x-1 gap-y-2 text-xs font-medium text-ink">
+              {STAGES.map((s, i) => (
+                <span key={s} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-muted">→</span>}
+                  <span className="rounded-full border border-hairline px-2.5 py-1">{s}</span>
+                </span>
+              ))}
             </div>
-            <div className="text-sm font-bold text-white mb-1">{campaign?.codebase.name}</div>
-            <div className="text-xs leading-relaxed" style={{ color: "#888" }}>{campaign?.codebase.description}</div>
+          </div>
+
+          {/* AI policy, stated plainly */}
+          <div className="rounded border border-hairline px-4 py-3 mb-5 text-xs text-muted leading-relaxed">
+            AI tools are allowed while you code. They&apos;re locked during the defence — that part is you.
+          </div>
+
+          {/* Ticket preview */}
+          <div className="rounded border border-hairline bg-paper p-4 mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs uppercase tracking-wide text-muted">You&apos;ll solve</div>
+              <Badge tone={campaign?.difficulty === "SENIOR" ? "bad" : campaign?.difficulty === "MID" ? "warn" : "good"}>
+                {campaign?.difficulty}
+              </Badge>
+            </div>
+            <div className="text-sm font-semibold text-ink mb-1">{campaign?.codebase.name}</div>
+            <div className="text-xs leading-relaxed text-muted">{campaign?.codebase.description}</div>
           </div>
 
           {error && (
-            <div className="rounded-lg px-3 py-2 mb-4 text-xs" style={{ background: "#1c0000", color: "#f87171" }}>{error}</div>
+            <div className="rounded border border-red bg-red-weak px-3 py-2 mb-4 text-xs text-red">{error}</div>
           )}
 
           {authed ? (
             <>
               <div className="mb-3">
-                <label className="block text-xs font-bold mb-1.5" style={{ color: "#888" }}>
-                  Your full name <span style={{ color: "#f87171" }}>*</span>
-                  <span className="font-normal ml-1" style={{ color: "#555" }}>(appears on your certificate)</span>
+                <label className="block text-xs font-semibold mb-1.5 text-muted">
+                  Your full name <span className="text-red">*</span>
+                  <span className="font-normal ml-1">(appears on your certificate)</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="e.g. Sarah Ahmed"
-                  className="w-full px-3 py-2.5 rounded-lg text-sm"
-                  style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb", outline: "none" }}
                   onKeyDown={(e) => e.key === "Enter" && join()}
                 />
               </div>
-              <button onClick={join} disabled={joining}
-                className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: branding.primaryColor }}>
-                {joining ? "Assigning your ticket…" : <>Join Campaign <ArrowRight size={15} /></>}
-              </button>
+              <Button
+                variant="primary" size="lg" className="w-full"
+                onClick={join} disabled={joining}
+                style={{ background: branding.primaryColor, borderColor: branding.primaryColor }}
+              >
+                {joining ? "Assigning your ticket…" : <>Join campaign <ArrowRight size={15} className="ml-1" /></>}
+              </Button>
             </>
           ) : (
-            <button onClick={signIn}
-              className="flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-bold text-white"
-              style={{ background: "#24292e" }}>
-              Sign in with GitHub to Apply
-            </button>
+            <Button variant="secondary" size="lg" className="w-full" onClick={signIn}>
+              Sign in with GitHub to apply
+            </Button>
           )}
-          <p className="text-xs text-center mt-3" style={{ color: "#555" }}>
-            Free · No credit card · ~{campaign?.difficulty === "SENIOR" ? "90" : "45"} min
+          <p className="text-xs text-center mt-3 text-muted">
+            Free · No credit card · ~{totalMinutes} min total
           </p>
         </div>
 
         {/* Powered by footer */}
         <div className="flex items-center justify-center gap-1.5 mt-5">
           <BoltIcon size={14} />
-          <span className="text-xs" style={{ color: "#555" }}>Powered by <span className="font-bold" style={{ color: "#888" }}>DevSimulate</span></span>
+          <span className="text-xs text-muted">Powered by <span className="font-semibold">DevSimulate</span></span>
         </div>
       </div>
     </div>

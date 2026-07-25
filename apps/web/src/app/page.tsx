@@ -1,21 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
-import { getToken } from "@/lib/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const ONBOARDING_URL = "/onboarding/select";
-
-const PRO_FEATURES = [
-  "Every codebase — .NET, Node, Python, C++ and more",
-  "Full written feedback on all four dimensions",
-  "Spoken defense on every submission",
-  "Score history and trend on your dashboard",
-  "Public shareable profile",
-  "New codebases as they launch",
-];
 
 // Small inline icons — no emoji, so it reads like a product not a deck.
 const icons: Record<string, React.ReactElement> = {
@@ -69,28 +57,6 @@ const SCORES = [
 ];
 
 export default function LandingPage(): React.ReactElement {
-  const [upgradeLoading, setUpgradeLoading] = useState(false);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
-
-  async function handleUpgrade() {
-    const token = getToken();
-    if (!token) { window.location.href = ONBOARDING_URL; return; }
-    setUpgradeLoading(true);
-    setUpgradeError(null);
-    try {
-      const res = await fetch(`${API_URL}/billing/create-checkout-session`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to start checkout");
-      window.location.href = data.url!;
-    } catch (err) {
-      setUpgradeError(err instanceof Error ? err.message : "Something went wrong");
-      setUpgradeLoading(false);
-    }
-  }
-
   return (
     <main className="bg-grid min-h-screen overflow-x-hidden">
 
@@ -98,7 +64,7 @@ export default function LandingPage(): React.ReactElement {
       <nav className="sticky top-0 z-50 nav-glass px-6 py-3.5 flex items-center justify-between mx-auto w-full" style={{ maxWidth: "100%" }}>
         <Logo variant="horizontal" size={32} />
         <div className="hidden md:flex items-center gap-8">
-          {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Pricing", "#pricing"], ["Leaderboard", "/leaderboard"]].map(([label, href]) => (
+          {[["How it works", "#how-it-works"], ["Scoring", "#scoring"], ["Leaderboard", "/leaderboard"]].map(([label, href]) => (
             <a key={label} href={href} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
               onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
               onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}
@@ -268,47 +234,6 @@ export default function LandingPage(): React.ReactElement {
         </div>
       </section>
 
-      {/* ── Pricing ── */}
-      <section id="pricing" className="py-24 px-6" style={{ background: "#F7F6F3" }}>
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-10">
-            <div className="section-label">Pricing</div>
-            <h2 className="text-4xl font-black" style={{ color: "#1A1A1A" }}>Simple, honest pricing</h2>
-            <p className="mt-3 text-base" style={{ color: "#6B6B6B" }}>Free to try it. Pro when you&apos;re serious about levelling up.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-5">
-            <div className="card rounded-2xl p-7 flex flex-col">
-              <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>Free</div>
-              <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$0</div>
-              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>2 submissions / month</div>
-              <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
-                {["2 tickets per month", "Full scored feedback", "Spoken defense", "Public profile page"].map(f => (
-                  <li key={f} className="flex items-center gap-2"><span className="font-black" style={{ color: "#0D9488" }}>✓</span> {f}</li>
-                ))}
-              </ul>
-              <Link href={ONBOARDING_URL} className="btn-outline w-full text-center block">Get started free</Link>
-            </div>
-            <div className="card-glow rounded-2xl p-7 flex flex-col relative overflow-hidden">
-              <div className="absolute top-0 right-0 text-xs font-black px-3 py-1 rounded-bl-xl" style={{ background: "#5B5BD6", color: "#fff" }}>PRO</div>
-              <div className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#5B5BD6" }}>Pro</div>
-              <div className="text-5xl font-black mb-1" style={{ color: "#1A1A1A" }}>$9</div>
-              <div className="text-sm mb-6" style={{ color: "#6B6B6B" }}>per month · cancel anytime</div>
-              <ul className="space-y-2.5 mb-8 flex-1 text-sm" style={{ color: "#3A3A3A" }}>
-                {PRO_FEATURES.map(f => (
-                  <li key={f} className="flex items-start gap-2"><span className="font-black mt-0.5 shrink-0" style={{ color: "#5B5BD6" }}>✓</span> {f}</li>
-                ))}
-              </ul>
-              {upgradeError && <p className="text-xs mb-3 text-red-500">{upgradeError}</p>}
-              <button onClick={handleUpgrade} disabled={upgradeLoading}
-                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-                {upgradeLoading ? "Redirecting to checkout…" : "Upgrade to Pro →"}
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-center mt-6" style={{ color: "#9CA3AF" }}>Payments processed securely by Stripe. Cancel anytime.</p>
-        </div>
-      </section>
-
       {/* ── Final CTA ── */}
       <section className="py-24 px-6" style={{ background: "#EEECEA" }}>
         <div className="max-w-2xl mx-auto text-center">
@@ -336,7 +261,6 @@ export default function LandingPage(): React.ReactElement {
           <Logo variant="horizontal" size={28} />
           <p className="text-sm" style={{ color: "#9CA3AF" }}>© 2026 DevSimulate. Real tickets. Real defense.</p>
           <div className="flex gap-6 text-sm" style={{ color: "#9CA3AF" }}>
-            <Link href="/pricing" className="hover:text-indigo-600 transition-colors">Pricing</Link>
             <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
             <Link href="/employer/campaigns" className="hover:text-indigo-600 transition-colors">For Employers</Link>
             <a href="mailto:ossama@devsimulate.com" className="hover:text-indigo-600 transition-colors">ossama@devsimulate.com</a>

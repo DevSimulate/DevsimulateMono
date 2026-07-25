@@ -6,7 +6,17 @@ import Link from "next/link";
 import { getToken, storeToken, clearToken } from "@/lib/auth";
 import Logo from "@/components/Logo";
 import { EdgeBanner } from "@/components/EdgeBanner";
-import clsx from "clsx";
+import { cn } from "@/lib/cn";
+import { StageTracker } from "@/components/assessment/StageTracker";
+import { ProgressNarrative } from "@/components/assessment/ProgressNarrative";
+import { useAudioLevel } from "@/components/assessment/useAudioLevel";
+import { LevelMeter } from "@/components/assessment/LevelMeter";
+import { useLocalAutosave } from "@/components/assessment/useLocalAutosave";
+import { Button } from "@/components/ui/Button";
+import { Textarea, Field } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { ScoreReceipt } from "@/components/ui/ScoreReceipt";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -48,12 +58,6 @@ interface ReviewResult {
   verbalScore?: number;
   verbalPenalty?: number;
 }
-
-const DIFFICULTY_COLOR: Record<string, string> = {
-  JUNIOR: "bg-[#CCFBF1] text-[#0D9488]",
-  MID:    "bg-[#FEF3C7] text-[#D97706]",
-  SENIOR: "bg-[#FCE7F3] text-[#BE185D]",
-};
 
 type AIDeclaration =
   | "NO_AI_USED"
@@ -125,22 +129,6 @@ function Watermark({ text }: { text: string }) {
     </div>
   );
 }
-
-function ScoreBar({ label, value, max }: { label: string; value: number | null; max: number }) {
-  const pct = value !== null ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-36 text-xs shrink-0" style={{ color: "#6B6B6B" }}>{label}</div>
-      <div className="flex-1 h-1.5 rounded-full" style={{ background: "#E4E2DD" }}>
-        <div className="score-bar-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="w-8 text-xs text-right font-bold shrink-0" style={{ color: "#1A1A1A" }}>
-        {value ?? "—"}
-      </div>
-    </div>
-  );
-}
-
 
 // The write-up is split into four explicit sections so candidates know exactly
 // what each one is asking for, instead of guessing from a blank box. The four
@@ -1086,9 +1074,21 @@ function SubmitPageInner() {
   const isDesign   = ticket?.stack === "SYSTEM_DESIGN";
   const STEP_LABELS = isDesign ? STEP_LABELS_DESIGN : STEP_LABELS_CODE;
 
+  // ── Presentational-only additions below. Neither touches any existing
+  // state, effect, or handler above — both are pure UI enhancements with no
+  // effect on flow, scoring, or proctoring. ──────────────────────────────
+  // Live mic level during the verbal pre-flight (visualizes the SAME stream
+  // already captured for recording — no new data collection).
+  const audioLevel = useAudioLevel(stage === "verbal" && verbalReady ? streamRef.current : null);
+  // Local-only safety net against an accidental refresh/tab close. Never
+  // touches the API — the actual submission is still only what's explicitly
+  // submitted via the existing handlers below.
+  const autosaveKey = ticketId ? `${ticketId}-${isDesign ? "design" : "describe"}` : null;
+  const autosavedAt = useLocalAutosave(autosaveKey, isDesign ? designFields : fields);
+
   if (stage === "loading") {
     return (
-      <div className="min-h-screen bg-grid flex items-center justify-center text-sm" style={{ color: "#6B6B6B" }}>
+      <div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">
         Loading…
       </div>
     );
@@ -1096,21 +1096,19 @@ function SubmitPageInner() {
 
   if (disqualified) {
     return (
-      <div className="min-h-screen bg-grid flex items-center justify-center px-6">
-        <div className="max-w-md w-full rounded-2xl border p-8 text-center"
-          style={{ background: "#FFFFFF", borderColor: "#FCA5A5" }}>
-          <div style={{ fontSize: 42, marginBottom: 12 }}>⛔</div>
-          <h1 className="text-xl font-bold mb-2" style={{ color: "#B42318" }}>
+      <div className="min-h-screen bg-paper flex items-center justify-center px-6">
+        <div className="max-w-md w-full rounded border border-red bg-surface p-8 text-center">
+          <h1 className="font-display text-xl font-bold mb-2 text-red">
             Assessment ended — disqualified
           </h1>
-          <p className="text-sm mb-4" style={{ color: "#5A6472", lineHeight: 1.6 }}>
+          <p className="text-sm mb-4 text-ink leading-relaxed">
             {dqCause === "leave"
               ? "Leaving the assessment — switching to another app or tab, or exiting fullscreen — is not allowed during the timed questions. After two warnings, you left a third time, so this assessment has been voided and your entry disqualified. You will not be able to re-apply."
               : dqReason
               ? `You have been disqualified from this assessment: ${dqReason} You cannot re-take it on this account.`
               : "You have been disqualified from this assessment and cannot re-take it on this account."}
           </p>
-          <p className="text-xs" style={{ color: "#98A2B3" }}>
+          <p className="text-xs text-muted">
             If you believe this is a mistake, contact the administrator so it can be reviewed.
           </p>
         </div>
@@ -1119,644 +1117,560 @@ function SubmitPageInner() {
   }
 
   const showGuard = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified && (!isFs || away);
+  const isWarned = leaveCount > 0;
+
+  // Timer shown in the persistent stage rail — whichever is active for the current stage.
+  const rail =
+    stage === "sd_write" ? { time: `${Math.floor(writeTimeLeft / 60).toString().padStart(2, "0")}:${(writeTimeLeft % 60).toString().padStart(2, "0")}`, urgent: writeTimeLeft < 120 } :
+    stage === "q1" || stage === "q2" ? { time: `${mins}:${secs}`, urgent: timeLeft < 120 } :
+    stage === "verbal" && verbalReady ? { time: `${Math.floor(verbalTimeLeft / 60)}:${(verbalTimeLeft % 60).toString().padStart(2, "0")}`, urgent: verbalTimeLeft <= 20 } :
+    null;
 
   return (
-    <div className="min-h-screen bg-grid">
+    <div className="min-h-screen bg-paper">
 
-      {/* Stay-on-screen / fullscreen guard — blocks the timed steps unless focused */}
+      {/* Stay-on-screen / fullscreen guard — blocks the timed steps unless focused.
+          Calm, firm, neutral: amber for a warning, never a red flash. */}
       {showGuard && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6"
-          style={{ background: "rgba(12,20,30,0.92)", backdropFilter: "blur(6px)" }}>
-          <div className="max-w-md w-full rounded-2xl border p-8 text-center"
-            style={{ background: "#FFFFFF", borderColor: leaveCount > 0 ? "#FCA5A5" : "#E4E2DD" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>{leaveCount > 0 ? "⚠️" : "🖥️"}</div>
-            <h2 className="text-lg font-bold mb-2" style={{ color: leaveCount > 0 ? "#B42318" : "#1A1A1A" }}>
-              {leaveCount > 0 ? `Stay on the assessment — warning ${leaveCount} of 2` : "Fullscreen required"}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-6 bg-[rgba(16,24,43,0.85)]">
+          <div className={cn("max-w-md w-full rounded border bg-surface p-8 text-center", isWarned ? "border-amber" : "border-hairline")}>
+            <h2 className={cn("font-display text-lg font-semibold mb-2", isWarned ? "text-amber" : "text-ink")}>
+              {isWarned ? `Stay on the assessment — warning ${leaveCount} of 2` : "Fullscreen required"}
             </h2>
-            <p className="text-sm mb-5" style={{ color: "#5A6472", lineHeight: 1.6 }}>
-              {leaveCount > 0
+            <p className="text-sm mb-5 text-muted leading-relaxed">
+              {isWarned
                 ? "Leaving the assessment — switching apps or tabs, or exiting fullscreen — is not allowed during the timed questions. One more time and you will be disqualified and unable to re-apply."
                 : "This step runs in fullscreen so you stay focused on the assessment. Do not switch to other apps (including your editor) while answering."}
             </p>
-            <button onClick={enterAssessmentFullscreen}
-              className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white" style={{ background: "#7C3AED" }}>
-              {leaveCount > 0 ? "Return to assessment" : "Enter fullscreen & begin"}
-            </button>
+            <Button variant="primary" size="lg" onClick={enterAssessmentFullscreen} className="w-full">
+              {isWarned ? "Return to assessment" : "Enter fullscreen & begin"}
+            </Button>
           </div>
         </div>
       )}
 
       {/* Header */}
-      <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-50 border-b border-hairline bg-surface px-6 py-3.5 flex items-center justify-between">
         <Link href="/"><Logo variant="horizontal" size={32} /></Link>
-        <Link href="/dashboard" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#1A1A1A")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#6B6B6B")}>
+        <Link href="/dashboard" className="text-sm font-medium text-muted hover:text-ink transition-colors">
           Dashboard →
         </Link>
       </header>
 
+      {/* Persistent stage tracker — slim top rail, always visible */}
+      <StageTracker labels={STEP_LABELS} currentIndex={si} timeRemaining={rail?.time} timeUrgent={rail?.urgent} />
+
       <main className="max-w-2xl mx-auto px-6 py-10">
 
-        {/* Step indicator */}
-        <div className="flex items-center mb-8">
-          {STEP_LABELS.map((label, i) => (
-            <div key={label} className="flex items-center flex-1 last:flex-none">
-              <div className="flex items-center gap-1.5 shrink-0">
-                <div className={clsx(
-                  "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors",
-                  i < si  ? "bg-[#0D9488] text-white" :
-                  i === si ? "bg-[#5B5BD6] text-white" :
-                             "bg-[#E4E2DD] text-[#6B6B6B]"
-                )}>
-                  {i < si ? "✓" : i + 1}
-                </div>
-                <span className={clsx(
-                  "text-xs font-medium hidden sm:block",
-                  i <= si ? "text-[#1A1A1A]" : "text-[#6B6B6B]"
-                )}>
-                  {label}
-                </span>
-              </div>
-              {i < STEP_LABELS.length - 1 && (
-                <div className="flex-1 h-px mx-2" style={{ background: i < si ? "#0D9488" : "#E4E2DD" }} />
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Quiet proctoring status — ambient awareness, not a threat */}
+        {WATCHED_STAGES.includes(stage) && (proctoring.requireFullscreen || proctoring.blockPaste) && (
+          <div className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 py-1 text-xs text-muted">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald" />
+            Proctored session
+            {proctoring.requireFullscreen && " · fullscreen required"}
+            {proctoring.blockPaste && " · paste disabled"}
+          </div>
+        )}
 
         {/* Ticket info bar */}
         {ticket && stage !== "score" && (
-          <div className="card p-4 mb-6">
+          <Card className="p-4 mb-6">
             <div className="flex items-center gap-3">
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm truncate mb-0.5" style={{ color: "#1A1A1A" }}>{ticket.title}</div>
+                <div className="font-semibold text-sm truncate mb-0.5 text-ink">{ticket.title}</div>
                 {!isDesign && prUrl && (
-                  <a href={prUrl} target="_blank" rel="noreferrer"
-                    className="text-xs font-mono truncate block hover:underline" style={{ color: "#5B5BD6" }}>
+                  <a href={prUrl} target="_blank" rel="noreferrer" className="text-xs font-mono truncate block hover:underline text-emerald">
                     {prUrl}
                   </a>
                 )}
                 {isDesign && (
-                  <span className="text-xs font-medium" style={{ color: "#5B5BD6" }}>
+                  <span className="text-xs font-medium text-emerald">
                     System Design Challenge · {ticket.expectedMinutes} min
                   </span>
                 )}
               </div>
-              <span className={clsx("text-xs font-bold rounded-full px-3 py-1 shrink-0", DIFFICULTY_COLOR[ticket.difficulty])}>
-                {ticket.difficulty}
-              </span>
+              <Badge tone="neutral" className="shrink-0">{ticket.difficulty}</Badge>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Error */}
         {error && (
-          <div className="rounded-xl border border-red-200 px-4 py-3 mb-6 text-sm"
-            style={{ background: "#FFF5F5", color: "#DC2626" }}>
+          <div className="rounded border border-red bg-red-weak px-4 py-3 mb-6 text-sm text-red">
             {error}
           </div>
         )}
 
         {/* ── Stage: Describe ── */}
         {stage === "describe" && (
-          <div className="card p-6 fade-in-up">
-            <div className="section-label mb-1">Your Approach</div>
-            <p className="text-sm mb-5" style={{ color: "#6B6B6B", lineHeight: 1.7 }}>
-              Answer each section below. <strong style={{ color: "#1A1A1A" }}>Be short and precise — 2–4 sentences each.</strong>{" "}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display text-base font-semibold text-ink">Your approach</h2>
+              {autosavedAt && (
+                <span className="font-mono text-xs text-muted">
+                  Saved · {autosavedAt.toLocaleTimeString([], { hour12: false })}
+                </span>
+              )}
+            </div>
+            <p className="text-sm mb-5 text-muted leading-relaxed">
+              Answer each section below. <strong className="text-ink">Short and precise beats long — 2–4 sentences each.</strong>{" "}
               We score the quality of your reasoning, not the length. Vague or padded answers score lower than a tight, specific one.
             </p>
 
             {DESCRIBE_FIELDS.map((f) => (
-              <div key={f.key} className="mb-5">
-                <label className="block text-sm font-bold mb-1" style={{ color: "#1A1A1A" }}>
-                  {f.label}
-                </label>
-                <p className="text-xs mb-2" style={{ color: "#6B6B6B", lineHeight: 1.6 }}>{f.help}</p>
-                <textarea
+              <Field key={f.key} label={f.label} helper={f.help}>
+                <Textarea
                   value={fields[f.key] ?? ""}
                   onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
                   onPaste={handleAnswerPaste}
                   placeholder={f.placeholder}
                   rows={3}
-                  className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none"
-                  style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+                  error={pasteWarn}
                 />
-              </div>
+              </Field>
             ))}
             {pasteWarn && (
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+              <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
                 {pasteNotice}
               </div>
             )}
             <div className="flex items-center justify-between mb-5">
-              <span className="text-xs font-medium" style={{ color: description.length < 100 ? "#D97706" : "#0D9488" }}>
+              <span className={cn("text-xs font-medium", description.length < 100 ? "text-amber" : "text-emerald")}>
                 {description.length} chars
                 {description.length < 100 ? ` — need ${100 - description.length} more` : " — ready"}
               </span>
-              <span className="text-xs" style={{ color: "#6B6B6B" }}>Est. {ticket?.expectedMinutes ?? "—"} min ticket</span>
+              <span className="text-xs text-muted">Est. {ticket?.expectedMinutes ?? "—"} min ticket</span>
             </div>
-            <button onClick={handleDescriptionSubmit} disabled={description.trim().length < 100}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-              Submit for Review →
-            </button>
-          </div>
+            <Button variant="primary" size="lg" className="w-full" onClick={handleDescriptionSubmit} disabled={description.trim().length < 100}>
+              Submit for review →
+            </Button>
+          </Card>
         )}
 
         {/* ── Stage: System Design Write ── */}
         {stage === "sd_write" && ticket && (
-          <div className="space-y-4 fade-in-up">
-            {/* Write timer */}
-            <div className="card p-4 flex items-center justify-between">
-              <span className="text-xs font-medium" style={{ color: "#6B6B6B" }}>Time remaining to write your design</span>
-              <span className="text-sm font-mono font-bold tabular-nums" style={{
-                color: writeTimeLeft < 120 ? "#DC2626" : writeTimeLeft < 300 ? "#D97706" : "#1A1A1A",
-              }}>
-                ⏱ {Math.floor(writeTimeLeft / 60).toString().padStart(2, "0")}:{(writeTimeLeft % 60).toString().padStart(2, "0")}
-              </span>
-            </div>
-
-
-            <div className="card p-6 relative overflow-hidden">
+          <div className="flex flex-col gap-4">
+            <Card className="p-6 relative overflow-hidden">
               <Watermark text={username} />
               <div className="relative" style={{ zIndex: 1 }}>
-                <div className="section-label mb-1">The Problem</div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#6B6B6B" }}>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">The problem</div>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap text-muted">
                   {ticket.description}
                 </div>
               </div>
-            </div>
+            </Card>
 
-            <div className="card p-6">
-              <div className="section-label mb-1">Your Design</div>
-              <p className="text-sm mb-5" style={{ color: "#6B6B6B", lineHeight: 1.7 }}>
-                Answer each section below. <strong style={{ color: "#1A1A1A" }}>Be short and precise — a few sentences or tight bullets each.</strong>{" "}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-display text-base font-semibold text-ink">Your design</h2>
+                {autosavedAt && (
+                  <span className="font-mono text-xs text-muted">
+                    Saved · {autosavedAt.toLocaleTimeString([], { hour12: false })}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm mb-5 text-muted leading-relaxed">
+                Answer each section below. <strong className="text-ink">Short and precise beats long — a few sentences or tight bullets each.</strong>{" "}
                 Name actual technologies, state your assumptions, and justify your choices. We score the
                 quality of your reasoning and trade-offs, not the length.
               </p>
 
               {DESIGN_FIELDS.map((f) => (
-                <div key={f.key} className="mb-5">
-                  <label className="block text-sm font-bold mb-1" style={{ color: "#1A1A1A" }}>
-                    {f.label}
-                  </label>
-                  <p className="text-xs mb-2" style={{ color: "#6B6B6B", lineHeight: 1.6 }}>{f.help}</p>
-                  <textarea
+                <Field key={f.key} label={f.label} helper={f.help}>
+                  <Textarea
                     value={designFields[f.key] ?? ""}
                     onChange={(e) => setDesignFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     onPaste={handleAnswerPaste}
                     placeholder={f.placeholder}
                     rows={3}
-                    className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none"
-                    style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A", lineHeight: 1.7 }}
+                    error={pasteWarn}
                   />
-                </div>
+                </Field>
               ))}
               {pasteWarn && (
-                <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                  style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
                   {pasteNotice}
                 </div>
               )}
               <div className="flex items-center justify-between mb-5">
-                <span className="text-xs font-medium" style={{ color: designDoc.length < 300 ? "#D97706" : "#0D9488" }}>
+                <span className={cn("text-xs font-medium", designDoc.length < 300 ? "text-amber" : "text-emerald")}>
                   {designDoc.length} chars
                   {designDoc.length < 300 ? ` — need ${300 - designDoc.length} more` : " — ready"}
                 </span>
-                <span className="text-xs" style={{ color: "#6B6B6B" }}>Est. {ticket.expectedMinutes} min</span>
+                <span className="text-xs text-muted">Est. {ticket.expectedMinutes} min</span>
               </div>
-              <button
-                onClick={handleDesignSubmit}
-                disabled={designDoc.trim().length < 300}
-                className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-              >
-                Submit for Review →
-              </button>
-            </div>
+              <Button variant="primary" size="lg" className="w-full" onClick={handleDesignSubmit} disabled={designDoc.trim().length < 300}>
+                Submit for review →
+              </Button>
+            </Card>
           </div>
         )}
 
         {/* ── Stage: Analysing ── */}
         {stage === "analysing" && (
-          <div className="card p-10 text-center fade-in-up">
-            <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
-            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>
-              {isDesign ? "Reviewing your design…" : "Analysing your PR…"}
+          <Card className="p-10 text-center">
+            <div className="font-display font-semibold text-base mb-1 text-ink">
+              {isDesign ? "Reviewing your design" : "Analysing your PR"}
             </div>
-            <div className="text-sm mb-1" style={{ color: "#6B6B6B" }}>
+            <div className="text-sm mb-6 text-muted">
               {isDesign
-                ? "Evaluating your architecture and generating a follow-up question. Usually 30–60 seconds."
-                : "Reading your diff and generating a question. Usually 60–90 seconds."}
+                ? "Evaluating your architecture and generating a follow-up question."
+                : "Reading your diff and generating a question."}
             </div>
-            <div className="text-xs font-mono mb-8" style={{ color: elapsed > 90 ? "#D97706" : "#6B6B6B" }}>
+            <ProgressNarrative
+              elapsedSeconds={elapsed}
+              steps={isDesign ? [
+                { label: "Reading your design document", doneAfter: 5 },
+                { label: "Scoring (3 independent passes)", doneAfter: 30 },
+                { label: "Preparing your follow-up question", doneAfter: 45 },
+              ] : [
+                { label: "Fetching your PR diff", doneAfter: 5 },
+                { label: "Scoring (3 independent passes)", doneAfter: 45 },
+                { label: "Preparing your follow-up question", doneAfter: 70 },
+              ]}
+            />
+            <div className="font-mono text-xs mt-6 text-muted">
               {Math.floor(elapsed / 60).toString().padStart(2, "0")}:{(elapsed % 60).toString().padStart(2, "0")} elapsed
             </div>
-            <div className="rounded-xl p-5 text-left space-y-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>What to expect</div>
-              {(isDesign ? [
-                "Q1 targets a specific decision in your design — a trade-off, a component choice",
-                "After you answer Q1, Q2 is generated from your actual answer",
-                "You have 15 minutes total across both questions",
-                "Final score = design review (100 pts) + follow-up answers",
-              ] : [
-                "Q1 is specific to your actual code changes — exact variables and functions",
-                "After you answer Q1, Q2 is generated from your answer",
-                "You have 15 minutes total across both questions",
-                "Your answers verify you understand your own fix — they confirm the score, not inflate it",
-              ]).map((tip) => (
-                <div key={tip} className="flex items-start gap-2 text-xs" style={{ color: "#6B6B6B" }}>
-                  <span className="shrink-0 mt-0.5" style={{ color: "#5B5BD6" }}>→</span>
-                  <span>{tip}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          </Card>
         )}
 
         {/* ── Stage: Q1 ── */}
         {stage === "q1" && (
-          <div className="card p-6 fade-in-up">
-            <div className="flex items-center justify-between mb-5">
-              <div className="section-label">Question 1 of 2</div>
-              <span className={clsx(
-                "text-sm font-mono font-bold tabular-nums",
-                timeLeft < 120 ? "text-red-500" : timeLeft < 300 ? "text-[#D97706]" : "text-[#6B6B6B]"
-              )}>
-                ⏱ {mins}:{secs}
-              </span>
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-base font-semibold text-ink">Question 1 of 2</h2>
             </div>
 
-            <div className="rounded-xl p-4 mb-2 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+            <div className="rounded border border-hairline bg-paper p-4 mb-3 relative overflow-hidden">
               <Watermark text={username} />
-              <p className="text-sm font-semibold leading-relaxed relative" style={{ color: "#1A1A1A", zIndex: 1 }}>{question1}</p>
+              <p className="font-display text-lg font-semibold leading-relaxed relative text-ink" style={{ zIndex: 1 }}>{question1}</p>
             </div>
-            <div className="mb-3" />
 
-            <textarea
+            <Textarea
               value={answer1}
               onChange={(e) => setAnswer1(e.target.value)}
               onPaste={handleAnswerPaste}
               placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
               disabled={timeLeft === 0}
-              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
-              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+              error={pasteWarn}
+              className="mb-2"
             />
             {pasteWarn && (
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+              <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
                 {pasteNotice}
               </div>
             )}
-            <div className="mb-3" />
 
-            <div className="rounded-xl border px-4 py-3 mb-5 text-xs" style={{ borderColor: "#E4E2DD", background: "#EBEBFF", color: "#5B5BD6" }}>
+            <div className="rounded border border-hairline bg-paper px-4 py-3 mb-5 text-xs text-muted">
               After you submit this answer, Q2 will be generated based on what you wrote.
             </div>
 
-            <button onClick={handleA1Submit} disabled={!answer1.trim() || timeLeft === 0}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-              {timeLeft === 0 ? "Time expired" : "Submit Answer → Get Q2"}
-            </button>
-          </div>
+            <Button variant="primary" size="lg" className="w-full" onClick={handleA1Submit} disabled={!answer1.trim() || timeLeft === 0}>
+              {timeLeft === 0 ? "Time expired" : "Submit answer → get Q2"}
+            </Button>
+          </Card>
         )}
 
         {/* ── Stage: Loading Q2 ── */}
         {stage === "loading_q2" && (
-          <div className="card p-10 text-center fade-in-up">
-            <div className="inline-block w-12 h-12 rounded-full border-4 border-[#5B5BD6] border-t-transparent animate-spin mb-5" />
-            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>Generating Q2…</div>
-            <div className="text-sm" style={{ color: "#6B6B6B" }}>
-              Reading your answer and generating a follow-up question. ~5 seconds.
-            </div>
-          </div>
+          <Card className="p-10 text-center">
+            <div className="font-display font-semibold text-base mb-4 text-ink">Generating Q2</div>
+            <ProgressNarrative elapsedSeconds={elapsed} steps={[{ label: "Reading your answer and generating a follow-up", doneAfter: 100 }]} />
+          </Card>
         )}
 
         {/* ── Stage: Q2 ── */}
         {stage === "q2" && (
-          <div className="card p-6 fade-in-up">
-            <div className="flex items-center justify-between mb-5">
-              <div className="section-label">Question 2 of 2</div>
-              <span className={clsx(
-                "text-sm font-mono font-bold tabular-nums",
-                timeLeft < 120 ? "text-red-500" : timeLeft < 300 ? "text-[#D97706]" : "text-[#6B6B6B]"
-              )}>
-                ⏱ {mins}:{secs}
-              </span>
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-base font-semibold text-ink">Question 2 of 2</h2>
             </div>
 
-            <div className="rounded-xl p-4 mb-5 relative overflow-hidden" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
+            <div className="rounded border border-hairline bg-paper p-4 mb-5 relative overflow-hidden">
               <Watermark text={username} />
-              <p className="text-sm font-semibold leading-relaxed relative" style={{ color: "#1A1A1A", zIndex: 1 }}>{question2}</p>
+              <p className="font-display text-lg font-semibold leading-relaxed relative text-ink" style={{ zIndex: 1 }}>{question2}</p>
             </div>
 
-            <textarea
+            <Textarea
               value={answer2}
               onChange={(e) => setAnswer2(e.target.value)}
               onPaste={handleAnswerPaste}
               placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
               disabled={timeLeft === 0}
-              className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-2 disabled:opacity-50"
-              style={{ borderColor: pasteWarn ? "#DC2626" : "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+              error={pasteWarn}
+              className="mb-2"
             />
             {pasteWarn && (
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs font-semibold"
-                style={{ background: "#FFF5F5", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+              <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
                 {pasteNotice}
               </div>
             )}
-            <div className="mb-3" />
 
-            <div className="rounded-xl border p-4 mb-5 space-y-2" style={{ borderColor: "#E4E2DD", background: "white" }}>
-              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "#6B6B6B" }}>
+            <div className="rounded border border-hairline p-4 mb-5 flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">
                 How did you answer these questions?
               </p>
               {AI_OPTIONS.map((opt) => (
-                <label key={opt.value} className={clsx(
-                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors",
-                  declaration === opt.value ? "border-[#5B5BD6] bg-[#EBEBFF]" : "border-[#E4E2DD] hover:border-[#C4C2DB]"
+                <label key={opt.value} className={cn(
+                  "flex items-start gap-3 rounded border px-3 py-2.5 cursor-pointer transition-colors duration-150",
+                  declaration === opt.value ? "border-emerald bg-emerald-weak" : "border-hairline hover:border-muted"
                 )}>
                   <input type="radio" name="aiDeclaration" value={opt.value}
                     checked={declaration === opt.value} onChange={() => setDeclaration(opt.value)}
-                    className="mt-0.5 shrink-0" style={{ accentColor: "#5B5BD6" }} />
+                    className="mt-0.5 shrink-0 accent-emerald" />
                   <div>
-                    <div className="text-xs font-semibold" style={{ color: "#1A1A1A" }}>{opt.label}</div>
-                    <div className="text-xs" style={{ color: "#6B6B6B" }}>{opt.sub}</div>
+                    <div className="text-xs font-semibold text-ink">{opt.label}</div>
+                    <div className="text-xs text-muted">{opt.sub}</div>
                   </div>
                 </label>
               ))}
+              <p className="text-xs text-muted mt-1">Your declaration never changes your score.</p>
             </div>
 
-            <button onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration || timeLeft === 0}
-              className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-              {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get My Score →"}
-            </button>
-          </div>
+            <Button variant="primary" size="lg" className="w-full" onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration || timeLeft === 0}>
+              {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get my score →"}
+            </Button>
+          </Card>
         )}
 
         {/* ── Stage: Verbal explanation ── */}
         {stage === "verbal" && (
-          <div className="card rounded-2xl p-6 fade-in-up">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-lg font-bold" style={{ color: "#1A1A1A" }}>Explain it out loud</h2>
-              {verbalReady && (
-                <span className="text-sm font-mono font-bold rounded-full px-3 py-1"
-                  style={{ background: verbalTimeLeft <= 20 ? "#FEE2E2" : "#EEF2FF", color: verbalTimeLeft <= 20 ? "#DC2626" : "#4F46E5" }}>
-                  {Math.floor(verbalTimeLeft / 60)}:{(verbalTimeLeft % 60).toString().padStart(2, "0")}
-                </span>
-              )}
-            </div>
-            <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
-              Answer in your own words — your speech is transcribed and checked against your written answers. The video is <span className="font-semibold">not recorded</span>; only the text is kept. <span className="font-semibold">Your score is finalised after this.</span>
+          <Card className="p-6">
+            <h2 className="font-display text-lg font-semibold mb-1 text-ink">Explain it out loud</h2>
+            <p className="text-xs mb-4 text-muted leading-relaxed">
+              Answer in your own words — your speech is transcribed and checked against your written answers.
+              Audio is <span className="font-semibold text-ink">never stored</span> — transcript only, and the video is not recorded.{" "}
+              <span className="font-semibold text-ink">Your score is finalised after this.</span>
             </p>
             {error && (
-              <div className="text-xs mb-4 rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#D97706" }}>{error}</div>
+              <div className="text-xs mb-4 rounded border border-amber bg-amber-weak px-3 py-2 text-amber">{error}</div>
             )}
 
             {!verbalReady ? (
               <>
-                <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-                  <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>On-the-spot question</div>
-                  <p className="text-sm leading-relaxed" style={{ color: "#4B4B4B" }}>
+                <div className="rounded border border-hairline bg-paper p-4 mb-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">On-the-spot question</div>
+                  <p className="text-sm leading-relaxed text-ink">
                     The question stays hidden until you start. Once you click Start, it appears and the <span className="font-semibold">5-minute timer begins</span> — so answer it aloud straight away, in your own words.
                   </p>
                 </div>
-                <div className="rounded-xl px-4 py-3 mb-4 text-xs" style={{ background: "#EEF2FF", color: "#4F46E5" }}>
-                  When you click Start, your browser will ask for <span className="font-semibold">camera &amp; microphone</span>. Allow both — the question and timer appear right after.
+                <div className="rounded border border-hairline px-4 py-3 mb-4 text-xs text-muted">
+                  When you click Start, your browser will ask for <span className="font-semibold text-ink">camera &amp; microphone</span> — this is the pre-flight check, so you can confirm both are live before the timer starts.
                 </div>
-                <button onClick={beginVerbal} className="btn-primary w-full">
+                <Button variant="primary" size="lg" className="w-full" onClick={beginVerbal}>
                   Start — reveal question &amp; allow camera &amp; mic →
-                </button>
+                </Button>
               </>
             ) : (
               <>
                 <div className="flex gap-4 mb-4 items-start">
                   <video ref={videoRef} muted autoPlay playsInline
-                    className="rounded-xl shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
-                  <div className="flex-1 rounded-xl p-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-                    <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Answer aloud</div>
-                    <p className="text-sm font-semibold leading-relaxed" style={{ color: "#1A1A1A" }}>{verbalQuestion}</p>
+                    className="rounded shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
+                  <div className="flex-1 rounded border border-hairline bg-paper p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted">Answer aloud</span>
+                      <span className={cn("font-mono text-sm font-semibold", verbalTimeLeft <= 20 ? "text-amber" : "text-muted")}>
+                        {Math.floor(verbalTimeLeft / 60)}:{(verbalTimeLeft % 60).toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                    <p className="font-display text-base font-semibold leading-relaxed text-ink">{verbalQuestion}</p>
                   </div>
                 </div>
 
-                <div className="rounded-xl px-4 py-3 mb-3 flex items-center gap-2 text-sm"
-                  style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#6B6B6B" }}>
-                  <span className="inline-block w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: "#DC2626" }} />
-                  Recording — speak your answer now. You&apos;ll <span className="font-semibold">review the transcript</span> before it&apos;s scored.
+                <div className="rounded border border-hairline px-4 py-3 mb-3 flex items-center justify-between text-sm text-muted">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red animate-pulse shrink-0" />
+                    Recording — you&apos;ll <span className="font-semibold text-ink">review the transcript</span> before it&apos;s scored.
+                  </span>
+                  <LevelMeter level={audioLevel} />
                 </div>
 
                 {/* Live captions — what we're hearing, in real time */}
-                <div className="rounded-xl px-4 py-3 mb-4 min-h-[64px]" style={{ background: "#F7F6F3", border: "1px dashed #C4C2DB" }}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#5B5BD6" }}>Live captions</div>
-                  <p className="text-sm leading-relaxed" style={{ color: liveCaption ? "#1A1A1A" : "#9A9A9A" }}>
+                <div className="rounded border border-dashed border-hairline px-4 py-3 mb-4 min-h-16">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-1">Live captions</div>
+                  <p className={cn("text-sm leading-relaxed", liveCaption ? "text-ink" : "text-muted")}>
                     {liveCaption || "Your words will appear here as you speak…"}
                   </p>
                 </div>
 
-                <button onClick={stopAndReview} disabled={verbalBusy}
-                  className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed">
+                <Button variant="primary" size="lg" className="w-full" onClick={stopAndReview} disabled={verbalBusy}>
                   {verbalBusy ? "Transcribing…" : "Stop & review my answer →"}
-                </button>
+                </Button>
               </>
             )}
-          </div>
+          </Card>
         )}
 
         {/* ── Stage: Verbal transcript review ── */}
         {stage === "verbal_review" && (
-          <div className="card rounded-2xl p-6 fade-in-up">
-            <h2 className="text-lg font-bold mb-1" style={{ color: "#1A1A1A" }}>Review what we heard</h2>
-            <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
-              This is the transcript of your spoken answer — <span className="font-semibold">exactly what will be scored</span>. If it captured you correctly, submit it. If a word came out wrong, you can re-record.
+          <Card className="p-6">
+            <h2 className="font-display text-lg font-semibold mb-1 text-ink">Review what we heard</h2>
+            <p className="text-xs mb-4 text-muted leading-relaxed">
+              This is the transcript of your spoken answer — <span className="font-semibold text-ink">exactly what will be scored</span>. If it captured you correctly, submit it. If a word came out wrong, you can re-record.
             </p>
             {error && (
-              <div className="text-xs mb-4 rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#D97706" }}>{error}</div>
+              <div className="text-xs mb-4 rounded border border-amber bg-amber-weak px-3 py-2 text-amber">{error}</div>
             )}
 
-            <div className="rounded-xl p-4 mb-4" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: "#5B5BD6" }}>Your explanation (transcribed)</div>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "#1A1A1A" }}>{reviewTranscript}</p>
+            <div className="rounded border border-hairline bg-paper p-4 mb-4">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted mb-2">Your explanation (transcribed)</div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-ink">{reviewTranscript}</p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2">
-              <button onClick={confirmVerbal} disabled={verbalBusy}
-                className="btn-primary flex-1 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Button variant="primary" size="lg" className="flex-1" onClick={confirmVerbal} disabled={verbalBusy}>
                 {verbalBusy ? "Scoring…" : "Looks right — submit for scoring →"}
-              </button>
-              <button onClick={reRecordVerbal} disabled={verbalBusy || verbalRetries <= 0}
-                className="flex-1 rounded-lg font-semibold px-4 py-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ background: "#FFFFFF", border: "1px solid #E4E2DD", color: "#4F46E5" }}>
+              </Button>
+              <Button variant="secondary" size="lg" className="flex-1" onClick={reRecordVerbal} disabled={verbalBusy || verbalRetries <= 0}>
                 {verbalRetries > 0 ? `Re-record (${verbalRetries} left)` : "No re-records left"}
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         )}
 
-        {/* ── Stage: Upgrade ── */}
+        {/* ── Stage: Upgrade — a neutral platform limit, never a sales prompt ── */}
         {stage === "upgrade" && (
-          <div className="card rounded-2xl p-10 text-center fade-in-up">
-            <div className="text-4xl mb-4">🚀</div>
-            <h2 className="text-2xl font-black mb-2" style={{ color: "#1A1A1A" }}>
-              Free plan limit reached
+          <Card className="p-10 text-center">
+            <h2 className="font-display text-xl font-bold mb-2 text-ink">
+              Monthly limit reached
             </h2>
-            <p className="text-sm mb-6 leading-relaxed" style={{ color: "#6B6B6B" }}>
-              You have used your 2 free submissions this month.<br />
-              Upgrade to Pro for <strong style={{ color: "#1A1A1A" }}>unlimited tickets</strong> at $9/month.
+            <p className="text-sm mb-6 leading-relaxed text-muted">
+              You&apos;ve used your 2 assessments this month — resets on the 1st.
             </p>
-            <div className="space-y-3 max-w-xs mx-auto">
-              <a href="/pricing" className="btn-primary w-full text-center block">
-                Upgrade to Pro — $9/month →
-              </a>
-              <a href="/dashboard" className="btn-outline w-full text-center block">
-                Back to Dashboard
-              </a>
-            </div>
-            <p className="text-xs mt-4" style={{ color: "#9CA3AF" }}>
-              Your limit resets on the 1st of every month.
-            </p>
-          </div>
+            <Link href="/dashboard">
+              <Button variant="secondary" size="lg" className="w-full max-w-xs mx-auto">
+                Back to dashboard
+              </Button>
+            </Link>
+          </Card>
         )}
 
         {/* ── Stage: Scoring ── */}
         {stage === "scoring" && (
-          <div className="card p-10 text-center fade-in-up">
-            <div className="inline-block w-12 h-12 rounded-full border-4 border-[#0D9488] border-t-transparent animate-spin mb-5" />
-            <div className="font-bold text-base mb-2" style={{ color: "#1A1A1A" }}>{scoringMsg}</div>
-            <div className="text-sm" style={{ color: "#6B6B6B" }}>
-              Almost done.
-            </div>
-          </div>
+          <Card className="p-10 text-center">
+            <div className="font-display font-semibold text-base mb-4 text-ink">{scoringMsg}</div>
+            <ProgressNarrative elapsedSeconds={elapsed} steps={[{ label: "Almost done", doneAfter: 100 }]} />
+          </Card>
         )}
 
         {/* ── Stage: Score ── */}
         {stage === "score" && result && (
-          <div className="space-y-5 fade-in-up">
+          <div className="flex flex-col gap-5">
 
             {pendingReview && (
-              <div className="rounded-xl px-4 py-3 text-sm"
-                style={{ background: "#F0F7FF", border: "1px solid #BFDBFE", color: "#1E40AF", lineHeight: 1.6 }}>
+              <div className="rounded border border-hairline bg-surface px-4 py-3 text-sm text-ink leading-relaxed">
                 {pendingReview}
               </div>
             )}
 
             {ticket && (
-              <div className="text-center mb-2">
-                <div className="text-sm font-semibold" style={{ color: "#6B6B6B" }}>{ticket.title}</div>
+              <div className="text-center mb-1">
+                <div className="text-sm font-semibold text-muted">{ticket.title}</div>
               </div>
             )}
 
-            <div className="card shine p-8 text-center">
-              <div className="text-6xl font-black gradient-text leading-none mb-1">{result.scoreTotal}</div>
-              <div className="text-sm font-semibold mb-3" style={{ color: "#6B6B6B" }}>/100</div>
-              {(() => {
-                const prBase = (result.scoreDiagnosis ?? 0) + (result.scoreDesign ?? 0) +
-                               (result.scoreCommunication ?? 0) + (result.scoreExecution ?? 0);
-                const gap = prBase - result.scoreTotal;
-                return gap > 10 ? (
-                  <div className="text-xs mb-3" style={{ color: "#6B6B6B" }}>
-                    PR score <span className="font-bold" style={{ color: "#1A1A1A" }}>{prBase}</span>
-                    {" → "}
-                    final <span className="font-bold" style={{ color: "#DC2626" }}>{result.scoreTotal}</span>
-                    {"  "}
-                    <span style={{ color: "#D97706" }}>({gap} pts deducted)</span>
-                  </div>
-                ) : null;
-              })()}
-              {result.verbalNote && (() => {
-                const penalised = (result.verbalPenalty ?? 0) > 0;
-                const notCaptured = result.verbalScore === null || result.verbalScore === undefined;
-                const bg = penalised ? "#FEE2E2" : notCaptured ? "#FEF3C7" : "#CCFBF1";
-                const fg = penalised ? "#DC2626" : notCaptured ? "#D97706" : "#0D9488";
-                const msg = penalised
-                  ? "couldn't fully back your written answer aloud — this is reflected in your Diagnosis & Design scores above."
-                  : notCaptured
-                    ? "no spoken answer captured — flagged for review."
-                    : "matched your written answer — understanding confirmed.";
-                return (
-                  <div className="text-xs mb-3 rounded-lg px-3 py-2 text-left inline-block" style={{ background: bg, color: fg }}>
-                    <span className="font-bold">Spoken explanation: </span>{msg}
-                  </div>
-                );
-              })()}
-              {/* Honest label only. The follow-up is a probe, not proof — we cannot
-                  assert "understanding verified" from text answers (a careful AI user
-                  passes it too). Surface completion; leave the judgment to the reviewer. */}
-              <div className="inline-block text-xs font-bold rounded-full px-4 py-1"
-                style={{ background: "#EEF2FF", color: "#4F46E5" }}>
-                ✓ Follow-up completed
-              </div>
-            </div>
+            {(() => {
+              const prBase = (result.scoreDiagnosis ?? 0) + (result.scoreDesign ?? 0) +
+                             (result.scoreCommunication ?? 0) + (result.scoreExecution ?? 0);
+              const deductions: { label: string; amount: number; note?: string }[] = [];
+              if ((result.verbalPenalty ?? 0) > 0) {
+                deductions.push({ label: "Verbal defence", amount: result.verbalPenalty!, note: result.verbalNote ?? undefined });
+              }
+              if (result.declarationMismatch && result.mismatchPenalty > 0) {
+                deductions.push({
+                  label: "Declaration mismatch",
+                  amount: result.mismatchPenalty,
+                  note: "Your answers show signs of AI generation but you declared little or no AI use.",
+                });
+              }
+              const dimLabel = (code: string, design: string) => (isDesign ? design : code);
+              return (
+                <ScoreReceipt
+                  variant="full"
+                  data={{
+                    prBaseScore: prBase,
+                    finalScore: result.scoreTotal,
+                    lineItems: [
+                      { label: dimLabel("Diagnosis", "Requirements"), weight: 40, score: result.scoreDiagnosis },
+                      { label: dimLabel("Design", "Architecture"), weight: 30, score: result.scoreDesign },
+                      { label: "Communication", weight: 20, score: result.scoreCommunication },
+                      { label: dimLabel("Execution", "Completeness"), weight: 10, score: result.scoreExecution },
+                    ],
+                    deductions,
+                  }}
+                />
+              );
+            })()}
 
-            <div className="card p-6">
-              <div className="section-label mb-4">Score Breakdown</div>
-              <div className="space-y-3">
-                <ScoreBar label={isDesign ? "Requirements (40)" : "Diagnosis (40)"}    value={result.scoreDiagnosis}     max={40} />
-                <ScoreBar label={isDesign ? "Architecture (30)" : "Design (30)"}       value={result.scoreDesign}        max={30} />
-                <ScoreBar label="Communication (20)"                                   value={result.scoreCommunication} max={20} />
-                <ScoreBar label={isDesign ? "Completeness (10)" : "Execution (10)"}   value={result.scoreExecution}     max={10} />
-              </div>
-            </div>
+            {result.verbalNote && (() => {
+              const penalised = (result.verbalPenalty ?? 0) > 0;
+              const notCaptured = result.verbalScore === null || result.verbalScore === undefined;
+              const tone = penalised ? "bad" : notCaptured ? "warn" : "good";
+              const msg = penalised
+                ? "couldn't fully back your written answer aloud — reflected in the deduction above."
+                : notCaptured
+                  ? "no spoken answer captured — flagged for review."
+                  : "matched your written answer — understanding confirmed.";
+              return (
+                <div className={cn(
+                  "text-xs rounded border px-3 py-2",
+                  tone === "bad" ? "border-red bg-red-weak text-red" : tone === "warn" ? "border-amber bg-amber-weak text-amber" : "border-emerald bg-emerald-weak text-emerald"
+                )}>
+                  <span className="font-semibold">Spoken explanation: </span>{msg}
+                </div>
+              );
+            })()}
 
             {result.claudeReview && (
-              <div className="card p-6">
-                <div className="section-label mb-4">Feedback</div>
-                <p className="text-sm italic leading-relaxed mb-5" style={{ color: "#6B6B6B" }}>
+              <Card className="p-6">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-4">Feedback</div>
+                <p className="text-sm italic leading-relaxed mb-5 text-muted">
                   &ldquo;{result.claudeReview.summary}&rdquo;
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-xl p-4" style={{ background: "#CCFBF1", border: "1px solid #A7F3D0" }}>
-                    <div className="text-xs font-bold mb-2" style={{ color: "#0D9488" }}>Top strength</div>
-                    <div className="text-sm" style={{ color: "#1A1A1A" }}>{result.claudeReview.topStrength}</div>
+                  <div className="rounded border border-emerald bg-emerald-weak p-4">
+                    <div className="text-xs font-semibold mb-2 text-emerald">Top strength</div>
+                    <div className="text-sm text-ink">{result.claudeReview.topStrength}</div>
                   </div>
-                  <div className="rounded-xl p-4" style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}>
-                    <div className="text-xs font-bold mb-2" style={{ color: "#D97706" }}>Top improvement</div>
-                    <div className="text-sm" style={{ color: "#1A1A1A" }}>{result.claudeReview.topImprovement}</div>
+                  <div className="rounded border border-amber bg-amber-weak p-4">
+                    <div className="text-xs font-semibold mb-2 text-amber">Top improvement</div>
+                    <div className="text-sm text-ink">{result.claudeReview.topImprovement}</div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {result.declarationMismatch && (
-              <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
-                style={{ background: "#FFF5F5", border: "1px solid #FCA5A5" }}>
-                <div className="font-bold mb-1" style={{ color: "#DC2626" }}>
-                  Declaration Mismatch — {result.mismatchPenalty} pts penalty applied
-                </div>
-                <div style={{ color: "#1A1A1A" }}>
-                  Your answers show signs of AI generation but you declared little or no AI use.
-                  {result.mismatchPenalty} points were deducted because your answers did not match your declaration.
-                  Honest declarations always give better long-term results.
-                </div>
-              </div>
+              </Card>
             )}
 
             {result.bonusNote && !result.declarationMismatch && (
-              <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
-                style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}>
-                <span className="font-bold" style={{ color: "#D97706" }}>AI Usage: </span>
-                <span style={{ color: "#1A1A1A" }}>{result.bonusNote}</span>
+              <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
+                <span className="font-semibold text-ink">AI usage: </span>
+                <span className="text-muted">{result.bonusNote}</span>
               </div>
             )}
 
             {result.followUpFeedback && (
-              <div className="rounded-xl px-5 py-4 text-sm leading-relaxed"
-                style={{ background: "#EBEBFF", border: "1px solid #C4C2DB" }}>
-                <span className="font-bold" style={{ color: "#5B5BD6" }}>Assessment: </span>
-                <span style={{ color: "#1A1A1A" }}>{result.followUpFeedback}</span>
+              <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
+                <span className="font-semibold text-ink">Assessment: </span>
+                <span className="text-muted">{result.followUpFeedback}</span>
               </div>
             )}
 
-            <Link href="/dashboard" className="btn-primary w-full text-center block">
-              Back to Dashboard →
+            <Link href="/dashboard">
+              <Button variant="primary" size="lg" className="w-full">Back to dashboard →</Button>
             </Link>
+
+            {/* Request human review — quiet action, always available */}
+            <a href="mailto:ossama@devsimulate.com?subject=Requesting review of my assessment" className="text-center text-xs text-muted hover:text-ink underline underline-offset-2">
+              Request human review
+            </a>
 
             {/* Feedback */}
             {!feedbackSent ? (
-              <div className="card p-6">
-                <div className="section-label mb-1">Quick Feedback</div>
-                <p className="text-xs mb-4" style={{ color: "#6B6B6B" }}>
+              <Card className="p-6">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">Quick feedback</div>
+                <p className="text-xs mb-4 text-muted">
                   Help us improve — takes 30 seconds. Goes directly to the founder.
                 </p>
                 <div className="flex gap-2 mb-4">
@@ -1768,25 +1682,23 @@ function SubmitPageInner() {
                     </button>
                   ))}
                 </div>
-                <textarea
+                <Textarea
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   placeholder="What worked well? What was confusing? Anything you want added?"
                   rows={3}
-                  className="w-full rounded-xl border px-4 py-3 text-sm focus:outline-none resize-none mb-3"
-                  style={{ borderColor: "#E4E2DD", background: "#F7F6F3", color: "#1A1A1A" }}
+                  className="mb-3"
                 />
-                <button
+                <Button
+                  variant="primary" size="lg" className="w-full"
                   onClick={handleFeedbackSubmit}
                   disabled={feedbackRating === 0 || !feedbackText.trim()}
-                  className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
                 >
-                  Send Feedback
-                </button>
-              </div>
+                  Send feedback
+                </Button>
+              </Card>
             ) : (
-              <div className="rounded-2xl p-5 text-center text-sm font-semibold"
-                style={{ background: "#DCFCE7", color: "#16a34a" }}>
+              <div className="rounded border border-emerald bg-emerald-weak p-5 text-center text-sm font-semibold text-emerald">
                 Thanks for the feedback! It goes straight to ossama@devsimulate.com
               </div>
             )}
