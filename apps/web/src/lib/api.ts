@@ -122,3 +122,37 @@ export async function getPublicProfile(username: string): Promise<PublicProfile 
     return null;
   }
 }
+
+export interface PublicCertificate {
+  id: string;
+  recipientName: string;
+  githubUsername: string;
+  campaignName: string;
+  companyName: string;
+  score: number;
+  rank: number | null;
+  category: string | null;
+  issuedAt: string;
+  branding: {
+    logoUrl: string | null;
+    primaryColor: string;
+    accentColor: string;
+    brandName: string | null;
+  };
+}
+
+/**
+ * Fetches a certificate by id for public verification. The credential ID
+ * shown on the printable certificate (DS-YYYY-XX-XXXX) is derived from this
+ * same id client-side — there's no separate reverse lookup, so the verify
+ * page's [credentialId] route param is this id.
+ */
+export async function getPublicCertificate(id: string): Promise<PublicCertificate | null> {
+  try {
+    const client = createClient();
+    const res = await client.get<{ data: PublicCertificate }>(`/certificates/${id}`);
+    return res.data.data;
+  } catch {
+    return null;
+  }
+}
