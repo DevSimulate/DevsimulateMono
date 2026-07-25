@@ -161,7 +161,7 @@ function InstallModal({
               display: "block",
               textAlign: "center",
               padding: "10px",
-              background: "#5B5BD6",
+              background: "#4F46E5",
               color: "#fff",
               borderRadius: "8px",
               fontSize: "13px",

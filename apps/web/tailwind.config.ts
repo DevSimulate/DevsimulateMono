@@ -16,9 +16,17 @@ const config: Config = {
         surface: "var(--surface)",
         hairline: "var(--hairline)",
         muted: "var(--muted)",
+        // Utility class stays "emerald" (avoids a mechanical class-rename
+        // sweep across every consumer), but the variable underneath is now
+        // --verified: this class means verification/pass states only —
+        // never a generic action/accent. Use `brand` for actions/links/nav.
         emerald: {
-          DEFAULT: "var(--emerald)",
-          weak: "var(--emerald-weak)",
+          DEFAULT: "var(--verified)",
+          weak: "var(--verified-weak)",
+        },
+        brand: {
+          DEFAULT: "var(--brand)",
+          weak: "var(--brand-weak)",
         },
         amber: {
           DEFAULT: "var(--signal-amber)",

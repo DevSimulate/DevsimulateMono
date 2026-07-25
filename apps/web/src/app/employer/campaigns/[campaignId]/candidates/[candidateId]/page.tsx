@@ -14,6 +14,7 @@ import { Tabs } from "@/components/ui/Tabs";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 const INK = "#10182B", MUTED = "#5E6673", HAIRLINE = "#D8DAD3", PAPER = "#FBFBF8", SURFACE = "#FFFFFF";
+const BRAND = "#4F46E5";
 const EMERALD = "#0B7A5E", EMERALD_WEAK = "#E6F3EF";
 const AMBER = "#B7791F", AMBER_WEAK = "#FBF1E1";
 const RED = "#B3372F", RED_WEAK = "#FBECEB";
@@ -279,7 +280,7 @@ export default function CandidateDetailPage() {
                         <div className="flex items-center justify-between mb-3">
                           <div className="text-xs uppercase tracking-wide font-semibold" style={{ color: MUTED }}>Candidate&apos;s PR description</div>
                           {s.prUrl && (
-                            <a href={s.prUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold" style={{ color: EMERALD }}>
+                            <a href={s.prUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs font-semibold" style={{ color: BRAND }}>
                               View PR <ExternalLink size={11} />
                             </a>
                           )}
@@ -310,7 +311,7 @@ export default function CandidateDetailPage() {
                     )}
                     {fu.claudeFeedback && (
                       <div className="rounded p-3 border" style={{ background: SURFACE, borderColor: HAIRLINE }}>
-                        <span className="text-xs font-bold" style={{ color: EMERALD }}>Assessment: </span>
+                        <span className="text-xs font-bold" style={{ color: BRAND }}>Assessment: </span>
                         <span className="text-xs" style={{ color: MUTED }}>{fu.claudeFeedback}</span>
                       </div>
                     )}
@@ -335,7 +336,7 @@ export default function CandidateDetailPage() {
                     )}
                     {fu?.verbalNote && (
                       <div className="rounded p-3 text-xs border" style={{ background: SURFACE, borderColor: HAIRLINE, color: MUTED }}>
-                        <span className="font-bold" style={{ color: EMERALD }}>Verbal assessment: </span>{fu.verbalNote}
+                        <span className="font-bold" style={{ color: BRAND }}>Verbal assessment: </span>{fu.verbalNote}
                       </div>
                     )}
                     {fu?.verbalTranscript && (

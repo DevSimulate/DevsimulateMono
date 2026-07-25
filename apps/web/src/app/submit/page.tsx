@@ -1165,7 +1165,7 @@ function SubmitPageInner() {
         {/* Quiet proctoring status — ambient awareness, not a threat */}
         {WATCHED_STAGES.includes(stage) && (proctoring.requireFullscreen || proctoring.blockPaste) && (
           <div className="mb-6 inline-flex items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 py-1 text-xs text-muted">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand" />
             Proctored session
             {proctoring.requireFullscreen && " · fullscreen required"}
             {proctoring.blockPaste && " · paste disabled"}
@@ -1179,12 +1179,12 @@ function SubmitPageInner() {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm truncate mb-0.5 text-ink">{ticket.title}</div>
                 {!isDesign && prUrl && (
-                  <a href={prUrl} target="_blank" rel="noreferrer" className="text-xs font-mono truncate block hover:underline text-emerald">
+                  <a href={prUrl} target="_blank" rel="noreferrer" className="text-xs font-mono truncate block hover:underline text-brand">
                     {prUrl}
                   </a>
                 )}
                 {isDesign && (
-                  <span className="text-xs font-medium text-emerald">
+                  <span className="text-xs font-medium text-brand">
                     System Design Challenge · {ticket.expectedMinutes} min
                   </span>
                 )}
@@ -1416,11 +1416,11 @@ function SubmitPageInner() {
               {AI_OPTIONS.map((opt) => (
                 <label key={opt.value} className={cn(
                   "flex items-start gap-3 rounded border px-3 py-2.5 cursor-pointer transition-colors duration-150",
-                  declaration === opt.value ? "border-emerald bg-emerald-weak" : "border-hairline hover:border-muted"
+                  declaration === opt.value ? "border-brand bg-brand-weak" : "border-hairline hover:border-muted"
                 )}>
                   <input type="radio" name="aiDeclaration" value={opt.value}
                     checked={declaration === opt.value} onChange={() => setDeclaration(opt.value)}
-                    className="mt-0.5 shrink-0 accent-emerald" />
+                    className="mt-0.5 shrink-0 accent-brand" />
                   <div>
                     <div className="text-xs font-semibold text-ink">{opt.label}</div>
                     <div className="text-xs text-muted">{opt.sub}</div>
@@ -1714,7 +1714,7 @@ function SubmitPageInner() {
 export default function SubmitPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-grid flex items-center justify-center text-sm" style={{ color: "#6B6B6B" }}>
+      <div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">
         Loading…
       </div>
     }>

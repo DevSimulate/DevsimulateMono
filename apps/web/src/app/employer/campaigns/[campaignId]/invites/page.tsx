@@ -154,8 +154,8 @@ export default function CampaignInvitesPage() {
           onDrop={(e) => { e.preventDefault(); setDragging(false); void readFile(e.dataTransfer.files?.[0]); }}
           className="block rounded border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors duration-150"
           style={{
-            borderColor: dragging ? "var(--emerald)" : "var(--hairline)",
-            background: dragging ? "rgba(11,122,94,0.06)" : "var(--paper)",
+            borderColor: dragging ? "var(--brand)" : "var(--hairline)",
+            background: dragging ? "rgba(79,70,229,0.06)" : "var(--paper)",
           }}
         >
           <input
@@ -180,7 +180,7 @@ export default function CampaignInvitesPage() {
             onChange={(e) => { setRaw(e.target.value); setFileName(null); }}
             rows={6}
             placeholder={"Ali Raza, ali@example.com\nSara Khan, sara@example.com\nomar@example.com"}
-            className="w-full mt-2 rounded border border-hairline bg-surface px-3 py-2.5 text-sm font-mono resize-y focus:border-emerald focus:outline-none focus:ring-2 focus:ring-[rgba(11,122,94,0.25)]"
+            className="w-full mt-2 rounded border border-hairline bg-surface px-3 py-2.5 text-sm font-mono resize-y focus:border-brand focus:outline-none focus:ring-2 focus:ring-[rgba(79,70,229,0.25)]"
           />
         </details>
 
@@ -254,7 +254,7 @@ function Banner({ tone, children }: { tone: "ok" | "error"; children: React.Reac
       style={{
         background: ok ? "rgba(11,122,94,0.06)" : "rgba(179,55,47,0.06)",
         borderColor: ok ? "rgba(11,122,94,0.25)" : "rgba(179,55,47,0.25)",
-        color: ok ? "var(--emerald)" : "var(--signal-red)",
+        color: ok ? "var(--verified)" : "var(--signal-red)",
       }}
     >
       {children}

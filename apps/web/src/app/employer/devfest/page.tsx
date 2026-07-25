@@ -27,7 +27,7 @@ interface Campaign {
   _count: { candidates: number };
 }
 
-const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "good", CLOSED: "neutral", DRAFT: "warn" };
+const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "neutral", CLOSED: "neutral", DRAFT: "warn" };
 
 export default function DevFestDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -65,8 +65,8 @@ export default function DevFestDashboard() {
       </div>
 
       {tags.length > 0 && (
-        <Card className="p-4 mb-5" style={{ background: "rgba(11,122,94,0.05)", borderColor: "rgba(11,122,94,0.25)" }}>
-          <div className="text-[11px] font-bold uppercase tracking-widest text-emerald mb-2">Public leaderboards</div>
+        <Card className="p-4 mb-5" style={{ background: "rgba(79,70,229,0.05)", borderColor: "rgba(79,70,229,0.25)" }}>
+          <div className="text-[11px] font-bold uppercase tracking-widest text-brand mb-2">Public leaderboards</div>
           <div className="flex gap-2 flex-wrap">
             {tags.map((t) => (
               <Link key={t} href={`/devfest/${t}`}>

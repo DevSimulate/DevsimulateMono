@@ -153,7 +153,7 @@ export default function ReceiptPage() {
             {r.prUrl && (
               <div className="flex justify-between">
                 <span>PR</span>
-                <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-emerald no-underline">view →</a>
+                <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-brand no-underline">view →</a>
               </div>
             )}
           </div>

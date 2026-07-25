@@ -181,7 +181,7 @@ export default function LandingPage(): React.ReactElement {
           <ul className="flex flex-col gap-4">
             {PRINCIPLES.map((p) => (
               <li key={p} className="flex gap-3 items-start text-sm leading-relaxed">
-                <span className="text-emerald mt-1 shrink-0">—</span>
+                <span className="text-brand mt-1 shrink-0">—</span>
                 <span>{p}</span>
               </li>
             ))}

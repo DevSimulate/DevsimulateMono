@@ -46,8 +46,8 @@ interface AssignedTicket {
 
 const DEFAULT_BRANDING: Branding = {
   logoUrl: null,
-  primaryColor: "#0B7A5E",
-  accentColor: "#0B7A5E",
+  primaryColor: "#4F46E5",
+  accentColor: "#4F46E5",
   brandName: "DevSimulate",
 };
 
@@ -176,7 +176,7 @@ export default function ApplyPage() {
                 {campaign?.companyName?.slice(0, 4).toUpperCase()}
               </div>
             )}
-            <Badge tone="good">
+            <Badge tone="neutral">
               {campaign?.type === "CONTEST" ? "Contest is live" : "Now accepting candidates"}
             </Badge>
           </div>
@@ -198,8 +198,8 @@ export default function ApplyPage() {
           </p>
 
           {/* The fairness promise — the hero of this page */}
-          <div className="rounded border border-emerald bg-emerald-weak px-5 py-4 mb-5 text-center">
-            <p className="font-display text-lg font-semibold leading-snug text-emerald">
+          <div className="rounded border border-brand bg-brand-weak px-5 py-4 mb-5 text-center">
+            <p className="font-display text-lg font-semibold leading-snug text-brand">
               A tooling failure never costs you points.
             </p>
           </div>

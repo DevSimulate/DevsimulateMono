@@ -22,7 +22,7 @@ interface Campaign {
   _count: { candidates: number };
 }
 
-const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "good", CLOSED: "neutral", DRAFT: "warn" };
+const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "neutral", CLOSED: "neutral", DRAFT: "warn" };
 
 export default function HiringDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);

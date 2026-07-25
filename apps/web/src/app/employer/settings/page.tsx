@@ -167,7 +167,7 @@ export default function SettingsPage() {
             { icon: Users,     label: "Team members", value: data?.memberCount ?? 0 },
           ].map(({ icon: Icon, label, value }) => (
             <Card key={label} className="p-4">
-              <Icon size={15} className="text-emerald mb-2" />
+              <Icon size={15} className="text-brand mb-2" />
               <div className="font-display text-xl font-bold">{value}</div>
               <div className="text-xs text-muted">{label}</div>
             </Card>

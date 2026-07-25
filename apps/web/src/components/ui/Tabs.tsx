@@ -25,7 +25,7 @@ export function Tabs({ items, defaultKey }: { items: TabItem[]; defaultKey?: str
             className={cn(
               "px-3.5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors duration-150",
               active === item.key
-                ? "border-emerald text-ink"
+                ? "border-brand text-ink"
                 : "border-transparent text-muted hover:text-ink"
             )}
           >

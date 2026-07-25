@@ -14,9 +14,9 @@ interface Member {
   id: string; role: string; githubUsername: string; email: string | null; isMe: boolean;
 }
 
-const ROLE_TONE: Record<string, BadgeTone> = { ADMIN: "good", MANAGER: "neutral", MEMBER: "neutral" };
+const ROLE_TONE: Record<string, BadgeTone> = { ADMIN: "neutral", MANAGER: "neutral", MEMBER: "neutral" };
 
-const SELECT_CLASS = "rounded border border-hairline bg-surface px-2.5 py-2 text-sm text-ink outline-none focus:border-emerald";
+const SELECT_CLASS = "rounded border border-hairline bg-surface px-2.5 py-2 text-sm text-ink outline-none focus:border-brand";
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -99,7 +99,7 @@ export default function TeamPage() {
           {loading ? <div className="px-5 py-8 text-center text-sm text-muted">Loading…</div> :
             members.map((m, i) => (
               <div key={m.id} className={`flex items-center gap-3 px-5 py-3.5 ${i < members.length - 1 ? "border-b border-hairline" : ""}`}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-weak text-emerald">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-brand-weak text-brand">
                   {m.githubUsername.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">

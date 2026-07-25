@@ -21,8 +21,8 @@ const VERDICT_TONE: Record<string, BadgeTone> = {
 const VERDICT_LABEL: Record<string, string> = {
   STRONG_YES: "Strong yes", YES: "Yes", MAYBE: "Maybe", NO: "No",
 };
-const BAND: Record<string, string> = { HIGH: "var(--emerald)", MEDIUM: "var(--signal-amber)", LOW: "var(--signal-red)" };
-const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "good", CLOSED: "neutral", DRAFT: "warn" };
+const BAND: Record<string, string> = { HIGH: "var(--verified)", MEDIUM: "var(--signal-amber)", LOW: "var(--signal-red)" };
+const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "neutral", CLOSED: "neutral", DRAFT: "warn" };
 
 interface Summary {
   stats: { activeCampaigns: number; totalAssessed: number; totalShortlisted: number; avgScore: number };
@@ -33,8 +33,8 @@ interface Summary {
 function StatCard({ icon: Icon, label, value, unit }: { icon: React.ElementType; label: string; value: number | string; unit?: string }) {
   return (
     <Card className="p-5">
-      <div className="w-9 h-9 rounded flex items-center justify-center mb-3 bg-emerald-weak">
-        <Icon size={17} className="text-emerald" />
+      <div className="w-9 h-9 rounded flex items-center justify-center mb-3 bg-brand-weak">
+        <Icon size={17} className="text-brand" />
       </div>
       <div className="flex items-baseline gap-1">
         <span className="font-display text-3xl font-bold text-ink">{value}</span>
@@ -90,7 +90,7 @@ export default function EmployerDashboard() {
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between px-5 py-4 border-b border-hairline">
                 <span className="text-sm font-bold">Recent candidates</span>
-                <Link href="/employer/candidates" className="flex items-center gap-1 text-xs font-semibold text-emerald">
+                <Link href="/employer/candidates" className="flex items-center gap-1 text-xs font-semibold text-brand">
                   View all <ChevronRight size={13} />
                 </Link>
               </div>
@@ -109,7 +109,7 @@ export default function EmployerDashboard() {
                     <Tr key={c.id}>
                       <Td className="text-xs font-semibold">{c.githubUsername}</Td>
                       <Td className="text-xs text-muted">{c.roleName}</Td>
-                      <Td numeric className="text-sm font-bold" style={{ color: c.score >= 80 ? "var(--emerald)" : c.score >= 60 ? "var(--signal-amber)" : "var(--signal-red)" }}>{c.score}</Td>
+                      <Td numeric className="text-sm font-bold" style={{ color: c.score >= 80 ? "var(--verified)" : c.score >= 60 ? "var(--signal-amber)" : "var(--signal-red)" }}>{c.score}</Td>
                       <Td>
                         <span className="inline-flex items-center gap-1 text-xs">
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: BAND[c.band] }} />
@@ -129,13 +129,13 @@ export default function EmployerDashboard() {
             <Card className="overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3.5 border-b border-hairline">
                 <span className="text-sm font-bold">Campaigns</span>
-                <Link href="/employer/campaigns" className="text-xs font-semibold text-emerald">Manage</Link>
+                <Link href="/employer/campaigns" className="text-xs font-semibold text-brand">Manage</Link>
               </div>
               <div>
                 {loading ? null : (data?.campaigns ?? []).length === 0 ? (
                   <div className="px-4 py-8 text-center text-xs text-muted">
                     No campaigns yet.<br />
-                    <Link href="/employer/campaigns/new" className="font-semibold text-emerald">Create one →</Link>
+                    <Link href="/employer/campaigns/new" className="font-semibold text-brand">Create one →</Link>
                   </div>
                 ) : data!.campaigns.map((c, i) => (
                   <Link key={c.id} href={`/employer/campaigns/${c.id}/results`}

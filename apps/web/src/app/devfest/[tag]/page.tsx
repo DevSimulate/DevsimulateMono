@@ -144,8 +144,8 @@ export default function DevFestPage() {
           )}
         </div>
 
-        <Badge tone={closed ? "neutral" : "good"} className="mb-5">
-          {!closed && <span className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />}
+        <Badge tone="neutral" className="mb-5">
+          {!closed && <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />}
           {closed ? "Competition closed" : "Live leaderboard"}
         </Badge>
 

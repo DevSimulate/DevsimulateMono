@@ -8,7 +8,7 @@ import { Badge, BadgeTone } from "@/components/ui/Badge";
 
 // ─── Codebase data ────────────────────────────────────────────────────────────
 
-const DIFF_TONE: Record<string, BadgeTone> = { JUNIOR: "good", MID: "warn", SENIOR: "neutral" };
+const DIFF_TONE: Record<string, BadgeTone> = { JUNIOR: "neutral", MID: "warn", SENIOR: "neutral" };
 
 interface Card {
   id: string;
@@ -53,7 +53,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "17 tickets available",
     active: true,
-    cornerBadge: { label: "Live", tone: "good" },
+    cornerBadge: { label: "Live", tone: "neutral" },
     stackKey: "DOTNET",
     href: "/tickets?stack=DOTNET",
   },
@@ -274,7 +274,7 @@ export default function SelectCodebasePage() {
             return (
               <div
                 key={card.id}
-                className={`relative rounded border bg-surface flex flex-col overflow-hidden transition-colors duration-150 ${card.active ? "cursor-pointer border-hairline hover:border-emerald" : "border-hairline"}`}
+                className={`relative rounded border bg-surface flex flex-col overflow-hidden transition-colors duration-150 ${card.active ? "cursor-pointer border-hairline hover:border-brand" : "border-hairline"}`}
                 onClick={() => navigate(card)}
               >
                 {/* Corner badge */}
@@ -305,7 +305,7 @@ export default function SelectCodebasePage() {
 
                   {/* Ticket count */}
                   {card.ticketCount && (
-                    <p className={`text-xs font-medium mb-5 ${card.active ? "text-emerald" : "text-muted"}`}>{card.ticketCount}</p>
+                    <p className={`text-xs font-medium mb-5 ${card.active ? "text-brand" : "text-muted"}`}>{card.ticketCount}</p>
                   )}
 
                   <div className="flex-1" />

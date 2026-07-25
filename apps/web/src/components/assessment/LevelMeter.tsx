@@ -9,7 +9,7 @@ export function LevelMeter({ level }: { level: number }): React.ReactElement {
           className="w-1 rounded-full transition-colors duration-100"
           style={{
             height: 4 + i * 1.2,
-            background: i < active ? "var(--emerald)" : "var(--hairline)",
+            background: i < active ? "var(--verified)" : "var(--hairline)",
           }}
         />
       ))}

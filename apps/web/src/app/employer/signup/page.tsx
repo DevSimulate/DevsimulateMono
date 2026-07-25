@@ -80,10 +80,10 @@ export default function EmployerSignupPage(): React.ReactElement {
                   type="button"
                   onClick={() => setPlan(p)}
                   className={`rounded border px-4 py-3 text-left text-sm transition-colors duration-150 ${
-                    plan === p ? "border-emerald bg-emerald-weak" : "border-hairline bg-surface hover:bg-paper"
+                    plan === p ? "border-brand bg-brand-weak" : "border-hairline bg-surface hover:bg-paper"
                   }`}
                 >
-                  <div className={`font-semibold ${plan === p ? "text-emerald" : "text-ink"}`}>{ENGAGEMENT_LABEL[p].title}</div>
+                  <div className={`font-semibold ${plan === p ? "text-brand" : "text-ink"}`}>{ENGAGEMENT_LABEL[p].title}</div>
                   <div className="text-xs text-muted mt-0.5">{ENGAGEMENT_LABEL[p].body}</div>
                 </button>
               ))}

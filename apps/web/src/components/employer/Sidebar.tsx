@@ -105,6 +105,7 @@ export default function Sidebar() {
                     background: active ? "var(--p-sidebar-active)" : "transparent",
                     color: active ? "#ffffff" : "var(--p-sidebar-text)",
                     fontWeight: active ? 600 : 500,
+                    boxShadow: active ? "inset 2px 0 0 var(--brand)" : "none",
                   }}
                   onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = "#ffffff0d"; }}
                   onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}

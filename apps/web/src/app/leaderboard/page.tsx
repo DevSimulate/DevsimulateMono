@@ -128,7 +128,7 @@ export default function LeaderboardPage(): React.ReactElement {
 
         <p className="text-xs text-center mt-10 text-muted">
           Ranked by average score · Updated in real time ·{" "}
-          <Link href="/onboarding/select" className="underline text-emerald">Join the board →</Link>
+          <Link href="/onboarding/select" className="underline text-brand">Join the board →</Link>
         </p>
       </main>
     </div>

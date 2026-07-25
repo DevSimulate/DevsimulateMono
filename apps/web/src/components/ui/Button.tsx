@@ -11,7 +11,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-emerald text-white border border-emerald hover:brightness-110 disabled:hover:brightness-100",
+  primary: "bg-brand text-white border border-brand hover:brightness-110 disabled:hover:brightness-100",
   secondary: "bg-surface text-ink border border-hairline hover:bg-paper",
   quiet: "bg-transparent text-ink border border-transparent hover:bg-paper",
   destructive: "bg-transparent text-red border border-[rgba(179,55,47,0.4)] hover:bg-[rgba(179,55,47,0.05)]",
@@ -24,8 +24,9 @@ const SIZE: Record<ButtonSize, string> = {
 };
 
 /**
- * primary = emerald fill (the one accent, used with intent — the main
- *   action on a screen, never more than one per view).
+ * primary = brand indigo fill (the logo's color — the one action accent,
+ *   used with intent, never more than one per view). Emerald/"good" is
+ *   reserved for verification and passing states — see Badge.
  * secondary = hairline outline.
  * quiet = text-only, for tertiary actions ("request human review", cancel).
  * destructive = outlined red, reserved for genuinely destructive actions.

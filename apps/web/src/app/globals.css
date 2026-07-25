@@ -33,7 +33,7 @@ h1, h2, h3, .font-display {
 
 /* Visible focus everywhere — WCAG AA, no exceptions, no outline:none. */
 :focus-visible {
-  outline: 2px solid var(--emerald);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -75,10 +75,10 @@ h1, h2, h3, .font-display {
   --p-text: var(--ink);
   --p-dim: var(--muted);
   --p-faint: #8b9088;
-  --p-primary: var(--emerald);
-  --p-primary-weak: var(--emerald-weak);
-  --p-primary-text: var(--emerald);
-  --p-good: var(--emerald); --p-good-weak: var(--emerald-weak);
+  --p-primary: var(--brand);
+  --p-primary-weak: var(--brand-weak);
+  --p-primary-text: var(--brand);
+  --p-good: var(--verified); --p-good-weak: var(--verified-weak);
   --p-warn: var(--signal-amber); --p-warn-weak: var(--signal-amber-weak);
   --p-bad:  var(--signal-red);   --p-bad-weak:  var(--signal-red-weak);
   --p-shadow-sm: none;
@@ -87,7 +87,7 @@ h1, h2, h3, .font-display {
   --p-sidebar: var(--ink);
   --p-sidebar-text: #c3c8d4;
   --p-sidebar-dim: #7c8496;
-  --p-sidebar-active: #ffffff16;
+  --p-sidebar-active: rgba(79, 70, 229, 0.35); /* brand-tinted — active nav is brand indigo */
 
   background: var(--p-ground);
   color: var(--p-text);

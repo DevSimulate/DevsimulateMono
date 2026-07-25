@@ -11,6 +11,7 @@ import { Table, Thead, Th, Tr, Td } from "@/components/ui/Table";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 const INK = "#10182B", MUTED = "#5E6673", HAIRLINE = "#D8DAD3", PAPER = "#FBFBF8", SURFACE = "#FFFFFF";
+const BRAND = "#4F46E5";
 const EMERALD = "#0B7A5E", AMBER = "#B7791F", RED = "#B3372F";
 
 type VerdictTone = "good" | "warn" | "bad";
@@ -61,7 +62,7 @@ export default function CandidatesPage() {
           </div>
           <div className="flex items-center gap-2 text-xs" style={{ color: MUTED }}>
             Min score
-            <input type="range" min={0} max={100} value={minScore} onChange={(e) => setMinScore(parseInt(e.target.value))} style={{ accentColor: EMERALD }} />
+            <input type="range" min={0} max={100} value={minScore} onChange={(e) => setMinScore(parseInt(e.target.value))} style={{ accentColor: BRAND }} />
             <span className="w-6 font-mono font-bold" style={{ color: INK }}>{minScore}</span>
           </div>
         </div>
@@ -98,7 +99,7 @@ export default function CandidatesPage() {
                   <Td><Badge tone={VERDICT[c.verdict].tone}>{VERDICT[c.verdict].label}</Badge></Td>
                   <Td className="text-xs" style={{ color: MUTED }}>{c.status[0] + c.status.slice(1).toLowerCase()}</Td>
                   <Td>
-                    <Link href={`/employer/campaigns/${c.campaignId}/candidates/${c.id}`} className="text-xs font-semibold" style={{ color: EMERALD }}>View</Link>
+                    <Link href={`/employer/campaigns/${c.campaignId}/candidates/${c.id}`} className="text-xs font-semibold" style={{ color: BRAND }}>View</Link>
                   </Td>
                 </Tr>
               ))}

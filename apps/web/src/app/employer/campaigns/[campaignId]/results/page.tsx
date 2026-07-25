@@ -14,9 +14,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 // Precision Instrument palette used throughout this page's lookup tables —
-// emerald is the one accent (also "good"/primary-action), amber is advisory,
-// red is reserved for genuinely negative signals.
+// emerald means verified/passing signal only (no AI used, defended, high
+// confidence, positive verdict), amber is advisory, red is a negative signal.
+// Brand indigo (buttons/links elsewhere on this page) never appears in these
+// lookup tables — they're all judgment/quality signals, not actions.
 const INK = "#10182B", MUTED = "#5E6673", HAIRLINE = "#D8DAD3", PAPER = "#FBFBF8", SURFACE = "#FFFFFF";
+const BRAND = "#4F46E5", BRAND_WEAK = "#EEF0FD";
 const EMERALD = "#0B7A5E", EMERALD_WEAK = "#E6F3EF";
 const AMBER = "#B7791F", AMBER_WEAK = "#FBF1E1";
 const RED = "#B3372F", RED_WEAK = "#FBECEB";
@@ -373,8 +376,8 @@ export default function ResultsPage() {
             return (
               <button key={rk} onClick={() => setRole(rk)}
                 className="flex flex-col items-start px-3 py-1.5 rounded text-left transition-colors duration-150"
-                style={{ background: active ? EMERALD_WEAK : SURFACE, border: `1px solid ${active ? EMERALD : HAIRLINE}` }}>
-                <span className="text-xs font-semibold" style={{ color: active ? EMERALD : MUTED }}>{ROLES[rk].label}</span>
+                style={{ background: active ? BRAND_WEAK : SURFACE, border: `1px solid ${active ? BRAND : HAIRLINE}` }}>
+                <span className="text-xs font-semibold" style={{ color: active ? BRAND : MUTED }}>{ROLES[rk].label}</span>
                 <span className="text-[10px]" style={{ color: MUTED }}>{ROLES[rk].sub}</span>
               </button>
             );
@@ -387,7 +390,7 @@ export default function ResultsPage() {
               <div key={d} className="flex items-center gap-1.5">
                 <span className="font-mono text-[10px]" style={{ color: MUTED }}>{DIM_LABEL[d].slice(0, 4)}</span>
                 <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: HAIRLINE }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: EMERALD }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: BRAND }} />
                 </div>
                 <span className="font-mono text-[10px] tabular-nums" style={{ color: MUTED }}>{pct}%</span>
               </div>

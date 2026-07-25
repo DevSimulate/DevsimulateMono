@@ -100,8 +100,8 @@ export default function CampaignLeaderboardPage() {
             </div>
           )}
         </div>
-        <Badge tone="good" className="mb-3">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />
+        <Badge tone="neutral" className="mb-3">
+          {board.status === "ACTIVE" && <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />}
           {board.status === "ACTIVE" ? "Live" : "Final"}
         </Badge>
         <h1 className="font-display text-3xl sm:text-4xl font-bold">{board.campaignName}</h1>

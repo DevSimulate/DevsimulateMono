@@ -15,9 +15,20 @@
   --hairline: #d8dad3; /* borders, rules, dividers */
   --muted: #5e6673;    /* secondary text */
 
-  /* The one accent */
-  --emerald: #0b7a5e;
-  --emerald-weak: #e6f3ef; /* emerald tinted background, e.g. success chips */
+  /* Brand — sampled from the logo mark's indigo (gradient stop #6366F1),
+     shifted one step deeper for guaranteed AA contrast as white-on-fill
+     button text and as body-size text on paper/white (raw #6366F1 measures
+     ~4.47:1, just under the 4.5:1 text threshold; #4F46E5 clears ~6.3:1).
+     This is the ONLY color used for primary actions, active nav, links,
+     focus rings, and selected states. */
+  --brand: #4f46e5;
+  --brand-weak: #eef0fd; /* brand tinted background, e.g. selected chips */
+
+  /* Verified — one meaning only: verification and passing states (tier
+     badges, certificate seals, "passed" states, success toasts). Never a
+     generic action color, nav accent, or lifecycle indicator. */
+  --verified: #0b7a5e;
+  --verified-weak: #e6f3ef;
 
   /* Advisory signals — used sparingly, never decoratively */
   --signal-amber: #b7791f;

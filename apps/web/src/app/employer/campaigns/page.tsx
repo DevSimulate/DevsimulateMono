@@ -30,7 +30,7 @@ interface Campaign {
 }
 
 const STATUS_TONE: Record<Campaign["status"], BadgeTone> = {
-  ACTIVE: "good",
+  ACTIVE: "neutral",
   CLOSED: "neutral",
   DRAFT: "warn",
 };
@@ -227,7 +227,7 @@ export default function CampaignsListPage() {
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
                       placeholder="e.g. lmkr-devfest-2025"
-                      className="w-full px-3 py-1.5 rounded border border-hairline bg-surface text-xs mb-2 outline-none focus:border-emerald"
+                      className="w-full px-3 py-1.5 rounded border border-hairline bg-surface text-xs mb-2 outline-none focus:border-brand"
                       onKeyDown={(e) => e.key === "Enter" && saveDevFestTag(c.id)}
                     />
                     <div className="flex gap-2">
