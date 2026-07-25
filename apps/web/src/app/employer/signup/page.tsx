@@ -5,6 +5,15 @@ import Link from "next/link";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
+import Logo from "@/components/Logo";
+import { Button } from "@/components/ui/Button";
+import { Input, Field } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+
+const ENGAGEMENT_LABEL: Record<"HIRING" | "TRAINING", { title: string; body: string }> = {
+  HIRING: { title: "Hiring", body: "Assess and rank candidates for open roles." },
+  TRAINING: { title: "Training", body: "Run assessments for internal upskilling and cohorts." },
+};
 
 export default function EmployerSignupPage(): React.ReactElement {
   const router = useRouter();
@@ -41,72 +50,51 @@ export default function EmployerSignupPage(): React.ReactElement {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-[#131722] flex flex-col items-center justify-center px-6">
-      <Link href="/" className="font-bold text-[#131722] tracking-tight mb-10 text-xl">
-        ⚡ DevSimulate
-      </Link>
+    <div className="min-h-screen bg-paper text-ink flex flex-col items-center justify-center px-6">
+      <Link href="/" className="mb-10"><Logo variant="horizontal" size={32} /></Link>
 
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8">
-        <h1 className="text-2xl font-bold mb-1">Create your organisation</h1>
-        <p className="text-slate-400 text-sm mb-6">Set up your employer account to start hiring.</p>
+      <Card className="w-full max-w-md p-8">
+        <h1 className="font-display text-2xl font-bold mb-1">Create your organisation</h1>
+        <p className="text-sm text-muted mb-6">Set up your employer account to start assessing candidates.</p>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <div className="mb-4 rounded border px-4 py-3 text-sm text-red" style={{ background: "rgba(179,55,47,0.05)", borderColor: "rgba(179,55,47,0.25)" }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Company name *</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              placeholder="Acme Corp"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-[#131722] placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
-            />
-          </div>
+        <form onSubmit={handleSubmit}>
+          <Field label="Company name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Acme Corp" />
+          </Field>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-1">Company domain (optional)</label>
-            <input
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="acmecorp.com"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-[#131722] placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
-            />
-          </div>
+          <Field label="Company domain (optional)">
+            <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="acmecorp.com" />
+          </Field>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-400 mb-2">Plan</label>
+          <Field label="What are you using DevSimulate for?">
             <div className="grid grid-cols-2 gap-3">
-              {(["HIRING", "TRAINING"] as const).map((p) => (
+              {(Object.keys(ENGAGEMENT_LABEL) as Array<"HIRING" | "TRAINING">).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setPlan(p)}
-                  className={`rounded-lg border px-4 py-3 text-sm font-semibold transition-colors ${
-                    plan === p
-                      ? "border-cyan-500 bg-cyan-500/10 text-cyan-400"
-                      : "border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600"
+                  className={`rounded border px-4 py-3 text-left text-sm transition-colors duration-150 ${
+                    plan === p ? "border-emerald bg-emerald-weak" : "border-hairline bg-surface hover:bg-paper"
                   }`}
                 >
-                  {p === "HIRING" ? "Hiring — $299/mo" : "Training — $499/mo"}
+                  <div className={`font-semibold ${plan === p ? "text-emerald" : "text-ink"}`}>{ENGAGEMENT_LABEL[p].title}</div>
+                  <div className="text-xs text-muted mt-0.5">{ENGAGEMENT_LABEL[p].body}</div>
                 </button>
               ))}
             </div>
-          </div>
+          </Field>
 
-          <button
-            type="submit"
-            disabled={loading || !name}
-            className="w-full rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-bold py-3 text-sm transition-colors mt-2"
-          >
-            {loading ? "Creating…" : "Create Organisation"}
-          </button>
+          <Button type="submit" variant="primary" disabled={loading || !name} className="w-full mt-2">
+            {loading ? "Creating…" : "Create organisation"}
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }

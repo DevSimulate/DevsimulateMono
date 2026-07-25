@@ -3,14 +3,12 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import { Button } from "@/components/ui/Button";
+import { Badge, BadgeTone } from "@/components/ui/Badge";
 
 // ─── Codebase data ────────────────────────────────────────────────────────────
 
-const DIFF_STYLE: Record<string, { bg: string; color: string }> = {
-  MID:    { bg: "#FEF3C7", color: "#D97706" },
-  SENIOR: { bg: "#FCE7F3", color: "#BE185D" },
-  JUNIOR: { bg: "#CCFBF1", color: "#0D9488" },
-};
+const DIFF_TONE: Record<string, BadgeTone> = { JUNIOR: "good", MID: "warn", SENIOR: "neutral" };
 
 interface Card {
   id: string;
@@ -24,7 +22,7 @@ interface Card {
   difficulties: string[];
   ticketCount: string;
   active: boolean;
-  cornerBadge?: { label: string; bg: string; color: string };
+  cornerBadge?: { label: string; tone: BadgeTone };
   href?: string;
 }
 
@@ -40,7 +38,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "10 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#EBEBFF", color: "#5B5BD6" },
+    cornerBadge: { label: "New", tone: "neutral" },
     stackKey: "SYSTEM_DESIGN",
     href: "/tickets?stack=SYSTEM_DESIGN",
   },
@@ -55,7 +53,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "17 tickets available",
     active: true,
-    cornerBadge: { label: "● Live", bg: "#DCFCE7", color: "#16a34a" },
+    cornerBadge: { label: "Live", tone: "good" },
     stackKey: "DOTNET",
     href: "/tickets?stack=DOTNET",
   },
@@ -70,7 +68,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#FEF3C7", color: "#92400E" },
+    cornerBadge: { label: "New", tone: "neutral" },
     stackKey: "PYTHON",
     href: "/tickets?codebaseId=ragcore-seed-id-001",
   },
@@ -86,7 +84,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#DBEAFE", color: "#1D4ED8" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?stack=NODE",
   },
   {
@@ -101,7 +99,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#E0F2FE", color: "#0369A1" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?stack=REACT",
   },
   {
@@ -116,7 +114,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#FFF7ED", color: "#C2410C" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=dataforge-seed-id-001",
   },
   {
@@ -131,7 +129,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#ECFDF5", color: "#065F46" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=infracore-seed-id-001",
   },
   {
@@ -146,7 +144,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#E2E8F0", color: "#1E293B" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=matchcore-seed-id-001",
   },
   {
@@ -161,7 +159,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "11 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#E0F2FE", color: "#0369A1" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=meridian-globeview-seed-id-001",
   },
   {
@@ -176,7 +174,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#FEE2E2", color: "#B91C1C" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=finserve-seed-id-001",
   },
   {
@@ -191,7 +189,7 @@ const CARDS: Card[] = [
     difficulties: ["JUNIOR", "MID", "SENIOR"],
     ticketCount: "15 tickets available",
     active: true,
-    cornerBadge: { label: "● New", bg: "#FEE2E2", color: "#DD0031" },
+    cornerBadge: { label: "New", tone: "neutral" },
     href: "/tickets?codebaseId=pulsedash-seed-id-001",
   },
   {
@@ -205,7 +203,7 @@ const CARDS: Card[] = [
     difficulties: ["SENIOR"],
     ticketCount: "Coming soon",
     active: false,
-    cornerBadge: { label: "FAANG Prep", bg: "#EBEBFF", color: "#5B5BD6" },
+    cornerBadge: { label: "FAANG prep", tone: "neutral" },
   },
   {
     id: "placeholder",
@@ -235,60 +233,40 @@ export default function SelectCodebasePage() {
   }
 
   return (
-    <main className="bg-grid min-h-screen" style={{ background: "#F7F6F3" }}>
+    <main className="min-h-screen bg-paper text-ink">
 
       {/* Beta banner */}
-      <div className="w-full px-4 py-3 text-center text-sm font-medium"
-        style={{ background: "#FEF9C3", borderBottom: "1px solid #FDE68A", color: "#92400E" }}>
-        🚧 DevSim is in beta — System Design Arena, NovaTech CRM, RAGCore, TechCorp HRM, ShopFront, DataForge, and InfraCore are live now. More codebases dropping soon.
+      <div className="w-full px-4 py-3 text-center text-sm font-medium border-b border-hairline" style={{ background: "var(--signal-amber-weak)", color: "var(--signal-amber)" }}>
+        DevSim is in beta — System Design Arena, NovaTech CRM, RAGCore, TechCorp HRM, ShopFront, DataForge, and InfraCore are live now. More codebases dropping soon.
         Your feedback shapes what we build next.
       </div>
 
       {/* Nav */}
-      <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
-        <Link href="/dashboard" className="text-sm font-medium transition-colors"
-          style={{ color: "#6B6B6B" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
-          onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
-          Dashboard
-        </Link>
+      <nav className="sticky top-0 z-40 bg-surface border-b border-hairline px-6 py-3.5 flex items-center justify-between">
+        <Link href="/"><Logo variant="horizontal" size={30} /></Link>
+        <Link href="/dashboard" className="text-sm font-medium text-muted hover:text-ink transition-colors duration-150">Dashboard</Link>
       </nav>
 
       <div className="max-w-5xl mx-auto px-5 py-14">
 
         {/* Header */}
-        <div className="text-center mb-12 fade-in-up">
-          <div className="section-label mb-4">Start here</div>
-          <h1 className="text-4xl sm:text-5xl font-black tracking-tight mb-3" style={{ color: "#1A1A1A" }}>
-            Choose your codebase
-          </h1>
-          <p className="text-lg max-w-md mx-auto" style={{ color: "#6B6B6B" }}>
-            Pick the stack you work with. More coming soon.
-          </p>
+        <div className="text-center mb-12">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-3">Start here</div>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mb-3">Choose your codebase</h1>
+          <p className="text-base text-muted max-w-md mx-auto">Pick the stack you work with. More coming soon.</p>
         </div>
 
         {/* Card grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {CARDS.map((card, i) => {
+          {CARDS.map((card) => {
             const isPlaceholder = card.id === "placeholder";
 
             if (isPlaceholder) {
               return (
-                <div key={card.id}
-                  className="fade-in-up rounded-2xl flex flex-col items-center justify-center p-8 text-center"
-                  style={{
-                    border: "2px dashed #E4E2DD",
-                    background: "transparent",
-                    minHeight: "220px",
-                    animationDelay: `${i * 60}ms`,
-                  }}>
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl mb-4"
-                    style={{ background: "#F3F4F6", color: "#9CA3AF", fontWeight: 900 }}>
-                    ?
-                  </div>
-                  <h3 className="font-bold text-base mb-1" style={{ color: "#1A1A1A" }}>More stacks coming</h3>
-                  <p className="text-sm" style={{ color: "#9CA3AF" }}>Vote for what you want next</p>
+                <div key={card.id} className="rounded border-2 border-dashed border-hairline flex flex-col items-center justify-center p-8 text-center" style={{ minHeight: "220px" }}>
+                  <div className="w-11 h-11 rounded flex items-center justify-center text-xl mb-4 bg-paper text-muted font-bold">?</div>
+                  <h3 className="font-semibold text-base mb-1">{card.name}</h3>
+                  <p className="text-sm text-muted">{card.subtitle}</p>
                 </div>
               );
             }
@@ -296,152 +274,63 @@ export default function SelectCodebasePage() {
             return (
               <div
                 key={card.id}
-                className={`fade-in-up relative rounded-2xl flex flex-col overflow-hidden transition-all duration-200 ${card.active ? "cursor-pointer" : ""}`}
-                style={{
-                  background: "#fff",
-                  border: card.active
-                    ? card.id === "system-design" ? "2px solid #5B5BD6"
-                    : card.id === "ragcore" ? "2px solid #D97706"
-                    : card.id === "techcorp" ? "2px solid #1D4ED8"
-                    : card.id === "shopfront" ? "2px solid #0369A1"
-                    : card.id === "dataforge" ? "2px solid #C2410C"
-                    : card.id === "infracore" ? "2px solid #059669"
-                    : "2px solid #22c55e"
-                    : "1px solid #E4E2DD",
-                  boxShadow: card.active
-                    ? card.id === "system-design" ? "0 0 0 3px rgba(91,91,214,0.12)"
-                    : card.id === "ragcore" ? "0 0 0 3px rgba(217,119,6,0.12)"
-                    : card.id === "techcorp" ? "0 0 0 3px rgba(29,78,216,0.12)"
-                    : card.id === "shopfront" ? "0 0 0 3px rgba(3,105,161,0.12)"
-                    : card.id === "dataforge" ? "0 0 0 3px rgba(194,65,12,0.12)"
-                    : card.id === "infracore" ? "0 0 0 3px rgba(5,150,105,0.12)"
-                    : "0 0 0 3px rgba(34,197,94,0.12)"
-                    : "0 1px 3px rgba(0,0,0,0.04)",
-                  animationDelay: `${i * 60}ms`,
-                }}
+                className={`relative rounded border bg-surface flex flex-col overflow-hidden transition-colors duration-150 ${card.active ? "cursor-pointer border-hairline hover:border-emerald" : "border-hairline"}`}
                 onClick={() => navigate(card)}
-                onMouseEnter={e => {
-                  if (card.active) {
-                    const shadow = card.id === "system-design"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(91,91,214,0.25)"
-                      : card.id === "ragcore"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(217,119,6,0.25)"
-                      : card.id === "techcorp"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(29,78,216,0.25)"
-                      : card.id === "shopfront"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(3,105,161,0.25)"
-                      : card.id === "dataforge"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(194,65,12,0.25)"
-                      : card.id === "infracore"
-                      ? "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(5,150,105,0.25)"
-                      : "0 8px 24px rgba(0,0,0,0.10), 0 0 0 3px rgba(34,197,94,0.20)";
-                    (e.currentTarget as HTMLDivElement).style.transform = "translateY(-3px)";
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (card.active) {
-                    const shadow = card.id === "system-design"
-                      ? "0 0 0 3px rgba(91,91,214,0.12)"
-                      : card.id === "ragcore"
-                      ? "0 0 0 3px rgba(217,119,6,0.12)"
-                      : card.id === "techcorp"
-                      ? "0 0 0 3px rgba(29,78,216,0.12)"
-                      : card.id === "shopfront"
-                      ? "0 0 0 3px rgba(3,105,161,0.12)"
-                      : card.id === "dataforge"
-                      ? "0 0 0 3px rgba(194,65,12,0.12)"
-                      : card.id === "infracore"
-                      ? "0 0 0 3px rgba(5,150,105,0.12)"
-                      : "0 0 0 3px rgba(34,197,94,0.12)";
-                    (e.currentTarget as HTMLDivElement).style.transform = "";
-                    (e.currentTarget as HTMLDivElement).style.boxShadow = shadow;
-                  }
-                }}
               >
                 {/* Corner badge */}
                 {card.cornerBadge && (
-                  <span className="absolute top-3 right-3 text-xs font-bold px-2 py-0.5 rounded-full z-10"
-                    style={{ background: card.cornerBadge.bg, color: card.cornerBadge.color }}>
-                    {card.cornerBadge.label}
-                  </span>
+                  <Badge tone={card.cornerBadge.tone} className="absolute top-3 right-3 z-10">{card.cornerBadge.label}</Badge>
                 )}
 
                 <div className="p-6 flex-1 flex flex-col">
                   {/* Logo + name */}
                   <div className="flex items-start gap-3 mb-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shrink-0"
+                    <div className="w-11 h-11 rounded flex items-center justify-center font-bold text-sm shrink-0"
                       style={{ background: card.logoBg, color: card.logoColor }}>
                       {card.logoLabel}
                     </div>
                     <div>
-                      <h3 className="font-black text-base leading-tight" style={{ color: "#1A1A1A" }}>
-                        {card.name}
-                      </h3>
-                      <p className="text-xs mt-0.5 leading-snug" style={{ color: "#6B6B6B" }}>
-                        {card.subtitle}
-                      </p>
+                      <h3 className="font-semibold text-base leading-tight">{card.name}</h3>
+                      <p className="text-xs mt-0.5 leading-snug text-muted">{card.subtitle}</p>
                     </div>
                   </div>
 
                   {/* Badges */}
                   <div className="flex flex-wrap gap-1.5 mb-3">
-                    {card.stack && (
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-lg"
-                        style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
-                        {card.stack}
-                      </span>
-                    )}
-                    {card.difficulties.map(d => (
-                      <span key={d} className="text-xs font-semibold px-2.5 py-1 rounded-lg"
-                        style={{ background: DIFF_STYLE[d]?.bg, color: DIFF_STYLE[d]?.color }}>
-                        {d}
-                      </span>
+                    {card.stack && <Badge tone="neutral">{card.stack}</Badge>}
+                    {card.difficulties.map((d) => (
+                      <Badge key={d} tone={DIFF_TONE[d]}>{d[0] + d.slice(1).toLowerCase()}</Badge>
                     ))}
                   </div>
 
                   {/* Ticket count */}
                   {card.ticketCount && (
-                    <p className="text-xs font-medium mb-5 flex items-center gap-1.5"
-                      style={{ color: card.active ? "#16a34a" : "#9CA3AF" }}>
-                      {card.active ? "🎫" : "⏳"} {card.ticketCount}
-                    </p>
+                    <p className={`text-xs font-medium mb-5 ${card.active ? "text-emerald" : "text-muted"}`}>{card.ticketCount}</p>
                   )}
 
                   <div className="flex-1" />
 
                   {/* CTA — only on active card */}
                   {card.active && (
-                    <button
-                      onClick={e => { e.stopPropagation(); navigate(card); }}
-                      className="btn-primary w-full text-sm text-center"
-                    >
+                    <Button variant="primary" className="w-full" onClick={(e) => { e.stopPropagation(); navigate(card); }}>
                       Start with {card.name} →
-                    </button>
+                    </Button>
                   )}
 
                   {/* Coming soon label — no button */}
                   {!card.active && card.ticketCount && (
-                    <div className="text-xs font-semibold text-center py-2 rounded-xl"
-                      style={{ background: "#F7F6F3", color: "#9CA3AF" }}>
-                      Coming soon
-                    </div>
+                    <div className="text-xs font-semibold text-center py-2 rounded bg-paper text-muted">Coming soon</div>
                   )}
                 </div>
 
                 {/* Coming soon overlay */}
-                {!card.active && (
-                  <div className="absolute inset-0 rounded-2xl pointer-events-none"
-                    style={{ background: "rgba(247,246,243,0.55)" }} />
-                )}
+                {!card.active && <div className="absolute inset-0 rounded pointer-events-none bg-[rgba(247,246,243,0.55)]" />}
               </div>
             );
           })}
         </div>
 
-        <p className="text-center text-sm mt-8" style={{ color: "#9CA3AF" }}>
-          All codebases are free during beta.
-        </p>
+        <p className="text-center text-sm mt-8 text-muted">All codebases are free during beta.</p>
       </div>
     </main>
   );
