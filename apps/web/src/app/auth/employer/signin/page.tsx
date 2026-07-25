@@ -4,6 +4,10 @@ import { useState } from "react";
 import { storeToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
 import { Mail, Check } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -50,67 +54,60 @@ export default function EmployerSignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
-      <div className="max-w-md w-full rounded-2xl p-8" style={{ background: "#111111", border: "1px solid #222222" }}>
+    <div className="min-h-screen bg-paper flex items-center justify-center px-6">
+      <Card className="max-w-md w-full p-8">
         <div className="flex items-center gap-2 mb-6">
-          <BoltIcon size={28} /><span className="font-black text-white">DevSimulate</span>
+          <BoltIcon size={28} /><span className="font-display font-bold">DevSimulate</span>
         </div>
-        <div className="text-xs font-semibold px-2.5 py-1 rounded-full inline-block mb-4"
-          style={{ background: "#1e1b4b", color: "#818cf8" }}>Employer Portal</div>
+        <Badge tone="neutral" className="mb-4">Employer portal</Badge>
 
         {sent ? (
           <div className="text-center py-6">
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#052e16" }}>
-              <Check size={28} style={{ color: "#4ade80" }} />
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-emerald-weak">
+              <Check size={28} className="text-emerald" />
             </div>
-            <h1 className="text-xl font-black text-white mb-1">Check your inbox</h1>
-            <p className="text-sm" style={{ color: "#888" }}>
-              We sent a sign-in link to <span className="text-white font-semibold">{email}</span>. Click it to continue. It expires in 15 minutes.
+            <h1 className="font-display text-xl font-bold mb-1">Check your inbox</h1>
+            <p className="text-sm text-muted">
+              We sent a sign-in link to <span className="text-ink font-semibold">{email}</span>. Click it to continue. It expires in 15 minutes.
             </p>
-            <button onClick={() => setSent(false)} className="text-xs mt-4" style={{ color: "#818cf8" }}>Use a different email</button>
+            <button onClick={() => setSent(false)} className="text-xs mt-4 text-brand hover:underline">Use a different email</button>
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-black text-white mb-1">Sign in to hire</h1>
-            <p className="text-sm mb-6" style={{ color: "#888" }}>
-              No GitHub needed — we'll email you a secure sign-in link.
+            <h1 className="font-display text-2xl font-bold mb-1">Sign in to hire</h1>
+            <p className="text-sm text-muted mb-6">
+              No GitHub needed — we&apos;ll email you a secure sign-in link.
             </p>
 
-            {error && <div className="rounded-lg px-3 py-2 mb-4 text-xs" style={{ background: "#1c0000", color: "#f87171" }}>{error}</div>}
+            {error && <div className="rounded bg-red-weak px-3 py-2 mb-4 text-xs text-red">{error}</div>}
 
-            <label className="block text-xs font-semibold mb-1.5" style={{ color: "#888" }}>Work email</label>
-            <div className="flex items-center gap-2 rounded-lg px-3 mb-4" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a" }}>
-              <Mail size={15} style={{ color: "#555" }} />
+            <label className="block text-xs font-semibold mb-1.5 text-muted">Work email</label>
+            <div className="flex items-center gap-2 rounded border border-hairline bg-paper px-3 mb-4">
+              <Mail size={15} className="text-muted" />
               <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
                 onKeyDown={(e) => e.key === "Enter" && sendLink()}
-                className="flex-1 bg-transparent py-2.5 text-sm outline-none" style={{ color: "#e5e7eb" }} />
+                className="flex-1 bg-transparent py-2.5 text-sm outline-none text-ink" />
             </div>
 
-            <button onClick={sendLink} disabled={busy}
-              className="w-full py-3 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#6366f1,#4f46e5)" }}>
+            <Button variant="primary" onClick={sendLink} disabled={busy} className="w-full">
               {busy ? "Sending…" : "Email me a sign-in link"}
-            </button>
+            </Button>
 
             {/* Test-login bypass — REMOVE after testing */}
-            <div className="mt-6 pt-4" style={{ borderTop: "1px solid #1e1e1e" }}>
-              <button onClick={() => setShowTest(!showTest)} className="text-xs" style={{ color: "#555" }}>
+            <div className="mt-6 pt-4 border-t border-hairline">
+              <button onClick={() => setShowTest(!showTest)} className="text-xs text-muted hover:text-ink">
                 {showTest ? "Hide" : "Test login (dev only)"}
               </button>
               {showTest && (
                 <div className="mt-3 flex gap-2">
-                  <input value={testCode} onChange={(e) => setTestCode(e.target.value)} placeholder="Test code"
-                    className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#0d0d0d", border: "1px solid #2a2a2a", color: "#e5e7eb" }} />
-                  <button onClick={testLogin} disabled={busy}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#e5e7eb" }}>
-                    Enter
-                  </button>
+                  <Input value={testCode} onChange={(e) => setTestCode(e.target.value)} placeholder="Test code" className="flex-1" />
+                  <Button variant="secondary" onClick={testLogin} disabled={busy}>Enter</Button>
                 </div>
               )}
             </div>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

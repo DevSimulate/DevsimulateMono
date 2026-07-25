@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
+import { Button } from "@/components/ui/Button";
 
 const GITHUB_AUTH_URL =
   `https://github.com/login/oauth/authorize` +
@@ -59,38 +60,31 @@ export default function VsCodeLinkPage(): React.ReactElement {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 text-center px-6"
-      style={{ background: "#0f172a" }}>
+    <div className="min-h-screen bg-paper flex flex-col items-center justify-center gap-6 text-center px-6">
       <BoltIcon size={52} />
 
       {status === "checking" && (
-        <>
-          <h1 className="text-xl font-bold text-white">Checking your session…</h1>
-          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        </>
+        <h1 className="font-display text-xl font-bold text-ink">Checking your session…</h1>
       )}
 
       {status === "code" && linkToken && (
         <>
-          <h1 className="text-xl font-bold text-white">Connect VS Code</h1>
-          <p className="text-slate-400 text-sm max-w-sm">
+          <h1 className="font-display text-xl font-bold text-ink">Connect VS Code</h1>
+          <p className="text-sm text-muted max-w-sm">
             VS Code should open automatically. If it doesn&apos;t, copy this code and paste it in VS Code when prompted.
           </p>
 
-          <div className="bg-slate-800 border border-slate-600 rounded-xl px-6 py-5 w-full max-w-sm">
-            <p className="text-xs text-slate-500 mb-2 uppercase tracking-widest">Your connection code</p>
-            <p className="font-mono text-xs text-white break-all select-all leading-relaxed">{linkToken}</p>
+          <div className="rounded border border-hairline bg-surface px-6 py-5 w-full max-w-sm">
+            <p className="text-xs text-muted mb-2 uppercase tracking-widest">Your connection code</p>
+            <p className="font-mono text-xs text-ink break-all select-all leading-relaxed">{linkToken}</p>
           </div>
 
           <div className="flex flex-col gap-3 w-full max-w-sm">
-            <button
-              onClick={handleCopy}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
-            >
-              {copied ? "Copied!" : "Copy Code"}
-            </button>
-            <p className="text-xs text-slate-500">
-              In VS Code: open Command Palette → <span className="text-slate-300">DevSimulate: Paste Connection Code</span>
+            <Button variant="primary" onClick={handleCopy}>
+              {copied ? "Copied!" : "Copy code"}
+            </Button>
+            <p className="text-xs text-muted">
+              In VS Code: open Command Palette → <span className="text-ink">DevSimulate: Paste Connection Code</span>
             </p>
           </div>
         </>
@@ -98,14 +92,9 @@ export default function VsCodeLinkPage(): React.ReactElement {
 
       {status === "error" && (
         <>
-          <h1 className="text-xl font-bold text-white">Connection failed</h1>
-          <p className="text-red-400 text-sm max-w-sm">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors"
-          >
-            Try again
-          </button>
+          <h1 className="font-display text-xl font-bold text-ink">Connection failed</h1>
+          <p className="text-sm text-red max-w-sm">{error}</p>
+          <Button variant="primary" onClick={() => window.location.reload()}>Try again</Button>
         </>
       )}
     </div>

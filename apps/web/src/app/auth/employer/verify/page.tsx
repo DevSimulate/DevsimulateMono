@@ -28,19 +28,18 @@ function VerifyInner() {
   }, [params]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen bg-paper flex items-center justify-center px-6">
       <div className="text-center">
         <BoltIcon size={44} />
         {error ? (
           <>
-            <h1 className="text-xl font-bold text-white mt-4 mb-2">Sign-in failed</h1>
-            <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>
-            <a href="/employer/signin" className="text-sm mt-4 inline-block" style={{ color: "#818cf8" }}>Request a new link</a>
+            <h1 className="font-display text-xl font-bold mt-4 mb-2">Sign-in failed</h1>
+            <p className="text-sm text-red">{error}</p>
+            <a href="/employer/signin" className="text-sm mt-4 inline-block text-brand hover:underline">Request a new link</a>
           </>
         ) : (
           <>
-            <h1 className="text-xl font-bold text-white mt-4 mb-2">Signing you in…</h1>
-            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <h1 className="font-display text-xl font-bold mt-4 mb-2">Signing you in…</h1>
           </>
         )}
       </div>
@@ -50,7 +49,7 @@ function VerifyInner() {
 
 export default function EmployerVerifyPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a", color: "#555" }}>Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">Loading…</div>}>
       <VerifyInner />
     </Suspense>
   );

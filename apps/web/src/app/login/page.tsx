@@ -4,6 +4,7 @@ import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import { BoltIcon } from "@/components/Logo";
+import { Card } from "@/components/ui/Card";
 
 const GITHUB_AUTH_URL =
   `https://github.com/login/oauth/authorize` +
@@ -28,19 +29,19 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen bg-paper flex items-center justify-center px-6">
       <div className="max-w-sm w-full">
-        <div className="rounded-2xl p-8 text-center" style={{ background: "#111111", border: "1px solid #222222" }}>
+        <Card className="p-8 text-center">
           <div className="flex justify-center mb-5">
             <BoltIcon size={40} />
           </div>
-          <h1 className="text-xl font-black text-white mb-2">Sign in to DevSimulate</h1>
-          <p className="text-sm mb-6" style={{ color: "#888" }}>
+          <h1 className="font-display text-xl font-bold mb-2">Sign in to DevSimulate</h1>
+          <p className="text-sm text-muted mb-6">
             Use your GitHub account to sign in and access your assigned tickets.
           </p>
           <button
             onClick={signIn}
-            className="flex items-center justify-center gap-2.5 w-full py-3 rounded-lg text-sm font-bold text-white transition-opacity hover:opacity-90"
+            className="flex items-center justify-center gap-2.5 w-full py-3 rounded text-sm font-semibold text-white transition-opacity duration-150 hover:opacity-90"
             style={{ background: "#24292e" }}
           >
             <svg height="18" viewBox="0 0 16 16" fill="white" aria-hidden="true">
@@ -48,14 +49,14 @@ function LoginContent() {
             </svg>
             Sign in with GitHub
           </button>
-          <p className="text-xs mt-4" style={{ color: "#444" }}>
+          <p className="text-xs mt-4 text-muted">
             Free · No credit card required
           </p>
-        </div>
+        </Card>
         <div className="flex items-center justify-center gap-1.5 mt-5">
           <BoltIcon size={14} />
-          <span className="text-xs" style={{ color: "#555" }}>
-            Powered by <span className="font-bold" style={{ color: "#888" }}>DevSimulate</span>
+          <span className="text-xs text-muted">
+            Powered by <span className="font-semibold text-ink">DevSimulate</span>
           </span>
         </div>
       </div>
@@ -65,7 +66,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a", color: "#888" }}>Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">Loading…</div>}>
       <LoginContent />
     </Suspense>
   );

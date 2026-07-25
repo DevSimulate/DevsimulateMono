@@ -8,33 +8,23 @@ import Logo from "@/components/Logo";
 import { OpenInVsCode } from "@/components/OpenInVsCode";
 import { getMe, getSubmissions, getAssignments, getScoreHistory, ScoreHistoryPoint } from "@/lib/api";
 import { User, Submission, TicketAssignment, ClaudeReview, Difficulty } from "@devsimulate/shared";
-import clsx from "clsx";
 import { format } from "date-fns";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Dot,
 } from "recharts";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { Badge, BadgeTone } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ScoreReceipt, ScoreReceiptData } from "@/components/ui/ScoreReceipt";
 
-const DIFFICULTY_COLOR: Record<Difficulty, string> = {
-  JUNIOR: "bg-[#CCFBF1] text-[#0D9488]",
-  MID: "bg-[#FEF3C7] text-[#D97706]",
-  SENIOR: "bg-[#FCE7F3] text-[#BE185D]",
+const DIFFICULTY_TONE: Record<Difficulty, BadgeTone> = {
+  JUNIOR: "good",
+  MID: "warn",
+  SENIOR: "neutral",
 };
-
-function ScoreBar({ label, value, max }: { label: string; value: number | null; max: number }) {
-  const pct = value !== null ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-32 text-xs shrink-0" style={{ color: "#6B6B6B" }}>{label}</div>
-      <div className="flex-1 h-1.5 rounded-full" style={{ background: "#E4E2DD" }}>
-        <div className="score-bar-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="w-8 text-xs text-right font-bold shrink-0" style={{ color: "#1A1A1A" }}>
-        {value ?? "—"}
-      </div>
-    </div>
-  );
-}
 
 interface CertSummary {
   id:           string;
@@ -56,118 +46,101 @@ interface FollowUp {
   verbalNote: string | null;
 }
 
+const GRADER_META: Record<string, { tone: BadgeTone; text: string }> = {
+  pass:         { tone: "good", text: "Verified correct under load — automated test passed" },
+  fail:         { tone: "bad",  text: "Failed automated correctness test — Execution capped to 0" },
+  inconclusive: { tone: "warn", text: "Automated test couldn't run (build issue) — flagged for review, score not penalised" },
+};
+
 function SubmissionCard({ submission }: { submission: Submission }) {
   const review = submission.claudeReview as ClaudeReview | null;
   const isReviewed = submission.status === "REVIEWED";
-  const followUp = (submission as any).followUp as FollowUp | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sub = submission as any;
+  const followUp = sub.followUp as FollowUp | null;
+  const ticketTitle = sub.ticket?.title ?? "Unknown ticket";
+  const graderResult = sub.graderResult as { result?: string } | undefined;
+
+  const prBase = (submission.scoreDiagnosis ?? 0) + (submission.scoreDesign ?? 0) +
+                 (submission.scoreCommunication ?? 0) + (submission.scoreExecution ?? 0);
+  const gap = prBase - (submission.scoreTotal ?? 0);
+  const gapReason = followUp?.verbalScore != null
+    ? (followUp.verbalScore <= 3 ? "spoken explanation couldn't be defended aloud" : "weak spoken explanation")
+    : undefined;
+
+  const receiptData: ScoreReceiptData = {
+    prBaseScore: prBase,
+    finalScore: submission.scoreTotal ?? 0,
+    lineItems: [
+      { label: "Diagnosis", weight: 40, score: submission.scoreDiagnosis ?? 0 },
+      { label: "Design", weight: 30, score: submission.scoreDesign ?? 0 },
+      { label: "Communication", weight: 20, score: submission.scoreCommunication ?? 0 },
+      { label: "Execution", weight: 10, score: submission.scoreExecution ?? 0 },
+    ],
+    deductions: gap > 0 ? [{ label: "Verbal defence", amount: gap, note: gapReason }] : [],
+  };
 
   return (
-    <div className="card shine p-5">
+    <Card className="p-5">
       {/* Top row */}
       <div className="flex items-start justify-between gap-4 mb-3">
         <div className="min-w-0">
-          <div className="font-bold text-sm mb-1 truncate" style={{ color: "#1A1A1A" }}>
-            {(submission as any).ticket?.title ?? "Unknown ticket"}
-          </div>
-          <a href={submission.prUrl} target="_blank" rel="noreferrer"
-            className="text-xs font-medium hover:underline" style={{ color: "#5B5BD6" }}>
+          <div className="font-semibold text-sm mb-1 truncate">{ticketTitle}</div>
+          <a href={submission.prUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-brand hover:underline">
             View PR →
           </a>
         </div>
 
-        <div className="shrink-0 text-right">
-          {isReviewed && submission.scoreTotal !== null ? (
-            <div>
-              <div className="text-3xl font-black gradient-text leading-none">{submission.scoreTotal}</div>
-              <div className="text-xs" style={{ color: "#6B6B6B" }}>/100</div>
-            </div>
-          ) : isReviewed ? (
-            <span className="text-xs font-semibold rounded-full px-3 py-1" style={{ background: "#FEF3C7", color: "#D97706" }}>
-              Pending score
-            </span>
-          ) : (
-            <span className="text-xs font-semibold rounded-full px-3 py-1" style={{ background: "#E4E2DD", color: "#6B6B6B" }}>
-              Under review
-            </span>
+        <div className="shrink-0">
+          {!isReviewed && (
+            <Badge tone="neutral">Under review</Badge>
+          )}
+          {isReviewed && submission.scoreTotal === null && (
+            <Badge tone="warn">Pending score</Badge>
           )}
         </div>
       </div>
 
       {/* Reviewed content */}
-      {isReviewed && (
-        <>
-          <div className="mb-3">
-            <span className="text-xs font-bold rounded-full px-3 py-0.5" style={{ background: "#CCFBF1", color: "#0D9488" }}>
-              ✓ Resolved
-            </span>
-          </div>
+      {isReviewed && submission.scoreTotal !== null && (
+        <div className="flex flex-col gap-3">
+          <ScoreReceipt variant="full" animate={false} data={receiptData} />
 
-          <div className="space-y-2 mb-4">
-            <ScoreBar label="Diagnosis (40)" value={submission.scoreDiagnosis} max={40} />
-            <ScoreBar label="Design (30)"    value={submission.scoreDesign}    max={30} />
-            <ScoreBar label="Comms (20)"     value={submission.scoreCommunication} max={20} />
-            <ScoreBar label="Execution (10)" value={submission.scoreExecution} max={10} />
-          </div>
+          {graderResult?.result && GRADER_META[graderResult.result] && (
+            <Badge tone={GRADER_META[graderResult.result].tone} className="w-fit">
+              {GRADER_META[graderResult.result].text}
+            </Badge>
+          )}
 
-          {(() => {
-            const g = (submission as { graderResult?: { result?: string } }).graderResult;
-            const m: Record<string, { bg: string; fg: string; text: string }> = {
-              pass:         { bg: "#CCFBF1", fg: "#0D9488", text: "✓ Verified correct under load — automated test passed" },
-              fail:         { bg: "#FEE2E2", fg: "#DC2626", text: "🚩 Failed automated correctness test — Execution capped to 0" },
-              inconclusive: { bg: "#FEF3C7", fg: "#D97706", text: "⚠ Automated test couldn't run (build issue) — flagged for review, score not penalised" },
-            };
-            const c = g?.result ? m[g.result] : undefined;
-            return c ? (
-              <div className="mb-3 text-xs font-semibold rounded-lg px-3 py-2" style={{ background: c.bg, color: c.fg }}>
-                {c.text}
-              </div>
-            ) : null;
-          })()}
-
-          {/* Reconcile the breakdown (PR review) with the final score after deductions */}
-          {(() => {
-            const prBase = (submission.scoreDiagnosis ?? 0) + (submission.scoreDesign ?? 0) +
-                           (submission.scoreCommunication ?? 0) + (submission.scoreExecution ?? 0);
-            const gap = prBase - (submission.scoreTotal ?? 0);
-            if (gap <= 0) return null;
-            const vScore = followUp?.verbalScore;
-            const reason = vScore != null
-              ? (vScore <= 3 ? " — spoken explanation couldn't be defended aloud" : " — weak spoken explanation")
-              : "";
-            return (
-              <div className="mb-3 text-xs rounded-lg px-3 py-2" style={{ background: "#FEF3C7", color: "#92400E" }}>
-                <span className="font-bold">PR review {prBase} → final {submission.scoreTotal} (−{gap})</span>{reason}.
-              </div>
-            );
-          })()}
-
-          {review && (
-            <div className="rounded-xl p-4 mb-3" style={{ background: "#F7F6F3", border: "1px solid #E4E2DD" }}>
-              <p className="text-sm italic leading-relaxed mb-3" style={{ color: "#6B6B6B" }}>
-                &ldquo;{review.summary}&rdquo;
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="rounded-lg p-3" style={{ background: "#CCFBF1", border: "1px solid #A7F3D0" }}>
-                  <div className="font-bold mb-1" style={{ color: "#0D9488" }}>Top strength</div>
-                  <div style={{ color: "#1A1A1A" }}>{review.topStrength}</div>
-                </div>
-                <div className="rounded-lg p-3" style={{ background: "#FEF3C7", border: "1px solid #FDE68A" }}>
-                  <div className="font-bold mb-1" style={{ color: "#D97706" }}>Top improvement</div>
-                  <div style={{ color: "#1A1A1A" }}>{review.topImprovement}</div>
-                </div>
+          {review && (review.summary || review.topStrength || review.topImprovement) && (
+            <div className="rounded border border-hairline bg-paper p-4">
+              {review.summary && <p className="text-sm italic leading-relaxed mb-3 text-muted">&ldquo;{review.summary}&rdquo;</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {review.topStrength && (
+                  <div className="rounded border border-[rgba(11,122,94,0.25)] bg-emerald-weak p-3 text-xs">
+                    <div className="font-semibold mb-1 text-emerald">Top strength</div>
+                    <div className="text-ink">{review.topStrength}</div>
+                  </div>
+                )}
+                {review.topImprovement && (
+                  <div className="rounded border border-[rgba(183,121,31,0.25)] bg-amber-weak p-3 text-xs">
+                    <div className="font-semibold mb-1 text-amber">Top improvement</div>
+                    <div className="text-ink">{review.topImprovement}</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {followUp?.claudeFeedback && (
-            <div className="rounded-lg px-4 py-3 text-xs leading-relaxed" style={{ background: "#EBEBFF", border: "1px solid #C4C2DB" }}>
-              <span className="font-bold" style={{ color: "#5B5BD6" }}>Assessment: </span>
-              <span style={{ color: "#1A1A1A" }}>{followUp.claudeFeedback}</span>
+            <div className="rounded border border-hairline px-4 py-3 text-xs leading-relaxed">
+              <span className="font-semibold text-brand">Assessment: </span>
+              <span className="text-ink">{followUp.claudeFeedback}</span>
             </div>
           )}
-        </>
+        </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -180,10 +153,10 @@ function ScoreTooltip({ active, payload }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
-    <div className="rounded-xl border p-3 text-xs shadow-lg" style={{ background: "white", borderColor: "#E4E2DD" }}>
-      <div className="font-bold mb-1" style={{ color: "#1A1A1A" }}>{d.ticketTitle}</div>
-      <div className="mb-2" style={{ color: "#6B6B6B" }}>{d.label}</div>
-      <div className="space-y-1">
+    <div className="rounded border border-hairline bg-surface p-3 text-xs shadow-overlay">
+      <div className="font-semibold mb-1 text-ink">{d.ticketTitle}</div>
+      <div className="mb-2 text-muted">{d.label}</div>
+      <div className="flex flex-col gap-1">
         {[
           { label: "Total", val: `${d.scoreTotal}/100`, bold: true },
           { label: "Diagnosis", val: `${d.scoreDiagnosis}/40` },
@@ -192,8 +165,8 @@ function ScoreTooltip({ active, payload }: ChartTooltipProps) {
           { label: "Execution", val: `${d.scoreExecution}/10` },
         ].map(({ label, val, bold }) => (
           <div key={label} className="flex justify-between gap-4">
-            <span style={{ color: "#6B6B6B" }}>{label}</span>
-            <span className={bold ? "font-bold gradient-text" : ""} style={bold ? {} : { color: "#1A1A1A" }}>{val}</span>
+            <span className="text-muted">{label}</span>
+            <span className={bold ? "font-bold font-display text-ink" : "text-ink"}>{val}</span>
           </div>
         ))}
       </div>
@@ -204,10 +177,7 @@ function ScoreTooltip({ active, payload }: ChartTooltipProps) {
 function ProgressChart({ history }: { history: ScoreHistoryPoint[] }) {
   if (history.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed p-10 text-center text-sm"
-        style={{ borderColor: "#E4E2DD", color: "#6B6B6B" }}>
-        No submissions yet — complete your first ticket to see progress.
-      </div>
+      <EmptyState title="No submissions yet" description="Complete your first ticket to see progress." />
     );
   }
 
@@ -220,17 +190,17 @@ function ProgressChart({ history }: { history: ScoreHistoryPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height={200}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#E4E2DD" />
-        <XAxis dataKey="label" tick={{ fill: "#6B6B6B", fontSize: 11 }} axisLine={false} tickLine={false} />
-        <YAxis domain={[0, 100]} tick={{ fill: "#6B6B6B", fontSize: 11 }} axisLine={false} tickLine={false} />
-        <Tooltip content={<ScoreTooltip />} cursor={{ stroke: "#E4E2DD" }} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#D8DAD3" />
+        <XAxis dataKey="label" tick={{ fill: "#5E6673", fontSize: 11 }} axisLine={false} tickLine={false} />
+        <YAxis domain={[0, 100]} tick={{ fill: "#5E6673", fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip content={<ScoreTooltip />} cursor={{ stroke: "#D8DAD3" }} />
         <Line
           type="monotone"
           dataKey="scoreTotal"
-          stroke="#5B5BD6"
+          stroke="#4F46E5"
           strokeWidth={2.5}
-          dot={<Dot r={4} fill="#5B5BD6" stroke="white" strokeWidth={2} />}
-          activeDot={{ r: 6, fill: "#5B5BD6", stroke: "white", strokeWidth: 2 }}
+          dot={<Dot r={4} fill="#4F46E5" stroke="white" strokeWidth={2} />}
+          activeDot={{ r: 6, fill: "#4F46E5", stroke: "white", strokeWidth: 2 }}
         />
       </LineChart>
     </ResponsiveContainer>
@@ -300,7 +270,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-grid flex items-center justify-center text-sm" style={{ color: "#6B6B6B" }}>
+      <div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">
         Loading…
       </div>
     );
@@ -316,283 +286,219 @@ export default function DashboardPage() {
       : null;
 
   const stats = [
-    { label: "Skill Score",    value: user.skillScore,                               unit: "pts" },
+    { label: "Skill score",    value: user.skillScore,                               unit: "pts" },
     { label: "Tickets solved", value: reviewed.length,                               unit: "" },
     { label: "Avg score",      value: avgScore !== null ? avgScore : "—",            unit: avgScore !== null ? "/100" : "" },
   ];
 
   return (
-    <div className="min-h-screen bg-grid">
+    <div className="min-h-screen bg-paper text-ink">
 
-      {/* ── Header ── */}
-      <header className="nav-glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
-        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-surface border-b border-hairline px-6 py-3.5 flex items-center justify-between">
+        <Link href="/"><Logo variant="horizontal" size={30} /></Link>
         <div className="flex items-center gap-5">
-          <Link href={ticketsHref} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
-            Browse Tickets
+          <Link href={ticketsHref} className="text-sm font-medium text-muted hover:text-ink transition-colors duration-150">
+            Browse tickets
           </Link>
-          <Link href={`/profile/${user.githubUsername}`} className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
+          <Link href={`/profile/${user.githubUsername}`} className="text-sm font-medium text-muted hover:text-ink transition-colors duration-150">
             @{user.githubUsername}
           </Link>
-          <button onClick={handleLogout} className="btn-outline text-xs py-1.5 px-4">
-            Logout
-          </button>
+          <Button variant="secondary" size="sm" onClick={handleLogout}>Logout</Button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
 
-        {/* ── Certificate name banner (if not set) ── */}
+        {/* Certificate name banner */}
         {!user.fullName && !nameEdit && (
-          <div className="rounded-xl px-5 py-4 mb-6 flex items-center justify-between gap-4"
-            style={{ background: "#1a1200", border: "1px solid #3d2e00" }}>
+          <Card className="p-4 mb-6 flex items-center justify-between gap-4 bg-amber-weak !border-[rgba(183,121,31,0.25)]">
             <div>
-              <p className="text-sm font-bold" style={{ color: "#fbbf24" }}>Set your real name for certificates</p>
-              <p className="text-xs mt-0.5" style={{ color: "#78600a" }}>Your GitHub username appears on certificates right now. Add your real name.</p>
+              <p className="text-sm font-semibold text-amber">Set your real name for certificates</p>
+              <p className="text-xs mt-0.5 text-muted">Your GitHub username appears on certificates right now. Add your real name.</p>
             </div>
-            <button onClick={() => { setNameInput(""); setNameEdit(true); }}
-              className="shrink-0 px-4 py-2 rounded-lg text-xs font-bold"
-              style={{ background: "#fbbf24", color: "#000" }}>
-              Set Name
-            </button>
-          </div>
+            <Button variant="secondary" size="sm" onClick={() => { setNameInput(""); setNameEdit(true); }}>
+              Set name
+            </Button>
+          </Card>
         )}
         {nameEdit && (
-          <div className="rounded-xl px-5 py-4 mb-6" style={{ background: "#111", border: "1px solid #2a2a2a" }}>
-            <p className="text-xs font-bold mb-3" style={{ color: "#888" }}>Your name on certificates</p>
+          <Card className="p-4 mb-6">
+            <p className="text-xs font-semibold mb-3 text-muted">Your name on certificates</p>
             <div className="flex gap-2">
-              <input
+              <Input
                 type="text"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 placeholder="e.g. Sarah Ahmed"
                 autoFocus
-                className="flex-1 px-3 py-2 rounded-lg text-sm"
-                style={{ background: "#0a0a0a", border: "1px solid #2a2a2a", color: "#e5e7eb", outline: "none" }}
+                className="flex-1"
                 onKeyDown={(e) => e.key === "Enter" && saveName()}
               />
-              <button onClick={saveName} disabled={nameSaving || !nameInput.trim()}
-                className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-                style={{ background: "#5B5BD6" }}>
+              <Button variant="primary" onClick={saveName} disabled={nameSaving || !nameInput.trim()}>
                 {nameSaving ? "Saving…" : "Save"}
-              </button>
-              <button onClick={() => setNameEdit(false)}
-                className="px-3 py-2 rounded-lg text-sm"
-                style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
-                Cancel
-              </button>
+              </Button>
+              <Button variant="secondary" onClick={() => setNameEdit(false)}>Cancel</Button>
             </div>
-          </div>
+          </Card>
         )}
         {user.fullName && !nameEdit && (
-          <div className="rounded-xl px-5 py-3 mb-6 flex items-center justify-between"
-            style={{ background: "#0a110a", border: "1px solid #1a3a1a" }}>
+          <Card className="p-3 mb-6 flex items-center justify-between">
             <div>
-              <p className="text-xs" style={{ color: "#555" }}>Certificate name</p>
-              <p className="text-sm font-bold text-white">{user.fullName}</p>
+              <p className="text-xs text-muted">Certificate name</p>
+              <p className="text-sm font-semibold">{user.fullName}</p>
             </div>
-            <button onClick={() => { setNameInput(user.fullName ?? ""); setNameEdit(true); }}
-              className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888" }}>
+            <Button variant="quiet" size="sm" onClick={() => { setNameInput(user.fullName ?? ""); setNameEdit(true); }}>
               Edit
-            </button>
-          </div>
+            </Button>
+          </Card>
         )}
 
-        {/* ── Stats ── */}
+        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
           {stats.map(({ label, value, unit }) => (
-            <div key={label} className="card shine p-5">
-              <div className="text-2xl font-black" style={{ color: "#1A1A1A" }}>
+            <Card key={label} className="p-5">
+              <div className="font-display text-2xl font-bold">
                 {value}
-                {unit && <span className="text-sm font-normal" style={{ color: "#6B6B6B" }}>{unit}</span>}
+                {unit && <span className="text-sm font-normal text-muted"> {unit}</span>}
               </div>
-              <div className="text-xs mt-1" style={{ color: "#6B6B6B" }}>{label}</div>
-            </div>
+              <div className="text-xs mt-1 text-muted">{label}</div>
+            </Card>
           ))}
         </div>
 
-        {/* ── Active Tickets ── */}
+        {/* Active tickets */}
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4">
-            <div className="section-label">
-              Active Tickets
-              {assignments.length > 0 && (
-                <span className="ml-2 text-xs font-bold rounded-full px-2 py-0.5"
-                  style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
-                  {assignments.length}
-                </span>
-              )}
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              Active tickets
+              {assignments.length > 0 && <Badge tone="neutral">{assignments.length}</Badge>}
             </div>
-            <Link href={ticketsHref} className="text-xs font-semibold" style={{ color: "#5B5BD6" }}>
-              Browse all →
-            </Link>
+            <Link href={ticketsHref} className="text-xs font-semibold text-brand">Browse all →</Link>
           </div>
 
           {assignments.length === 0 ? (
-            <div className="card p-10 text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <div className="font-bold text-base mb-1" style={{ color: "#1A1A1A" }}>All caught up!</div>
-              <div className="text-sm mb-5" style={{ color: "#6B6B6B" }}>
-                You have no active tickets. Pick a new one to keep building.
-              </div>
-              <Link href={ticketsHref} className="btn-primary text-sm">Browse tickets →</Link>
-            </div>
+            <EmptyState
+              title="All caught up"
+              description="You have no active tickets. Pick a new one to keep building."
+              actionLabel="Browse tickets"
+              onAction={() => { window.location.href = ticketsHref; }}
+            />
           ) : (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {assignments.map((a) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const ticket = (a as any).ticket;
                 if (!ticket) return null;
                 return (
-                  <div key={a.id} className="card-glow p-6">
+                  <Card key={a.id} className="p-6">
                     <div className="flex items-start gap-3 mb-3">
-                      <Link
-                        href={`/tickets/${ticket.id}`}
-                        className="font-bold text-base flex-1 transition-colors"
-                        style={{ color: "#1A1A1A" }}
-                        onMouseEnter={e => (e.currentTarget.style.color = "#5B5BD6")}
-                        onMouseLeave={e => (e.currentTarget.style.color = "#1A1A1A")}
-                      >
+                      <Link href={`/tickets/${ticket.id}`} className="font-semibold text-base flex-1 hover:text-brand transition-colors duration-150">
                         {ticket.title}
                       </Link>
-                      <span className={clsx(
-                        "text-xs font-bold rounded-full px-3 py-1 shrink-0",
-                        DIFFICULTY_COLOR[ticket.difficulty as Difficulty]
-                      )}>
-                        {ticket.difficulty}
-                      </span>
+                      <Badge tone={DIFFICULTY_TONE[ticket.difficulty as Difficulty]}>{ticket.difficulty}</Badge>
                     </div>
 
                     {ticket.codebase && (
-                      <div className="text-xs font-semibold mb-2" style={{ color: "#5B5BD6" }}>
-                        {ticket.codebase.name} — <span style={{ color: "#6B6B6B", fontWeight: 400 }}>{ticket.codebase.description}</span>
+                      <div className="text-xs font-semibold mb-2 text-brand">
+                        {ticket.codebase.name} — <span className="text-muted font-normal">{ticket.codebase.description}</span>
                       </div>
                     )}
 
-                    <p className="text-sm leading-relaxed mb-4" style={{ color: "#6B6B6B" }}>
-                      {ticket.description}
-                    </p>
+                    <p className="text-sm leading-relaxed mb-4 text-muted">{ticket.description}</p>
 
-                    <div className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#6B6B6B" }}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide mb-2 text-muted">
                       Files to investigate
                     </div>
                     <div className="flex flex-wrap gap-2 mb-4">
                       {ticket.filesInvolved.map((f: string) => (
-                        <code key={f} className="text-xs rounded-lg px-2.5 py-1 font-mono"
-                          style={{ background: "#EBEBFF", color: "#5B5BD6" }}>
+                        <code key={f} className="text-xs rounded px-2.5 py-1 font-mono bg-brand-weak text-brand">
                           {f}
                         </code>
                       ))}
                     </div>
 
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 text-xs" style={{ color: "#6B6B6B" }}>
+                      <div className="flex items-center gap-3 text-xs text-muted">
                         {ticket.stack !== "SYSTEM_DESIGN" && (
                           <>
-                            <span>Branch: <code className="font-mono" style={{ color: "#1A1A1A" }}>{a.branchName}</code></span>
+                            <span>Branch: <code className="font-mono text-ink">{a.branchName}</code></span>
                             <span>·</span>
                           </>
                         )}
-                        <span>Est. {ticket.expectedMinutes} min</span>
+                        <span className="font-mono">Est. {ticket.expectedMinutes} min</span>
                       </div>
                       {ticket.stack === "SYSTEM_DESIGN" ? (
-                        <Link
-                          href={`/submit?ticketId=${ticket.id}`}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors"
-                          style={{ background: "#5B5BD6", color: "white" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "#4747C2")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "#5B5BD6")}
-                        >
-                          Write System Design
+                        <Link href={`/submit?ticketId=${ticket.id}`}>
+                          <Button variant="primary" size="sm">Write system design</Button>
                         </Link>
                       ) : (
                         <OpenInVsCode
                           assignmentId={a.id}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-bold transition-colors cursor-pointer"
-                          style={{ background: "#5B5BD6", color: "white", border: "none" }}
+                          className="shrink-0 inline-flex items-center gap-1.5 rounded px-4 py-2 text-xs font-semibold transition-colors duration-150 cursor-pointer bg-brand text-white hover:brightness-110"
                         />
                       )}
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
           )}
         </section>
 
-        {/* ── Progress Chart ── */}
+        {/* Progress chart */}
         <section className="mb-10">
-          <div className="section-label">Your Progress</div>
-          <div className="card p-5">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-4">Your progress</div>
+          <Card className="p-5">
             <ProgressChart history={history} />
             {history.length === 1 && (
-              <p className="text-center text-xs mt-2" style={{ color: "#6B6B6B" }}>
-                Complete more tickets to see your trend
-              </p>
+              <p className="text-center text-xs mt-2 text-muted">Complete more tickets to see your trend</p>
             )}
-          </div>
+          </Card>
         </section>
 
-        {/* ── Certificates ── */}
+        {/* Certificates */}
         {certs.length > 0 && (
           <section className="mb-10">
-            <div className="section-label">My Certificates</div>
-            <div className="space-y-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-4">My certificates</div>
+            <div className="flex flex-col gap-3">
               {certs.map((cert) => (
-                <div key={cert.id} className="card p-4 flex items-center gap-4">
+                <Card key={cert.id} className="p-4 flex items-center gap-4">
                   {cert.logoUrl ? (
-                    <img src={cert.logoUrl} alt={cert.brandName} className="h-10 w-10 rounded-lg object-contain shrink-0"
-                      style={{ background: "#f3f4f6", padding: "4px" }} />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={cert.logoUrl} alt={cert.brandName} className="h-10 w-10 rounded object-contain shrink-0 bg-paper p-1" />
                   ) : (
-                    <div className="h-10 w-10 rounded-lg flex items-center justify-center text-xs font-black shrink-0"
-                      style={{ background: cert.primaryColor + "22", color: cert.primaryColor }}>
+                    <div className="h-10 w-10 rounded flex items-center justify-center text-xs font-bold shrink-0 bg-brand-weak text-brand">
                       {cert.brandName.slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold text-sm truncate" style={{ color: "#1A1A1A" }}>
+                    <div className="font-semibold text-sm truncate">
                       {cert.brandName || cert.companyName} — {cert.campaignName}
                     </div>
-                    <div className="text-xs" style={{ color: "#6B6B6B" }}>
-                      Score: <span className="font-bold" style={{ color: cert.primaryColor }}>{cert.score}</span>
+                    <div className="text-xs text-muted">
+                      Score: <span className="font-semibold text-ink">{cert.score}</span>
                       {cert.rank ? ` · Rank #${cert.rank}` : ""}
                       {" · "}{format(new Date(cert.issuedAt), "MMM yyyy")}
                     </div>
                   </div>
-                  <a
-                    href={`/certificate/${cert.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "6px",
-                      flexShrink: 0, padding: "8px 16px", borderRadius: "8px",
-                      fontSize: "12px", fontWeight: 700, textDecoration: "none",
-                      background: cert.primaryColor || "#5B5BD6", color: "white",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    🏅 View Certificate
+                  <a href={`/certificate/${cert.id}`} target="_blank" rel="noopener noreferrer">
+                    <Button variant="primary" size="sm">View certificate</Button>
                   </a>
-                </div>
+                </Card>
               ))}
             </div>
           </section>
         )}
 
-        {/* ── Submission History ── */}
+        {/* Submission history */}
         <section>
-          <div className="section-label">Submission History</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-4">Submission history</div>
 
           {visibleSubmissions.length === 0 ? (
-            <div className="card p-10 text-center text-sm" style={{ color: "#6B6B6B" }}>
-              No submissions yet. Install the VS Code extension to get started.
-            </div>
+            <EmptyState title="No submissions yet" description="Install the VS Code extension to get started." />
           ) : (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {visibleSubmissions.map((sub) => (
                 <SubmissionCard key={sub.id} submission={sub} />
               ))}
