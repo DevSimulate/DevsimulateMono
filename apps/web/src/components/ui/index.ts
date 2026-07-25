@@ -6,6 +6,7 @@ export * from "./Badge";
 export * from "./Modal";
 export * from "./Toast";
 export * from "./Tabs";
+export * from "./Menu";
 export * from "./EmptyState";
 export * from "./Skeleton";
 export * from "./ScoreReceipt";
