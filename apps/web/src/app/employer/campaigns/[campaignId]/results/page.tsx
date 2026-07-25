@@ -7,39 +7,50 @@ import { getToken } from "@/lib/auth";
 import {
   ArrowLeft, Download, Mail, Check, X, ExternalLink, Star, CheckCircle2, Award,
 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+// Precision Instrument palette used throughout this page's lookup tables —
+// emerald is the one accent (also "good"/primary-action), amber is advisory,
+// red is reserved for genuinely negative signals.
+const INK = "#10182B", MUTED = "#5E6673", HAIRLINE = "#D8DAD3", PAPER = "#FBFBF8", SURFACE = "#FFFFFF";
+const EMERALD = "#0B7A5E", EMERALD_WEAK = "#E6F3EF";
+const AMBER = "#B7791F", AMBER_WEAK = "#FBF1E1";
+const RED = "#B3372F", RED_WEAK = "#FBECEB";
 
 type AIDeclaration = "NO_AI_USED" | "AI_USED_FOR_PHRASING" | "AI_USED_FOR_UNDERSTANDING" | "AI_USED_FOR_ANSWER";
 
 const AI_BADGE: Record<AIDeclaration, { label: string; bg: string; color: string }> = {
-  NO_AI_USED:                { label: "No AI",      bg: "#ecfdf3", color: "#067647" },
-  AI_USED_FOR_PHRASING:      { label: "Phrasing",   bg: "#fff8ec", color: "#b54708" },
-  AI_USED_FOR_UNDERSTANDING: { label: "Learning",   bg: "#fff8ec", color: "#b54708" },
-  AI_USED_FOR_ANSWER:        { label: "Full AI",    bg: "#fef3f2", color: "#b42318" },
+  NO_AI_USED:                { label: "No AI",      bg: EMERALD_WEAK, color: EMERALD },
+  AI_USED_FOR_PHRASING:      { label: "Phrasing",   bg: AMBER_WEAK,   color: AMBER },
+  AI_USED_FOR_UNDERSTANDING: { label: "Learning",   bg: AMBER_WEAK,   color: AMBER },
+  AI_USED_FOR_ANSWER:        { label: "Full AI",    bg: RED_WEAK,     color: RED },
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string }> = {
-  NEW:         { bg: "#eef0fd", color: "#4338ca" },
-  REVIEWED:    { bg: "#eef1f5", color: "#5a6472" },
-  SHORTLISTED: { bg: "#ecfdf3", color: "#067647" },
-  REJECTED:    { bg: "#fef3f2", color: "#b42318" },
+  NEW:         { bg: EMERALD_WEAK, color: EMERALD },
+  REVIEWED:    { bg: "#F1F0EB",    color: MUTED },
+  SHORTLISTED: { bg: EMERALD_WEAK, color: EMERALD },
+  REJECTED:    { bg: RED_WEAK,     color: RED },
 };
 
 type Verdict = "STRONG_YES" | "YES" | "MAYBE" | "NO";
 type AuthBand = "HIGH" | "MEDIUM" | "LOW";
 
 const VERDICT_META: Record<Verdict, { label: string; bg: string; color: string }> = {
-  STRONG_YES: { label: "Strong Yes", bg: "#ecfdf3", color: "#067647" },
-  YES:        { label: "Yes",        bg: "#ecfdf3", color: "#067647" },
-  MAYBE:      { label: "Maybe",      bg: "#fff8ec", color: "#b54708" },
-  NO:         { label: "No",         bg: "#fef3f2", color: "#b42318" },
+  STRONG_YES: { label: "Strong yes", bg: EMERALD_WEAK, color: EMERALD },
+  YES:        { label: "Yes",        bg: EMERALD_WEAK, color: EMERALD },
+  MAYBE:      { label: "Maybe",      bg: AMBER_WEAK,   color: AMBER },
+  NO:         { label: "No",         bg: RED_WEAK,     color: RED },
 };
 
 const AUTH_META: Record<AuthBand, { label: string; color: string }> = {
-  HIGH:   { label: "High",   color: "#067647" },
-  MEDIUM: { label: "Medium", color: "#b54708" },
-  LOW:    { label: "Low",    color: "#b42318" },
+  HIGH:   { label: "High",   color: EMERALD },
+  MEDIUM: { label: "Medium", color: AMBER },
+  LOW:    { label: "Low",    color: RED },
 };
 
 // ─── Role-weighted scoring (mirrors the API's ROLE_WEIGHTS) ───────────────────
@@ -56,17 +67,17 @@ const DIM_LABEL: Record<DimKey, string> = { diagnosis: "Diagnosis", design: "Des
 
 type DefenseLevel = "DEFENDED" | "SHAKY" | "FAILED" | "NONE";
 const DEFENSE_META: Record<DefenseLevel, { label: string; color: string; bg: string }> = {
-  DEFENDED: { label: "Defended",        color: "#067647", bg: "#ecfdf3" },
-  SHAKY:    { label: "Shaky defense",   color: "#b54708", bg: "#fff8ec" },
-  FAILED:   { label: "Couldn't defend", color: "#b42318", bg: "#fef3f2" },
-  NONE:     { label: "No verbal",       color: "#5a6472", bg: "#eef1f5" },
+  DEFENDED: { label: "Defended",        color: EMERALD, bg: EMERALD_WEAK },
+  SHAKY:    { label: "Shaky defence",   color: AMBER,   bg: AMBER_WEAK },
+  FAILED:   { label: "Couldn't defend", color: RED,     bg: RED_WEAK },
+  NONE:     { label: "No verbal",       color: MUTED,   bg: "#F1F0EB" },
 };
 
 type Confidence = "HIGH" | "MEDIUM" | "LOW";
 const CONF_META: Record<Confidence, { label: string; color: string }> = {
-  HIGH:   { label: "High confidence", color: "#067647" },
-  MEDIUM: { label: "Some variance",   color: "#b54708" },
-  LOW:    { label: "High variance",   color: "#b42318" },
+  HIGH:   { label: "High confidence", color: EMERALD },
+  MEDIUM: { label: "Some variance",   color: AMBER },
+  LOW:    { label: "High variance",   color: RED },
 };
 
 interface Signals {
@@ -91,6 +102,9 @@ interface Candidate {
   signals: Signals | null;
   effort: { minutes: number | null; expected: number | null; difficulty: string | null };
   user: { id: string; githubUsername: string; email: string | null };
+  // Score story — already returned by the API, just newly consumed here.
+  scorePrBase: number | null;
+  scoreGap: number | null;
   submission: {
     prUrl: string | null;
     scoreTotal: number | null;
@@ -111,6 +125,8 @@ interface Campaign {
 }
 
 const SENIOR_BAR = 65;
+// A gap this large or more gets the amber "strong code, weak defence" flag.
+const NOTABLE_GAP = 10;
 
 function weightedScore(sig: Signals | null, role: RoleKey): number | null {
   if (!sig) return null;
@@ -120,13 +136,13 @@ function weightedScore(sig: Signals | null, role: RoleKey): number | null {
     p.communication.pct * w.communication + p.execution.pct * w.execution
   );
 }
-const scoreColor = (s: number) => s >= 80 ? "#067647" : s >= 60 ? "#131722" : s >= 45 ? "#b54708" : "#b42318";
+const scoreColor = (s: number) => s >= 80 ? EMERALD : s >= 60 ? INK : s >= 45 ? AMBER : RED;
 function levelFit(s: number): { label: string; color: string; ico: string } {
-  if (s >= 80) return { label: "Exceeds", color: "#067647", ico: "★" };
-  if (s >= 58) return { label: "Meets",   color: "#5a6472", ico: "◆" };
-  return { label: "Below level", color: "#b42318", ico: "▽" };
+  if (s >= 80) return { label: "Exceeds", color: EMERALD, ico: "★" };
+  if (s >= 58) return { label: "Meets",   color: MUTED, ico: "◆" };
+  return { label: "Below level", color: RED, ico: "▽" };
 }
-const triColor = (v: number) => v >= 1 ? "#067647" : v >= 0.5 ? "#b54708" : "#b42318";
+const triColor = (v: number) => v >= 1 ? EMERALD : v >= 0.5 ? AMBER : RED;
 
 function Triangle({ t, size }: { t: { code: number; written: number; spoken: number }; size: number }) {
   const s = size, pad = size * 0.17, r = size * 0.09;
@@ -317,64 +333,49 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
-      <header className="sticky top-0 z-30 flex items-center gap-4 px-8 py-4"
-        style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
+    <div className="flex flex-col min-h-screen" style={{ color: INK, background: PAPER }}>
+      <header className="sticky top-0 z-30 flex items-center gap-4 px-8 py-4" style={{ background: SURFACE, borderBottom: `1px solid ${HAIRLINE}` }}>
+        <Link href="/employer/campaigns" style={{ color: MUTED }}><ArrowLeft size={18} /></Link>
         <div className="flex-1">
-          <h1 className="text-lg font-bold text-[#131722]">{campaign?.roleName ?? "Results"}</h1>
-          <p className="text-xs" style={{ color: "#8a93a3" }}>
+          <h1 className="font-display text-lg font-bold" style={{ color: INK }}>{campaign?.roleName ?? "Results"}</h1>
+          <p className="text-xs" style={{ color: MUTED }}>
             {campaign?.companyName} · {candidates.length} scored candidates · ranked for role fit
           </p>
         </div>
-        <button onClick={selectTopPicks}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: "#eef0fd", border: "1px solid #c7c9f7", color: "#4338ca" }}
-          title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
-          <Star size={14} /> Select Top Picks
-        </button>
-        <button onClick={issueCertificates} disabled={certIssuing}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-          style={{ background: "#ffffff", border: "1px solid #d5d9e0", color: "#131722" }}
-          title="Issue e-certificates to all reviewed candidates">
-          <Award size={14} style={{ color: "#b54708" }} /> {certIssuing ? "Issuing…" : "Issue Certificates"}
-        </button>
-        <button onClick={exportCsv}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
-          <Download size={14} /> Export CSV
-        </button>
+        <Button variant="secondary" onClick={selectTopPicks} title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
+          <Star size={14} className="mr-1.5" /> Select top picks
+        </Button>
+        <Button variant="secondary" onClick={issueCertificates} disabled={certIssuing} title="Issue e-certificates to all reviewed candidates">
+          <Award size={14} className="mr-1.5" style={{ color: AMBER }} /> {certIssuing ? "Issuing…" : "Issue certificates"}
+        </Button>
+        <Button variant="secondary" onClick={exportCsv}>
+          <Download size={14} className="mr-1.5" /> Export CSV
+        </Button>
       </header>
 
       {certResult && (
-        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
-          style={{ background: "#fff8ec", color: "#b54708", borderBottom: "1px solid #e6c98a" }}>
+        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2" style={{ background: AMBER_WEAK, color: AMBER, borderBottom: `1px solid ${HAIRLINE}` }}>
           <Award size={15} /> {certResult} — candidates can now view and share their certificates
         </div>
       )}
       {inviteResult && (
-        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2"
-          style={{ background: "#ecfdf3", color: "#067647", borderBottom: "1px solid #a7d8bd" }}>
+        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2" style={{ background: EMERALD_WEAK, color: EMERALD, borderBottom: `1px solid ${HAIRLINE}` }}>
           <Check size={15} /> Invites sent — {inviteResult}
         </div>
       )}
 
       {/* ── Role-weighting bar ── */}
-      <div className="px-8 py-3 flex items-center gap-4 flex-wrap"
-        style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: "#8a93a3" }}>Rank for</span>
+      <div className="px-8 py-3 flex items-center gap-4 flex-wrap" style={{ background: SURFACE, borderBottom: `1px solid ${HAIRLINE}` }}>
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Rank for</span>
         <div className="flex gap-1.5 flex-wrap">
           {(Object.keys(ROLES) as RoleKey[]).map((rk) => {
             const active = role === rk;
             return (
               <button key={rk} onClick={() => setRole(rk)}
-                className="flex flex-col items-start px-3 py-1.5 rounded-lg text-left transition-colors"
-                style={{
-                  background: active ? "#eef0fd" : "#ffffff",
-                  border: `1px solid ${active ? "#4338ca" : "#e4e7ec"}`,
-                }}>
-                <span className="text-xs font-semibold" style={{ color: active ? "#4338ca" : "#5a6472" }}>{ROLES[rk].label}</span>
-                <span className="text-[10px]" style={{ color: active ? "#6c6ad6" : "#8a93a3" }}>{ROLES[rk].sub}</span>
+                className="flex flex-col items-start px-3 py-1.5 rounded text-left transition-colors duration-150"
+                style={{ background: active ? EMERALD_WEAK : SURFACE, border: `1px solid ${active ? EMERALD : HAIRLINE}` }}>
+                <span className="text-xs font-semibold" style={{ color: active ? EMERALD : MUTED }}>{ROLES[rk].label}</span>
+                <span className="text-[10px]" style={{ color: MUTED }}>{ROLES[rk].sub}</span>
               </button>
             );
           })}
@@ -384,11 +385,11 @@ export default function ResultsPage() {
             const pct = Math.round(ROLES[role].w[d] * 100);
             return (
               <div key={d} className="flex items-center gap-1.5">
-                <span className="text-[10px]" style={{ color: "#8a93a3" }}>{DIM_LABEL[d].slice(0, 4)}</span>
-                <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: "#e4e7ec" }}>
-                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#4338ca" }} />
+                <span className="font-mono text-[10px]" style={{ color: MUTED }}>{DIM_LABEL[d].slice(0, 4)}</span>
+                <div className="w-12 h-1.5 rounded-full overflow-hidden" style={{ background: HAIRLINE }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: EMERALD }} />
                 </div>
-                <span className="text-[10px] tabular-nums" style={{ color: "#5a6472" }}>{pct}%</span>
+                <span className="font-mono text-[10px] tabular-nums" style={{ color: MUTED }}>{pct}%</span>
               </div>
             );
           })}
@@ -397,64 +398,60 @@ export default function ResultsPage() {
 
       <div className="flex flex-1">
         {/* ── Filter panel ── */}
-        <aside className="w-64 shrink-0 p-5 space-y-6" style={{ background: "#f2f4f7", borderRight: "1px solid #eef1f5" }}>
+        <aside className="w-64 shrink-0 p-5 space-y-6" style={{ background: PAPER, borderRight: `1px solid ${HAIRLINE}` }}>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest" style={{ color: "#8a93a3" }}>
-              Min Score: {minScore}
+            <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>
+              Min score: <span className="font-mono">{minScore}</span>
             </label>
             <input type="range" min={0} max={100} value={minScore}
               onChange={(e) => setMinScore(parseInt(e.target.value))}
-              className="w-full mt-3" style={{ accentColor: "#4338ca" }} />
+              className="w-full mt-3" style={{ accentColor: EMERALD }} />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest block mb-3" style={{ color: "#8a93a3" }}>
-              AI Declaration
+            <label className="text-xs font-semibold uppercase tracking-wide block mb-3" style={{ color: MUTED }}>
+              AI declaration
             </label>
             <div className="space-y-2">
               {(Object.keys(AI_BADGE) as AIDeclaration[]).map((d) => (
                 <label key={d} className="flex items-center gap-2.5 cursor-pointer text-sm">
-                  <input type="checkbox" checked={aiFilters.has(d)} onChange={() => toggleAi(d)}
-                    style={{ accentColor: AI_BADGE[d].color }} />
+                  <input type="checkbox" checked={aiFilters.has(d)} onChange={() => toggleAi(d)} style={{ accentColor: AI_BADGE[d].color }} />
                   <span style={{ color: AI_BADGE[d].color }}>{AI_BADGE[d].label}</span>
                 </label>
               ))}
             </div>
           </div>
-          <div className="text-xs leading-relaxed" style={{ color: "#8a93a3" }}>
-            <div className="font-bold uppercase tracking-widest mb-2" style={{ color: "#9aa3b2" }}>Reading the signals</div>
-            Score is <b style={{ color: "#5a6472" }}>re-weighted</b> for the role above. The
-            <b style={{ color: "#5a6472" }}> consistency</b> triangle compares code · written · spoken.
-            <b style={{ color: "#b42318" }}> Re-review</b> flags a score to double-check before deciding.
+          <div className="text-xs leading-relaxed" style={{ color: MUTED }}>
+            <div className="font-semibold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Reading the signals</div>
+            Score is <b style={{ color: INK }}>re-weighted</b> for the role above. <b style={{ color: INK }}>Gap</b> is
+            the PR score minus the final score — a large gap means strong code, weaker defence. The
+            <b style={{ color: INK }}> consistency</b> triangle compares code · written · spoken.
+            All flags below are <b>advisory — nothing is auto-rejected.</b>
           </div>
         </aside>
 
         {/* ── Table ── */}
         <main className="flex-1 p-6 pb-28">
           {loading ? (
-            <div className="text-center py-20 text-sm" style={{ color: "#8a93a3" }}>Loading…</div>
+            <div className="text-center py-20 text-sm" style={{ color: MUTED }}>Loading…</div>
           ) : candidates.length === 0 ? (
-            <div className="text-center py-20 text-sm" style={{ color: "#8a93a3" }}>
-              No scored candidates match your filters yet.
-            </div>
+            <EmptyState title="No scored candidates yet" description="Results appear here once candidates finish their assessments, or adjust your filters." />
           ) : (
-            <div className="rounded-xl overflow-x-auto" style={{ border: "1px solid #e4e7ec" }}>
-              <table className="w-full text-sm" style={{ background: "#f2f4f7", minWidth: 940 }}>
+            <div className="rounded overflow-x-auto" style={{ border: `1px solid ${HAIRLINE}` }}>
+              <table className="w-full text-sm font-mono" style={{ background: SURFACE, minWidth: 1040 }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid #eef1f5", background: "#ffffff" }}>
+                  <tr style={{ borderBottom: `1px solid ${HAIRLINE}`, background: PAPER }}>
                     <th className="px-3 py-3 w-10">
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
-                        onChange={toggleAll} style={{ accentColor: "#4338ca" }} />
+                        onChange={toggleAll} style={{ accentColor: EMERALD }} />
                     </th>
-                    {["#", "Candidate", "Score", "Level fit", "Defense", "Consistency", "Authenticity", "Verdict", "Status", ""].map((h) => (
-                      <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase tracking-wider"
-                        style={{ color: "#9aa3b2" }}>{h}</th>
+                    {["#", "Candidate", "PR score", "Final", "Gap", "Level fit", "Defence", "Consistency", "Authenticity", "Verdict", "Status", ""].map((h) => (
+                      <th key={h} className="text-left px-3 py-3 font-sans text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {ranked.map(({ c, ws }, i) => {
                     const sig = c.signals;
-                    const raw = c.submission?.scoreTotal ?? null;
                     const ai = c.submission?.followUp?.aiDeclaration;
                     const aiMeta = ai ? AI_BADGE[ai] : null;
                     const stMeta = STATUS_BADGE[c.status] ?? STATUS_BADGE.NEW;
@@ -464,67 +461,81 @@ export default function ResultsPage() {
                     const borderline = ws != null && (conf === "LOW" || Math.abs(ws - SENIOR_BAR) <= 4);
                     const fit = ws != null ? levelFit(ws) : null;
                     const def = sig ? DEFENSE_META[sig.defense.level] : DEFENSE_META.NONE;
+                    const gap = c.scoreGap;
+                    const notableGap = gap != null && gap >= NOTABLE_GAP;
                     return (
                       <Fragment key={c.id}>
                         <tr onClick={() => toggleExpand(c.id)} style={{
-                          borderBottom: isOpen ? "none" : "1px solid #eef1f5",
-                          borderLeft: c.recommended ? "3px solid #067647" : "3px solid transparent",
-                          background: selected.has(c.id) ? "#f2f4f7" : "transparent",
+                          borderBottom: isOpen ? "none" : `1px solid ${HAIRLINE}`,
+                          borderLeft: `3px solid ${c.recommended ? EMERALD : "transparent"}`,
+                          background: selected.has(c.id) ? PAPER : "transparent",
                           cursor: "pointer",
                         }}>
                           <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)}
-                              style={{ accentColor: "#4338ca" }} />
+                            <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} style={{ accentColor: EMERALD }} />
                           </td>
-                          <td className="px-3 py-3 text-xs font-bold tabular-nums" style={{ color: i === 0 ? "#e8762b" : "#8a93a3" }}>{i + 1}</td>
-                          <td className="px-3 py-3">
-                            <div className="text-xs font-semibold text-[#131722] flex items-center gap-1.5">
+                          <td className="px-3 py-3 text-xs font-bold tabular-nums" style={{ color: i === 0 ? AMBER : MUTED }}>{i + 1}</td>
+                          <td className="px-3 py-3 font-sans">
+                            <div className="text-xs font-semibold flex items-center gap-1.5" style={{ color: INK }}>
                               {c.user.githubUsername || c.user.email || "—"}
                               {c.recommended && (
-                                <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full"
-                                  style={{ background: "#ecfdf3", color: "#067647" }}>
+                                <span className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full" style={{ background: EMERALD_WEAK, color: EMERALD }}>
                                   <Star size={9} /> Rec
                                 </span>
                               )}
                             </div>
                             {c.effort?.minutes != null && c.effort.expected != null && (
-                              <div className="text-[10px] mt-0.5" style={{ color: "#8a93a3" }}>
+                              <div className="font-mono text-[10px] mt-0.5" style={{ color: MUTED }}>
                                 {c.effort.minutes}m / {c.effort.expected}m {ai ? `· ${aiMeta?.label}` : ""}
                               </div>
                             )}
                           </td>
-                          {/* Role-weighted score + confidence */}
+                          {/* PR score (base, pre-deduction) */}
+                          <td className="px-3 py-3 tabular-nums" style={{ color: MUTED }}>
+                            {c.scorePrBase ?? "—"}
+                          </td>
+                          {/* Final (role-weighted) + confidence */}
                           <td className="px-3 py-3">
                             <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-bold tabular-nums" style={{ color: ws != null ? scoreColor(ws) : "#9aa3b2" }}>
+                              <span className="text-lg font-bold tabular-nums" style={{ color: ws != null ? scoreColor(ws) : MUTED }}>
                                 {ws ?? "—"}
                               </span>
-                              {raw != null && ws != null && raw !== ws && (
-                                <span className="text-[10px]" style={{ color: "#8a93a3" }}>raw {raw}</span>
-                              )}
                             </div>
                             <div className="flex items-center gap-1 mt-0.5">
                               <span className="w-1.5 h-1.5 rounded-full" style={{ background: confMeta.color }} />
-                              <span className="text-[10px]" style={{ color: "#8a93a3" }}>{confMeta.label}</span>
+                              <span className="text-[10px]" style={{ color: MUTED }}>{confMeta.label}</span>
                               {borderline && (
                                 <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded" title="Score near the decision bar or contradicted — re-review before deciding"
-                                  style={{ background: "#fff8ec", color: "#b54708" }}>RE-REVIEW</span>
+                                  style={{ background: AMBER_WEAK, color: AMBER }}>RE-REVIEW</span>
                               )}
                             </div>
                           </td>
-                          {/* Level fit */}
+                          {/* Gap — the signature insight */}
                           <td className="px-3 py-3">
+                            {gap != null && gap > 0 ? (
+                              <span
+                                className="inline-flex items-center text-xs font-bold px-2 py-1 rounded-full tabular-nums"
+                                style={{ background: notableGap ? AMBER_WEAK : "#F1F0EB", color: notableGap ? AMBER : MUTED }}
+                                title={notableGap ? "Strong code, weaker defence — review the transcript" : undefined}
+                              >
+                                −{gap}
+                              </span>
+                            ) : (
+                              <span className="text-xs" style={{ color: MUTED }}>—</span>
+                            )}
+                          </td>
+                          {/* Level fit */}
+                          <td className="px-3 py-3 font-sans">
                             {fit && (
-                              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-md"
-                                style={{ color: fit.color, background: "#ffffff", border: `1px solid ${fit.color}33` }}>
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded"
+                                style={{ color: fit.color, background: SURFACE, border: `1px solid ${fit.color}33` }}>
                                 <span>{fit.ico}</span>{fit.label}
                               </span>
                             )}
                           </td>
-                          {/* Defense */}
-                          <td className="px-3 py-3">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-md"
-                              style={{ color: def.color, background: def.bg }}>
+                          {/* Defence */}
+                          <td className="px-3 py-3 font-sans">
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded" style={{ color: def.color, background: def.bg }}>
                               {def.label}
                               {sig?.defense.score != null && <span className="text-[10px] opacity-80 tabular-nums">{sig.defense.score}/10</span>}
                             </span>
@@ -534,35 +545,31 @@ export default function ResultsPage() {
                             {sig && <Triangle t={sig.consistency} size={34} />}
                           </td>
                           {/* Authenticity */}
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-3 font-sans">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full" style={{ background: AUTH_META[c.authBand].color }} />
                               <span style={{ color: AUTH_META[c.authBand].color }}>{AUTH_META[c.authBand].label}</span>
                               {c.flagged && (
-                                <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded"
-                                  style={{ background: "#fef3f2", color: "#b42318" }}
-                                  title="Answers contradict the candidate's own AI declaration — review before deciding">
-                                  Review
+                                <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: AMBER_WEAK, color: AMBER }}
+                                  title="Advisory — answers show signs contradicting the candidate's own AI declaration. Nothing was deducted; review before deciding.">
+                                  Advisory flag
                                 </span>
                               )}
                             </span>
                           </td>
                           {/* Verdict */}
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                              style={{ background: VERDICT_META[c.verdict].bg, color: VERDICT_META[c.verdict].color }}>
+                          <td className="px-3 py-3 font-sans">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: VERDICT_META[c.verdict].bg, color: VERDICT_META[c.verdict].color }}>
                               {VERDICT_META[c.verdict].label}
                             </span>
                           </td>
-                          <td className="px-3 py-3">
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                              style={{ background: stMeta.bg, color: stMeta.color }}>
+                          <td className="px-3 py-3 font-sans">
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: stMeta.bg, color: stMeta.color }}>
                               {c.status[0] + c.status.slice(1).toLowerCase()}
                             </span>
                           </td>
-                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                            <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`}
-                              className="flex items-center gap-1 text-xs font-semibold" style={{ color: "#4338ca" }}>
+                          <td className="px-3 py-3 font-sans" onClick={(e) => e.stopPropagation()}>
+                            <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`} className="flex items-center gap-1 text-xs font-semibold" style={{ color: EMERALD }}>
                               View <ExternalLink size={11} />
                             </Link>
                           </td>
@@ -570,75 +577,72 @@ export default function ResultsPage() {
 
                         {/* Expanded: skill profile + consistency + interview probe */}
                         {isOpen && sig && (
-                          <tr style={{ borderBottom: "1px solid #eef1f5", background: "#f5f6f8" }}>
-                            <td colSpan={11} className="px-6 py-5">
+                          <tr style={{ borderBottom: `1px solid ${HAIRLINE}`, background: PAPER }}>
+                            <td colSpan={12} className="px-6 py-5 font-sans">
                               <div className="grid gap-6" style={{ gridTemplateColumns: "1.2fr 1fr" }}>
                                 <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>
-                                    Skill profile <span style={{ color: "#4338ca" }}>· weighted for {ROLES[role].label}</span>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: MUTED }}>
+                                    Skill profile <span style={{ color: EMERALD }}>· weighted for {ROLES[role].label}</span>
                                   </div>
                                   <div className="space-y-2.5">
                                     {(Object.keys(DIM_LABEL) as DimKey[]).map((d) => {
                                       const p = sig.skillProfile[d];
                                       const lead = ROLES[role].w[d] === Math.max(...Object.values(ROLES[role].w));
-                                      const col = p.pct >= 75 ? "#067647" : p.pct >= 55 ? "#4338ca" : p.pct >= 40 ? "#b54708" : "#b42318";
+                                      const col = p.pct >= 75 ? EMERALD : p.pct >= 55 ? INK : p.pct >= 40 ? AMBER : RED;
                                       return (
                                         <div key={d} className="grid items-center gap-3" style={{ gridTemplateColumns: "110px 1fr 34px" }}>
-                                          <span className="text-xs" style={{ color: lead ? "#4338ca" : "#999", fontWeight: lead ? 700 : 400 }}>
+                                          <span className="text-xs" style={{ color: lead ? EMERALD : MUTED, fontWeight: lead ? 700 : 400 }}>
                                             {DIM_LABEL[d]}{lead ? " ◂" : ""}
                                           </span>
-                                          <div className="h-2 rounded-full overflow-hidden" style={{ background: "#e4e7ec" }}>
+                                          <div className="h-2 rounded-full overflow-hidden" style={{ background: HAIRLINE }}>
                                             <div className="h-full rounded-full transition-all" style={{ width: `${p.pct}%`, background: col }} />
                                           </div>
-                                          <span className="text-[11px] tabular-nums text-right" style={{ color: "#999" }}>{p.pct}</span>
+                                          <span className="font-mono text-[11px] tabular-nums text-right" style={{ color: MUTED }}>{p.pct}</span>
                                         </div>
                                       );
                                     })}
                                   </div>
-                                  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 text-xs" style={{ borderTop: "1px solid #eef1f5" }}>
-                                    {sig.strength && <span style={{ color: "#999" }}><b style={{ color: "#067647" }}>Strength</b> · {sig.strength}</span>}
-                                    {sig.concern && <span style={{ color: "#999" }}><b style={{ color: "#b42318" }}>Watch</b> · {sig.concern}</span>}
+                                  <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 text-xs" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
+                                    {sig.strength && <span style={{ color: MUTED }}><b style={{ color: EMERALD }}>Strength</b> · {sig.strength}</span>}
+                                    {sig.concern && <span style={{ color: MUTED }}><b style={{ color: RED }}>Watch</b> · {sig.concern}</span>}
                                   </div>
                                 </div>
                                 <div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: "#8a93a3" }}>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: MUTED }}>
                                     Consistency — code · written · spoken
                                   </div>
                                   <div className="flex items-center gap-4">
                                     <Triangle t={sig.consistency} size={92} />
                                     <div className="text-xs space-y-1.5">
                                       {([["Code", sig.consistency.code], ["Written", sig.consistency.written], ["Spoken", sig.consistency.spoken]] as const).map(([k, v]) => (
-                                        <div key={k} className="flex items-center gap-2" style={{ color: "#999" }}>
+                                        <div key={k} className="flex items-center gap-2" style={{ color: MUTED }}>
                                           <span className="w-2 h-2 rounded-full" style={{ background: triColor(v) }} />
                                           {k} — {v >= 1 ? "aligned" : v >= 0.5 ? "partial" : "diverges"}
                                         </div>
                                       ))}
                                     </div>
                                   </div>
-                                  <div className="text-[11px] font-bold uppercase tracking-widest mt-4 mb-2" style={{ color: "#8a93a3" }}>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide mt-4 mb-2" style={{ color: MUTED }}>
                                     Interview pack — probes {DIM_LABEL[(interview[c.id]?.dimension as DimKey) ?? sig.weakestDimension].toLowerCase()}
                                   </div>
                                   {interview[c.id]?.questions ? (
                                     <div className="space-y-2.5">
                                       {interview[c.id]!.questions!.map((q, qi) => (
-                                        <div key={qi} className="flex gap-2.5 text-xs leading-relaxed" style={{ color: "#cbd0dc" }}>
-                                          <span className="font-bold tabular-nums flex-none" style={{ color: "#4338ca" }}>{qi + 1}</span>
+                                        <div key={qi} className="flex gap-2.5 text-xs leading-relaxed" style={{ color: INK }}>
+                                          <span className="font-bold tabular-nums flex-none" style={{ color: EMERALD }}>{qi + 1}</span>
                                           <span>{q}</span>
                                         </div>
                                       ))}
                                     </div>
                                   ) : (
-                                    <button onClick={() => genInterview(c.id)} disabled={interview[c.id]?.loading}
-                                      className="text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60"
-                                      style={{ background: "#eef0fd", border: "1px solid #c7c9f7", color: "#c7d2fe" }}>
+                                    <Button variant="secondary" size="sm" onClick={() => genInterview(c.id)} disabled={interview[c.id]?.loading}>
                                       {interview[c.id]?.loading ? "Generating…" : "Generate 3 interview questions"}
-                                    </button>
+                                    </Button>
                                   )}
                                   {interview[c.id]?.error && (
-                                    <div className="text-xs mt-2" style={{ color: "#b42318" }}>{interview[c.id]?.error}</div>
+                                    <div className="text-xs mt-2" style={{ color: RED }}>{interview[c.id]?.error}</div>
                                   )}
-                                  <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold mt-3" style={{ color: "#4338ca" }}>
+                                  <Link href={`/employer/campaigns/${campaignId}/candidates/${c.id}`} className="inline-flex items-center gap-1 text-xs font-semibold mt-3" style={{ color: EMERALD }}>
                                     Open full profile <ExternalLink size={11} />
                                   </Link>
                                 </div>
@@ -658,78 +662,58 @@ export default function ResultsPage() {
 
       {/* ── Floating action bar ── */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl"
-          style={{ background: "#eef1f5", border: "1px solid #d5d9e0", marginLeft: "120px" }}>
-          <span className="text-sm font-bold text-[#131722]">{selected.size} selected</span>
-          <div className="w-px h-6" style={{ background: "#d5d9e0" }} />
-          <button onClick={() => setShowInvite(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
-            style={{ background: "#4338ca" }}>
-            <Mail size={13} /> Invite to Interview
-          </button>
-          <button onClick={exportCsv}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#e4e7ec", color: "#131722" }}>
-            <Download size={13} /> Export
-          </button>
-          <button onClick={() => bulkStatus("REVIEWED")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#e4e7ec", color: "#131722" }}>
-            <CheckCircle2 size={13} /> Mark Reviewed
-          </button>
-          <button onClick={() => bulkStatus("REJECTED")}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-            style={{ background: "#fef3f2", color: "#b42318" }}>
-            <X size={13} /> Reject
-          </button>
-          <button onClick={() => setSelected(new Set())} className="text-xs font-medium" style={{ color: "#5a6472" }}>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-5 py-3 rounded shadow-overlay"
+          style={{ background: SURFACE, border: `1px solid ${HAIRLINE}`, marginLeft: "120px" }}>
+          <span className="text-sm font-bold" style={{ color: INK }}>{selected.size} selected</span>
+          <div className="w-px h-6" style={{ background: HAIRLINE }} />
+          <Button variant="primary" size="sm" onClick={() => setShowInvite(true)}>
+            <Mail size={13} className="mr-1.5" /> Invite to interview
+          </Button>
+          <Button variant="secondary" size="sm" onClick={exportCsv}>
+            <Download size={13} className="mr-1.5" /> Export
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => bulkStatus("REVIEWED")}>
+            <CheckCircle2 size={13} className="mr-1.5" /> Mark reviewed
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => bulkStatus("REJECTED")}>
+            <X size={13} className="mr-1.5" /> Reject
+          </Button>
+          <button onClick={() => setSelected(new Set())} className="text-xs font-medium" style={{ color: MUTED }}>
             Clear
           </button>
         </div>
       )}
 
       {/* ── Invite modal ── */}
-      {showInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          style={{ background: "rgba(0,0,0,0.7)" }} onClick={() => setShowInvite(false)}>
-          <div className="rounded-xl max-w-lg w-full p-6" style={{ background: "#ffffff", border: "1px solid #d5d9e0" }}
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-[#131722]">Invite {selected.size} candidate(s)</h2>
-              <button onClick={() => setShowInvite(false)} style={{ color: "#5a6472" }}><X size={18} /></button>
-            </div>
-            <div className="rounded-lg p-4 mb-4 text-sm" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec", color: "#5a6472" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>Email preview</div>
-              <p className="mb-2"><span style={{ color: "#8a93a3" }}>Subject:</span> You&apos;ve been shortlisted — {campaign?.roleName} at {campaign?.companyName}</p>
-              <div className="border-t my-3" style={{ borderColor: "#e4e7ec" }} />
-              <p className="leading-relaxed text-xs">
-                Hi [Candidate],<br /><br />
-                You performed strongly on the {campaign?.companyName} {campaign?.roleName} assessment on DevSimulate.
-                We&apos;d like to invite you for an interview.<br /><br />
-                Book your slot: <span style={{ color: "#4338ca" }}>{campaign?.bookingLink ?? "[booking link]"}</span><br /><br />
-                {campaign?.companyName} Hiring Team
-              </p>
-            </div>
-            {!campaign?.bookingLink && (
-              <div className="rounded-lg px-3 py-2 mb-4 text-xs" style={{ background: "#fff8ec", color: "#b54708" }}>
-                No booking link set on this campaign. Candidates will be shortlisted but the email won&apos;t include a link.
-              </div>
-            )}
-            <div className="flex gap-3">
-              <button onClick={confirmInvite}
-                className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white flex items-center justify-center gap-2"
-                style={{ background: "#4338ca" }}>
-                <Check size={15} /> Confirm & Send
-              </button>
-              <button onClick={() => setShowInvite(false)}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold"
-                style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
-                Cancel
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        title={`Invite ${selected.size} candidate(s)`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowInvite(false)}>Cancel</Button>
+            <Button variant="primary" onClick={confirmInvite}><Check size={15} className="mr-1.5" /> Confirm & send</Button>
+          </>
+        }
+      >
+        <div className="rounded p-4 mb-4 text-sm" style={{ background: PAPER, border: `1px solid ${HAIRLINE}`, color: MUTED }}>
+          <div className="text-xs uppercase tracking-wide mb-2" style={{ color: MUTED }}>Email preview</div>
+          <p className="mb-2"><span style={{ color: MUTED }}>Subject:</span> You&apos;ve been shortlisted — {campaign?.roleName} at {campaign?.companyName}</p>
+          <div className="border-t my-3" style={{ borderColor: HAIRLINE }} />
+          <p className="leading-relaxed text-xs">
+            Hi [Candidate],<br /><br />
+            You performed strongly on the {campaign?.companyName} {campaign?.roleName} assessment on DevSimulate.
+            We&apos;d like to invite you for an interview.<br /><br />
+            Book your slot: <span className="font-mono" style={{ color: EMERALD }}>{campaign?.bookingLink ?? "[booking link]"}</span><br /><br />
+            {campaign?.companyName} Hiring Team
+          </p>
         </div>
-      )}
+        {!campaign?.bookingLink && (
+          <div className="rounded px-3 py-2 text-xs" style={{ background: AMBER_WEAK, color: AMBER }}>
+            No booking link set on this campaign. Candidates will be shortlisted but the email won&apos;t include a link.
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
