@@ -223,7 +223,7 @@ async function getOrgForUser(userId: string): Promise<string | null> {
  */
 router.post("/", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink, ticketIds, type } =
+  const { roleName, codebaseId, difficulty, candidateLimit, deadline, companyName, bookingLink, ticketIds, type, devFestTag } =
     req.body as {
       roleName?: string;
       codebaseId?: string;
@@ -234,6 +234,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       bookingLink?: string;
       ticketIds?: string[];
       type?: CampaignType;
+      devFestTag?: string;
     };
 
   if (!roleName || !codebaseId || !difficulty || !companyName) {
@@ -266,6 +267,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         shareableSlug,
         ticketIds: Array.isArray(ticketIds) ? ticketIds : [],
         type: type === "CONTEST" ? CampaignType.CONTEST : CampaignType.HIRING,
+        devFestTag: type === "CONTEST" ? (devFestTag?.trim() || null) : null,
         status: CampaignStatus.ACTIVE,
         // Proctoring defaults follow the flow: a live DevFest is invigilated,
         // a remote hiring screen is not. Both remain admin-toggleable afterwards.

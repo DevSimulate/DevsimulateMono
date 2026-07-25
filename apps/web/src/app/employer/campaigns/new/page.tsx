@@ -4,18 +4,22 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getToken } from "@/lib/auth";
-import { ArrowLeft, Copy, Check, ExternalLink } from "lucide-react";
+import { ArrowLeft, Copy, Check, ExternalLink, Briefcase, Trophy } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input, Field } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
 
 interface Codebase { id: string; name: string; stack: string; }
 
-const inputStyle = {
-  background: "#f2f4f7",
-  border: "1px solid #d5d9e0",
-  color: "#131722",
-};
+const SELECT_CLASS = "w-full rounded border border-hairline bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-brand focus:ring-2 focus:ring-[rgba(79,70,229,0.25)]";
+
+const TYPE_META = {
+  HIRING:  { icon: Briefcase, title: "Hiring", desc: "Assess external candidates, shortlist & invite to interview" },
+  CONTEST: { icon: Trophy,    title: "DevFest / Contest", desc: "Public contest — compete on a live leaderboard, crown winners" },
+} as const;
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -28,7 +32,8 @@ export default function NewCampaignPage() {
     deadline: "",
     companyName: "",
     bookingLink: "",
-    type: "HIRING",
+    devFestTag: "",
+    type: "HIRING" as "HIRING" | "CONTEST",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +44,8 @@ export default function NewCampaignPage() {
   const [library, setLibrary] = useState<Array<{ id: string; title: string; expectedMinutes: number }>>([]);
   const [pickMode, setPickMode] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
+
+  const isContest = form.type === "CONTEST";
 
   useEffect(() => {
     const token = getToken();
@@ -103,6 +110,7 @@ export default function NewCampaignPage() {
           // regardless of the server's timezone.
           deadline: form.deadline ? new Date(form.deadline).toISOString() : "",
           ticketIds: pickMode ? [...selectedTickets] : [],
+          devFestTag: isContest ? (form.devFestTag.trim() || undefined) : undefined,
         }),
       });
       const json = await res.json();
@@ -127,51 +135,44 @@ export default function NewCampaignPage() {
   // Success view
   if (createdSlug) {
     return (
-      <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
-        <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-          <h1 className="text-lg font-bold text-[#131722]">Campaign Created</h1>
+      <div className="flex flex-col min-h-screen bg-paper text-ink">
+        <header className="px-8 py-4 bg-surface border-b border-hairline">
+          <h1 className="font-display text-lg font-bold">Campaign created</h1>
         </header>
         <main className="flex-1 px-8 py-10 max-w-2xl mx-auto w-full">
-          <div className="rounded-xl p-8 text-center" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ background: "#ecfdf3" }}>
-              <Check size={28} style={{ color: "#067647" }} />
+          <Card className="p-8 text-center">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 bg-emerald-weak">
+              <Check size={28} className="text-emerald" />
             </div>
-            <div className="text-xl font-bold text-[#131722] mb-1">Your campaign is live!</div>
-            <div className="text-sm mb-6" style={{ color: "#5a6472" }}>
+            <div className="font-display text-xl font-bold mb-1">Your campaign is live!</div>
+            <div className="text-sm mb-6 text-muted">
               Share this link with candidates. When they open it, they sign in with GitHub and
               get assigned a ticket automatically.
             </div>
 
-            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>
-                Application Link
-              </div>
+            <div className="rounded border border-hairline bg-paper p-4 mb-6 text-left">
+              <div className="text-xs uppercase tracking-widest mb-2 text-muted">Application link</div>
               <div className="flex items-center gap-3">
-                <code className="flex-1 text-sm break-all" style={{ color: "#4338ca" }}>{fullLink}</code>
-                <button onClick={copyLink}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-[#131722]"
-                  style={{ background: "#4338ca" }}>
+                <code className="flex-1 text-sm break-all text-brand">{fullLink}</code>
+                <Button variant="secondary" size="sm" onClick={copyLink} className="shrink-0">
                   {copied ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
-                </button>
+                </Button>
               </div>
             </div>
 
-            <div className="rounded-lg p-4 mb-6 text-left" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec" }}>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8a93a3" }}>
-                What candidates see
-              </div>
-              <div className="text-sm" style={{ color: "#5a6472" }}>
-                {form.type === "CONTEST" ? (
+            <div className="rounded border border-hairline bg-paper p-4 mb-6 text-left">
+              <div className="text-xs uppercase tracking-widest mb-2 text-muted">What candidates see</div>
+              <div className="text-sm text-muted">
+                {isContest ? (
                   <>
-                    <span className="font-bold text-[#131722]">{form.companyName}</span> is running{" "}
-                    <span className="font-bold text-[#131722]">{form.roleName}</span>. Solve a real{" "}
+                    <span className="font-semibold text-ink">{form.companyName}</span> is running{" "}
+                    <span className="font-semibold text-ink">{form.roleName}</span>. Solve a real{" "}
                     {form.difficulty.toLowerCase()}-level coding challenge, get AI-scored, and climb the live leaderboard.
                   </>
                 ) : (
                   <>
-                    <span className="font-bold text-[#131722]">{form.companyName}</span> is hiring for{" "}
-                    <span className="font-bold text-[#131722]">{form.roleName}</span>. Complete a real{" "}
+                    <span className="font-semibold text-ink">{form.companyName}</span> is hiring for{" "}
+                    <span className="font-semibold text-ink">{form.roleName}</span>. Complete a real{" "}
                     {form.difficulty.toLowerCase()}-level coding ticket to be considered.
                   </>
                 )}
@@ -179,18 +180,14 @@ export default function NewCampaignPage() {
             </div>
 
             <div className="flex gap-3">
-              <Link href="/employer/campaigns"
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-center text-[#131722]"
-                style={{ background: "#4338ca" }}>
-                View All Campaigns
+              <Link href="/employer/campaigns" className="flex-1">
+                <Button variant="primary" className="w-full">View all campaigns</Button>
               </Link>
-              <a href={fullLink} target="_blank" rel="noreferrer"
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold"
-                style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
-                Preview <ExternalLink size={13} />
+              <a href={fullLink} target="_blank" rel="noreferrer">
+                <Button variant="secondary">Preview <ExternalLink size={13} /></Button>
               </a>
             </div>
-          </div>
+          </Card>
         </main>
       </div>
     );
@@ -198,130 +195,148 @@ export default function NewCampaignPage() {
 
   // Form view
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
-      <header className="px-8 py-4 flex items-center gap-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <Link href="/employer/campaigns" style={{ color: "#5a6472" }}><ArrowLeft size={18} /></Link>
+    <div className="flex flex-col min-h-screen bg-paper text-ink">
+      <header className="px-8 py-4 flex items-center gap-4 bg-surface border-b border-hairline">
+        <Link href="/employer/campaigns" className="text-muted hover:text-ink transition-colors duration-150"><ArrowLeft size={18} /></Link>
         <div>
-          <h1 className="text-lg font-bold text-[#131722]">New Campaign</h1>
-          <p className="text-xs" style={{ color: "#8a93a3" }}>Create a hiring assessment campaign</p>
+          <h1 className="font-display text-lg font-bold">New campaign</h1>
+          <p className="text-xs text-muted">{isContest ? "Create a public DevFest contest" : "Create a hiring assessment campaign"}</p>
         </div>
       </header>
 
       <main className="flex-1 px-8 py-8 max-w-2xl mx-auto w-full">
-        <div className="rounded-xl p-6 space-y-5" style={{ background: "#ffffff", border: "1px solid #e4e7ec" }}>
+        <div className="flex flex-col gap-5">
 
           {error && (
-            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: "#1c0000", border: "1px solid #7f1d1d", color: "#b42318" }}>
+            <div className="rounded border px-4 py-3 text-sm text-red bg-red-weak !border-[rgba(179,55,47,0.25)]">
               {error}
             </div>
           )}
 
-          {/* Campaign type — Hiring vs DevFest/Contest */}
-          <Field label="Campaign Type">
+          {/* Campaign type — Hiring vs DevFest/Contest, each its own clearly labelled flow */}
+          <Field label="Campaign type">
             <div className="grid grid-cols-2 gap-3">
-              {[
-                { v: "HIRING", title: "Hiring", desc: "Assess external candidates, shortlist & invite to interview" },
-                { v: "CONTEST", title: "DevFest / Contest", desc: "Internal contest — compete on a live leaderboard, crown winners" },
-              ].map((opt) => (
-                <button key={opt.v} type="button" onClick={() => setForm({ ...form, type: opt.v })}
-                  className="text-left rounded-lg p-3 transition-colors"
-                  style={{
-                    background: form.type === opt.v ? "#eef0fd" : "#f2f4f7",
-                    border: `1px solid ${form.type === opt.v ? "#4338ca" : "#d5d9e0"}`,
-                  }}>
-                  <div className="text-sm font-bold text-[#131722]">{opt.title}</div>
-                  <div className="text-xs mt-0.5" style={{ color: "#5a6472" }}>{opt.desc}</div>
-                </button>
-              ))}
+              {(Object.keys(TYPE_META) as Array<"HIRING" | "CONTEST">).map((v) => {
+                const meta = TYPE_META[v];
+                const Icon = meta.icon;
+                const active = form.type === v;
+                return (
+                  <button key={v} type="button" onClick={() => setForm({ ...form, type: v })}
+                    className={`text-left rounded border p-3 transition-colors duration-150 ${active ? "border-brand bg-brand-weak" : "border-hairline bg-surface hover:bg-paper"}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon size={14} className={active ? "text-brand" : "text-muted"} />
+                      <div className={`text-sm font-semibold ${active ? "text-brand" : "text-ink"}`}>{meta.title}</div>
+                    </div>
+                    <div className="text-xs text-muted">{meta.desc}</div>
+                  </button>
+                );
+              })}
             </div>
           </Field>
 
-          <Field label={form.type === "CONTEST" ? "Contest Name" : "Role Name"}>
-            <input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })}
-              placeholder={form.type === "CONTEST" ? "DevFest — Angular" : "Senior Backend Engineer"}
-              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
-          </Field>
+          {/* Shared basics */}
+          <Card className="p-5 flex flex-col gap-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Basics</div>
 
-          <Field label="Company Name">
-            <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })}
-              placeholder="Acme Inc." className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Codebase">
-              <select value={form.codebaseId} onChange={(e) => setForm({ ...form, codebaseId: e.target.value })}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle}>
-                {codebases.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+            <Field label={isContest ? "Contest name" : "Role name"}>
+              <Input value={form.roleName} onChange={(e) => setForm({ ...form, roleName: e.target.value })}
+                placeholder={isContest ? "DevFest — Angular" : "Senior Backend Engineer"} />
             </Field>
 
-            <Field label="Difficulty">
-              <select value={form.difficulty} onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle}>
-                <option value="JUNIOR">Junior</option>
-                <option value="MID">Mid</option>
-                <option value="SENIOR">Senior</option>
-              </select>
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Candidate Limit">
-              <input type="number" value={form.candidateLimit}
-                onChange={(e) => setForm({ ...form, candidateLimit: parseInt(e.target.value) || 0 })}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
+            <Field label="Company name">
+              <Input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })}
+                placeholder="Acme Inc." />
             </Field>
 
-            <Field label={form.type === "CONTEST" ? "Deadline (competition closes)" : "Deadline"}>
-              <input
-                type="datetime-local"
-                value={form.deadline}
-                min={minDateTime}
-                onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-                onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none cursor-pointer"
-                style={{ ...inputStyle, colorScheme: "dark" }}
-              />
-            </Field>
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Codebase">
+                <select value={form.codebaseId} onChange={(e) => setForm({ ...form, codebaseId: e.target.value })} className={SELECT_CLASS}>
+                  {codebases.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
 
-          {form.type === "HIRING" && (
-            <Field label="Interview Booking Link (Calendly, etc.)">
-              <input value={form.bookingLink} onChange={(e) => setForm({ ...form, bookingLink: e.target.value })}
-                placeholder="https://calendly.com/your-team/interview"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" style={inputStyle} />
-            </Field>
+              <Field label="Difficulty">
+                <select value={form.difficulty} onChange={(e) => setForm({ ...form, difficulty: e.target.value })} className={SELECT_CLASS}>
+                  <option value="JUNIOR">Junior</option>
+                  <option value="MID">Mid</option>
+                  <option value="SENIOR">Senior</option>
+                </select>
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label={isContest ? "Participant limit" : "Candidate limit"}>
+                <Input type="number" value={form.candidateLimit}
+                  onChange={(e) => setForm({ ...form, candidateLimit: parseInt(e.target.value) || 0 })} />
+              </Field>
+
+              <Field label={isContest ? "Deadline (competition closes)" : "Deadline"}>
+                <input
+                  type="datetime-local"
+                  value={form.deadline}
+                  min={minDateTime}
+                  onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
+                  className="w-full rounded border border-hairline bg-surface px-3 py-2.5 text-sm outline-none cursor-pointer text-ink focus:border-brand focus:ring-2 focus:ring-[rgba(79,70,229,0.25)]"
+                />
+              </Field>
+            </div>
+          </Card>
+
+          {/* Type-specific section — this is what keeps Hiring and DevFest visually distinct */}
+          {isContest ? (
+            <Card className="p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <Trophy size={13} /> DevFest details
+              </div>
+              <Field
+                label="DevFest tag (optional)"
+                helper="Use the same tag on all campaigns in a DevFest to pool them onto one public leaderboard, at /devfest/[tag]. You can also add this later."
+              >
+                <Input value={form.devFestTag} onChange={(e) => setForm({ ...form, devFestTag: e.target.value })}
+                  placeholder="e.g. lmkr-devfest-2025" />
+              </Field>
+            </Card>
+          ) : (
+            <Card className="p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <Briefcase size={13} /> Hiring details
+              </div>
+              <Field label="Interview booking link (optional)" helper="Calendly or similar — shown to candidates you shortlist.">
+                <Input value={form.bookingLink} onChange={(e) => setForm({ ...form, bookingLink: e.target.value })}
+                  placeholder="https://calendly.com/your-team/interview" />
+              </Field>
+            </Card>
           )}
 
           {/* Optional ticket curation */}
-          <div className="rounded-lg p-4" style={{ background: "#f2f4f7", border: "1px solid #e4e7ec" }}>
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-1">
-              <div className="text-sm font-semibold text-[#131722]">Which tickets?</div>
-              <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: "#5a6472" }}>
-                <input type="checkbox" checked={pickMode} onChange={(e) => setPickMode(e.target.checked)} style={{ accentColor: "#4338ca" }} />
+              <div className="text-sm font-semibold">Which tickets?</div>
+              <label className="flex items-center gap-2 text-xs cursor-pointer text-muted">
+                <input type="checkbox" checked={pickMode} onChange={(e) => setPickMode(e.target.checked)} className="accent-brand" />
                 Choose specific tickets
               </label>
             </div>
             {!pickMode ? (
-              <div className="text-xs" style={{ color: "#8a93a3" }}>
-                Each candidate gets a <span style={{ color: "#5a6472" }}>random {form.difficulty.toLowerCase()} ticket</span> from this codebase — different candidates get different problems, so they can&apos;t share answers.
+              <div className="text-xs text-muted">
+                Each candidate gets a <span className="text-ink">random {form.difficulty.toLowerCase()} ticket</span> from this codebase — different candidates get different problems, so they can&apos;t share answers.
               </div>
             ) : (
-              <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
+              <div className="mt-2 flex flex-col gap-1.5 max-h-56 overflow-y-auto">
                 {library.length === 0 ? (
-                  <div className="text-xs" style={{ color: "#8a93a3" }}>No tickets found for this codebase + difficulty.</div>
+                  <div className="text-xs text-muted">No tickets found for this codebase + difficulty.</div>
                 ) : library.map((t) => (
-                  <label key={t.id} className="flex items-start gap-2.5 rounded-lg px-3 py-2 cursor-pointer transition-colors"
-                    style={{ background: selectedTickets.has(t.id) ? "#eef0fd" : "#ffffff", border: `1px solid ${selectedTickets.has(t.id) ? "#c7c9f7" : "#e4e7ec"}` }}>
-                    <input type="checkbox" checked={selectedTickets.has(t.id)} onChange={() => toggleTicket(t.id)} className="mt-0.5" style={{ accentColor: "#4338ca" }} />
+                  <label key={t.id} className={`flex items-start gap-2.5 rounded px-3 py-2 cursor-pointer transition-colors duration-150 border ${selectedTickets.has(t.id) ? "bg-brand-weak border-brand" : "bg-surface border-hairline"}`}>
+                    <input type="checkbox" checked={selectedTickets.has(t.id)} onChange={() => toggleTicket(t.id)} className="mt-0.5 accent-brand" />
                     <div className="min-w-0">
-                      <div className="text-xs font-semibold text-[#131722] truncate">{t.title}</div>
-                      <div className="text-xs" style={{ color: "#8a93a3" }}>~{t.expectedMinutes} min</div>
+                      <div className="text-xs font-semibold truncate">{t.title}</div>
+                      <div className="text-xs text-muted">~{t.expectedMinutes} min</div>
                     </div>
                   </label>
                 ))}
                 {library.length > 0 && (
-                  <div className="text-xs pt-1" style={{ color: "#8a93a3" }}>
+                  <div className="text-xs pt-1 text-muted">
                     {selectedTickets.size === 0
                       ? "Pick at least one. Candidates get a random ticket from your selection."
                       : `${selectedTickets.size} selected — candidates get a random one of these.`}
@@ -329,24 +344,13 @@ export default function NewCampaignPage() {
                 )}
               </div>
             )}
-          </div>
+          </Card>
 
-          <button onClick={handleSubmit} disabled={submitting}
-            className="w-full py-3 rounded-lg text-sm font-bold text-[#131722] disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #4f46e5, #4338ca)" }}>
-            {submitting ? "Creating…" : "Create Campaign & Generate Link"}
-          </button>
+          <Button variant="primary" size="lg" onClick={handleSubmit} disabled={submitting} className="w-full">
+            {submitting ? "Creating…" : "Create campaign & generate link"}
+          </Button>
         </div>
       </main>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold mb-1.5" style={{ color: "#5a6472" }}>{label}</label>
-      {children}
     </div>
   );
 }
