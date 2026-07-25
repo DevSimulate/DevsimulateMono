@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { BoltIcon } from "@/components/Logo";
+import { Badge } from "@/components/ui/Badge";
+import { TierBadge, tierForScore } from "@/components/ui/Badge";
+import { ScoreReceipt } from "@/components/ui/ScoreReceipt";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -35,16 +38,28 @@ interface Board {
   branding:     Branding;
 }
 
-const MEDAL: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" };
-
-function scoreColor(s: number): string {
-  return s >= 85 ? "#4ade80" : s >= 70 ? "#fbbf24" : s >= 50 ? "#fb923c" : "#f87171";
+/** Reconstructs a ScoreReceipt from leaderboard-shaped participant data (dimension scores + verbal penalty). */
+function receiptFor(p: Participant) {
+  const lineItems = [
+    { label: "Diagnosis", weight: 40, score: p.diag ?? 0 },
+    { label: "Design", weight: 30, score: p.design ?? 0 },
+    { label: "Communication", weight: 20, score: p.comms ?? 0 },
+    { label: "Execution", weight: 10, score: p.exec ?? 0 },
+  ];
+  const prBaseScore = lineItems.reduce((sum, l) => sum + l.score, 0);
+  return {
+    prBaseScore,
+    finalScore: p.score,
+    lineItems,
+    deductions: p.verbalPenalty > 0 ? [{ label: "Verbal defence", amount: p.verbalPenalty }] : [],
+  };
 }
 
 export default function CampaignLeaderboardPage() {
   const { slug } = useParams<{ slug: string }>();
   const [board, setBoard]   = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch(`${API}/employer/campaigns/leaderboard/${slug}`)
@@ -62,103 +77,75 @@ export default function CampaignLeaderboardPage() {
   }, [load]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a", color: "#555" }}>Loading…</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-paper text-muted text-sm">Loading…</div>;
   }
   if (!board) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0a", color: "#888" }}>Leaderboard not found.</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-paper text-muted text-sm">Leaderboard not found.</div>;
   }
 
-  const isContest   = board.type === "CONTEST";
-  const branding    = board.branding;
-  const primary     = branding.primaryColor;
-  const accent      = branding.accentColor;
+  const isContest = board.type === "CONTEST";
+  const branding   = board.branding;
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a0a0a", color: "#e5e7eb" }}>
-      {/* Header */}
-      <header className="px-8 py-6 text-center" style={{ borderBottom: "1px solid #1a1a1a" }}>
+    <div className="min-h-screen bg-paper text-ink">
+      <header className="px-8 py-6 text-center border-b border-hairline bg-surface">
         <div className="flex items-center justify-center gap-3 mb-3">
           {branding.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={branding.logoUrl} alt={branding.brandName} className="h-8 object-contain" />
           ) : (
             <div className="flex items-center gap-2">
               <BoltIcon size={26} />
-              <span className="font-black text-white">{branding.brandName}</span>
+              <span className="font-display font-bold">{branding.brandName}</span>
             </div>
           )}
         </div>
-        <div className="inline-flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full mb-3"
-          style={{ background: "#052e16", color: "#4ade80", border: "1px solid #166534" }}>
-          <span className="w-1.5 h-1.5 rounded-full inline-block animate-pulse" style={{ background: "#4ade80" }} />
-          {board.status === "ACTIVE" ? "LIVE" : "FINAL"}
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-black text-white">🏆 {board.campaignName}</h1>
-        <p className="text-sm mt-1" style={{ color: "#888" }}>
+        <Badge tone="good" className="mb-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse" />
+          {board.status === "ACTIVE" ? "Live" : "Final"}
+        </Badge>
+        <h1 className="font-display text-3xl sm:text-4xl font-bold">{board.campaignName}</h1>
+        <p className="text-sm mt-1 text-muted">
           {board.companyName} {isContest ? "DevFest" : ""} · {board.codebase} · {board.totalJoined} joined
         </p>
       </header>
 
-      {/* Board */}
       <main className="max-w-5xl mx-auto px-6 py-10">
         {board.participants.length === 0 ? (
-          <div className="text-center py-20" style={{ color: "#555" }}>
-            <div className="text-4xl mb-3">⏳</div>
-            <div className="text-lg font-bold text-white mb-1">No scores yet</div>
+          <div className="text-center py-20 text-muted">
+            <div className="text-lg font-bold text-ink mb-1">No scores yet</div>
             <div className="text-sm">Be the first to solve your ticket and top the board.</div>
           </div>
         ) : (
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #1a1a1a" }}>
-            {/* Table header */}
-            <div className="grid text-xs font-bold uppercase tracking-widest px-5 py-3"
-              style={{ background: "#111111", color: "#444", gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px" }}>
-              <div />
-              <div />
-              <div>Candidate</div>
-              <div className="text-center">Diag<br/><span style={{color:"#333",fontSize:9}}>/40</span></div>
-              <div className="text-center">Design<br/><span style={{color:"#333",fontSize:9}}>/30</span></div>
-              <div className="text-center">Comms<br/><span style={{color:"#333",fontSize:9}}>/20</span></div>
-              <div className="text-center">Exec<br/><span style={{color:"#333",fontSize:9}}>/10</span></div>
-              <div className="text-center">Final</div>
-            </div>
-
-            {board.participants.map((p) => (
-              <div key={p.githubUsername}
-                className="grid items-center px-5 py-3.5 transition-colors"
-                style={{
-                  gridTemplateColumns: "48px 48px 1fr 56px 56px 56px 56px 72px",
-                  background: p.rank <= 3 ? "#0d1117" : "transparent",
-                  borderTop: "1px solid #161616",
-                  borderLeft: `3px solid ${p.rank === 1 ? accent : p.rank <= 3 ? primary + "88" : "transparent"}`,
-                }}>
-                {/* Medal / rank */}
-                <div className="text-center">
-                  {p.rank <= 3
-                    ? <span className="text-xl">{MEDAL[p.rank]}</span>
-                    : <span className="text-xs font-black" style={{ color: "#555" }}>#{p.rank}</span>}
+          <div className="rounded border border-hairline bg-surface divide-y divide-hairline overflow-hidden">
+            {board.participants.map((p) => {
+              const isOpen = expanded === p.githubUsername;
+              return (
+                <div key={p.githubUsername}>
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : p.githubUsername)}
+                    className="w-full flex items-center gap-4 px-5 py-3.5 text-left hover:bg-paper transition-colors duration-150"
+                  >
+                    <span className="font-mono text-xs text-muted w-8 text-center shrink-0">#{p.rank}</span>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://github.com/${p.githubUsername}.png?size=40`} alt={p.githubUsername}
+                      className="w-8 h-8 rounded-full shrink-0 border border-hairline" />
+                    <span className="flex-1 min-w-0 font-semibold text-sm truncate">{p.githubUsername}</span>
+                    <TierBadge tier={tierForScore(p.score)} className="hidden sm:inline-flex" />
+                    <span className="font-display text-xl font-bold w-14 text-right shrink-0">{p.score}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-5 pb-4">
+                      <ScoreReceipt variant="full" animate={false} data={receiptFor(p)} />
+                    </div>
+                  )}
                 </div>
-                {/* Avatar */}
-                <div>
-                  <img src={`https://github.com/${p.githubUsername}.png?size=40`} alt={p.githubUsername}
-                    className="w-8 h-8 rounded-full" style={{ border: `2px solid ${primary}44` }} />
-                </div>
-                {/* Username */}
-                <div className="font-bold text-sm text-white truncate">{p.githubUsername}</div>
-                {/* Diag */}
-                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.diag ?? "—"}</div>
-                {/* Design */}
-                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.design ?? "—"}</div>
-                {/* Comms */}
-                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.comms ?? "—"}</div>
-                {/* Exec */}
-                <div className="text-center text-sm" style={{ color: "#aaa" }}>{p.exec ?? "—"}</div>
-                {/* Final score */}
-                <div className="text-center text-xl font-black" style={{ color: scoreColor(p.score) }}>{p.score}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
-        <p className="text-xs text-center mt-10" style={{ color: "#555" }}>
+        <p className="text-xs text-center mt-10 text-muted">
           Updates live · Powered by DevSimulate · Scored by AI
         </p>
       </main>

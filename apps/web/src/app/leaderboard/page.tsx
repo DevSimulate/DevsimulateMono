@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Logo from "@/components/Logo";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { TierBadge, tierForScore } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -14,24 +18,12 @@ interface LeaderboardEntry {
   bestScore: number;
 }
 
-const MEDAL: Record<number, string> = { 0: "🥇", 1: "🥈", 2: "🥉" };
-
 const STACK_LABEL: Record<string, string> = {
   DOTNET: ".NET", ANGULAR: "Angular", JAVA: "Java", CPP: "C++",
   NODE: "Node.js", REACT: "React", PYTHON: "Python", DEVOPS: "DevOps",
   SYSTEM_DESIGN: "System Design",
 };
 const stackLabel = (s: string) => STACK_LABEL[s] ?? s;
-
-function ScoreBadge({ score }: { score: number }) {
-  const color =
-    score >= 85 ? "#5B5BD6" : score >= 70 ? "#0D9488" : score >= 50 ? "#D97706" : "#9CA3AF";
-  return (
-    <span className="text-xl font-black" style={{ color }}>
-      {score}
-    </span>
-  );
-}
 
 export default function LeaderboardPage(): React.ReactElement {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -55,119 +47,88 @@ export default function LeaderboardPage(): React.ReactElement {
   }, [activeStack]);
 
   return (
-    <div className="min-h-screen" style={{ background: "#F7F6F3" }}>
-      <nav className="sticky top-0 z-40 nav-glass px-6 py-3.5 flex items-center justify-between">
-        <Link href="/"><Logo variant="horizontal" size={32} /></Link>
+    <div className="min-h-screen bg-paper text-ink">
+      <nav className="sticky top-0 z-40 bg-surface border-b border-hairline px-6 py-3.5 flex items-center justify-between">
+        <Link href="/"><Logo variant="horizontal" size={30} /></Link>
         <div className="flex items-center gap-6">
-          <Link href="/tickets" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
-            Tickets
-          </Link>
-          <Link href="/dashboard" className="text-sm font-medium transition-colors" style={{ color: "#6B6B6B" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#1A1A1A")}
-            onMouseLeave={e => (e.currentTarget.style.color = "#6B6B6B")}>
-            Dashboard
-          </Link>
+          <Link href="/tickets" className="text-sm font-medium text-muted hover:text-ink transition-colors duration-150">Tickets</Link>
+          <Link href="/dashboard" className="text-sm font-medium text-muted hover:text-ink transition-colors duration-150">Dashboard</Link>
         </div>
       </nav>
 
       <main className="max-w-3xl mx-auto px-6 py-16">
-        <div className="text-center mb-12 fade-in-up">
-          <div className="section-label mb-1">Community</div>
-          <h1 className="text-5xl font-black tracking-tight mb-3" style={{ color: "#1A1A1A" }}>
-            Leaderboard
-          </h1>
-          <p className="text-base" style={{ color: "#6B6B6B" }}>
-            Top engineers ranked by average score — <strong>within each stack</strong>.
+        <div className="text-center mb-12">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">Community</div>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mb-3">Leaderboard</h1>
+          <p className="text-base text-muted">
+            Top engineers ranked by average score — within each stack.
           </p>
         </div>
 
         {/* Stack tabs */}
         <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
           {["ALL", ...stacks].map((s) => (
-            <button
+            <Button
               key={s}
+              variant={activeStack === s ? "primary" : "secondary"}
+              size="sm"
               onClick={() => setActiveStack(s)}
-              className="text-xs font-bold px-3.5 py-1.5 rounded-full transition-colors"
-              style={{
-                background: activeStack === s ? "#5B5BD6" : "white",
-                color: activeStack === s ? "white" : "#6B6B6B",
-                border: `1px solid ${activeStack === s ? "#5B5BD6" : "#E4E2DD"}`,
-              }}
+              className="!rounded-full"
             >
-              {s === "ALL" ? "All Stacks" : stackLabel(s)}
-            </button>
+              {s === "ALL" ? "All stacks" : stackLabel(s)}
+            </Button>
           ))}
         </div>
 
         {loading && (
-          <div className="text-center py-20 text-sm" style={{ color: "#9CA3AF" }}>Loading…</div>
+          <div className="text-center py-20 text-sm text-muted">Loading…</div>
         )}
 
         {!loading && entries.length === 0 && (
-          <div className="card rounded-2xl p-16 text-center fade-in-up">
-            <div className="text-4xl mb-4">🏆</div>
-            <p className="font-bold text-lg mb-1" style={{ color: "#1A1A1A" }}>No scores yet</p>
-            <p className="text-sm mb-6" style={{ color: "#6B6B6B" }}>Be the first on the board.</p>
-            <Link href="/onboarding/select" className="btn-primary">Start a ticket →</Link>
-          </div>
+          <EmptyState title="No scores yet" description="Be the first on the board." actionLabel="Start a ticket" onAction={() => { window.location.href = "/onboarding/select"; }} />
         )}
 
         {!loading && entries.length > 0 && (
-          <div className="space-y-3 fade-in-up">
+          <div className="rounded border border-hairline bg-surface divide-y divide-hairline overflow-hidden">
             {entries.map((entry, i) => (
               <Link
                 key={`${entry.githubUsername}-${entry.stack}`}
                 href={`/profile/${entry.githubUsername}`}
-                className="card rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition-shadow"
-                style={{ display: "flex" }}
+                className="flex items-center gap-4 px-5 py-4 hover:bg-paper transition-colors duration-150"
               >
-                {/* Rank */}
-                <div className="w-10 text-center shrink-0">
-                  {i < 3 ? (
-                    <span className="text-2xl">{MEDAL[i]}</span>
-                  ) : (
-                    <span className="text-sm font-black" style={{ color: "#9CA3AF" }}>#{i + 1}</span>
-                  )}
-                </div>
+                <span className="font-mono text-xs text-muted w-8 text-center shrink-0">#{i + 1}</span>
 
-                {/* Avatar */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`https://github.com/${entry.githubUsername}.png?size=40`}
                   alt={entry.githubUsername}
-                  className="w-10 h-10 rounded-full shrink-0"
-                  style={{ border: "2px solid #E4E2DD" }}
+                  className="w-10 h-10 rounded-full shrink-0 border border-hairline"
                 />
 
-                {/* Name + stack */}
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm truncate" style={{ color: "#1A1A1A" }}>
-                    {entry.githubUsername}
-                  </div>
-                  <div className="text-xs" style={{ color: "#9CA3AF" }}>
+                  <div className="font-semibold text-sm truncate">{entry.githubUsername}</div>
+                  <div className="text-xs text-muted">
                     {stackLabel(entry.stack)} · {entry.ticketsCompleted} ticket{entry.ticketsCompleted !== 1 ? "s" : ""}
                   </div>
                 </div>
 
-                {/* Scores */}
+                <TierBadge tier={tierForScore(entry.averageScore)} className="hidden sm:inline-flex" />
+
                 <div className="text-right shrink-0">
                   <div className="flex items-baseline gap-1 justify-end">
-                    <ScoreBadge score={entry.averageScore} />
-                    <span className="text-xs" style={{ color: "#9CA3AF" }}>/100 avg</span>
+                    <span className="font-display text-xl font-bold">{entry.averageScore}</span>
+                    <span className="text-xs text-muted">/100 avg</span>
                   </div>
-                  <div className="text-xs" style={{ color: "#9CA3AF" }}>
-                    best: {entry.bestScore}
-                  </div>
+                  <div className="text-xs text-muted">best: {entry.bestScore}</div>
                 </div>
               </Link>
             ))}
           </div>
         )}
 
-        <p className="text-xs text-center mt-10" style={{ color: "#9CA3AF" }}>
+        <p className="text-xs text-center mt-10 text-muted">
           Ranked by average score · Updated in real time ·{" "}
-          <Link href="/onboarding/select" className="underline hover:text-indigo-600">Join the board →</Link>
+          <Link href="/onboarding/select" className="underline text-emerald">Join the board →</Link>
         </p>
       </main>
     </div>
