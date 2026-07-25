@@ -58,14 +58,29 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       { label: "Execution", weight: 10, score: sub.scoreExecution ?? 0 },
     ];
 
-    // Deductions applied after the base review. (Hidden tests are advisory only —
-    // they never affect the score — so they don't appear on the receipt.)
+    // Deductions applied after the base review.
     const deductions: Array<{ label: string; amount: number; note?: string }> = [];
     if (sub.verbalPenalty > 0) {
       deductions.push({
         label: "Verbal defence penalty",
         amount: sub.verbalPenalty,
         note: sub.followUp?.verbalNote ?? undefined,
+      });
+    }
+    if (sub.hiddenTestPenalty > 0) {
+      const gr = sub.graderResult as { counts?: { critical?: { failed?: number } } } | null;
+      const failedCount = gr?.counts?.critical?.failed ?? null;
+      const capScore = (sub.scoreTotal ?? 0);
+      // Deliberately generic in the NOTE — never the specific test name or
+      // input, only that concealed verification cases in the affected area
+      // failed. The count and cap are facts about the deduction, not hints
+      // about which case or why.
+      deductions.push({
+        label: failedCount !== null
+          ? `Hidden verification: ${failedCount} critical case${failedCount === 1 ? "" : "s"} failed → capped at ${capScore}`
+          : "Hidden verification",
+        amount: sub.hiddenTestPenalty,
+        note: "One or more concealed verification cases in the affected code path did not pass.",
       });
     }
 

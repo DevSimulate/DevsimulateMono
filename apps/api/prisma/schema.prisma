@@ -83,6 +83,11 @@ model Codebase {
   createdAt   DateTime   @default(now())
   tickets     Ticket[]
   campaigns   Campaign[]
+  // Private repo holding this codebase's hidden CI tests, e.g.
+  // "DevSimulate/geoinsight-grader". Null falls back to the GRADER_REPO env
+  // var (the platform's original single-grader-repo default), so existing
+  // codebases dispatch exactly as before with no change required.
+  graderRepo  String?
 }
 
 model Ticket {

@@ -168,7 +168,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
       const submission = await prisma.submission.create({
         data: { userId, ticketId, prUrl, prDescription, branchName, status: "PENDING" },
-        include: { ticket: true },
+        include: { ticket: { include: { codebase: { select: { graderRepo: true } } } } },
       });
 
       jobData = {
@@ -190,6 +190,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       // correctness check that runs the candidate's fix on a private CI runner.
       void triggerHiddenTest({
         repoOwner, repoName, branch: branchName!, ticketId, submissionId: submission.id,
+        graderRepo: submission.ticket.codebase.graderRepo,
       });
 
       res.status(201).json({ data: submission });

@@ -13,11 +13,13 @@ export async function triggerHiddenTest(p: {
   branch: string;
   ticketId: string;
   submissionId: string;
+  /** Codebase.graderRepo, when set. Falls back to GRADER_REPO / the platform default. */
+  graderRepo?: string | null;
 }): Promise<void> {
   const token = process.env.GRADER_DISPATCH_TOKEN;
   if (!token) return; // hidden-test grading disabled
 
-  const graderRepo = process.env.GRADER_REPO ?? "DevSimulate/novatech-grader";
+  const graderRepo = p.graderRepo ?? process.env.GRADER_REPO ?? "DevSimulate/novatech-grader";
   const apiBase =
     process.env.API_PUBLIC_URL ?? "https://devsimulateapi-production.up.railway.app";
 

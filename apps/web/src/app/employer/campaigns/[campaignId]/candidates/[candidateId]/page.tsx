@@ -45,7 +45,12 @@ interface CandidateDetail {
       scoreCommunication: number | null;
       scoreExecution: number | null;
       claudeReview: ClaudeReview | null;
-      graderResult: { result?: string } | null;
+      graderResult: {
+        result?: string; // legacy pass/fail/inconclusive mirror — always present
+        status?: string; // richer status when the grader sent per-test results
+        counts?: { critical?: { passed?: number; failed?: number }; regression?: { passed?: number; failed?: number } };
+      } | null;
+      hiddenTestPenalty: number | null;
       pasteAttempts: number | null;
       submittedAt: string;
       ticket: { title: string; difficulty: string };
@@ -171,11 +176,19 @@ export default function CandidateDetailPage() {
         {(() => {
           const prBase = (s.scoreDiagnosis ?? 0) + (s.scoreDesign ?? 0) + (s.scoreCommunication ?? 0) + (s.scoreExecution ?? 0);
           const gap = prBase - (s.scoreTotal ?? 0);
-          const g = s.graderResult?.result;
+          // Prefer the richer per-test status when the grader sent one;
+          // fall back to the legacy pass/fail/inconclusive mirror otherwise.
+          const g = s.graderResult?.status ?? s.graderResult?.result;
           const gMap: Record<string, { bg: string; color: string; text: string }> = {
-            pass:         { bg: "#ecfdf3", color: "#067647", text: "✓ Verified correct under load — hidden test passed" },
-            fail:         { bg: "#fef3f2", color: "#b42318", text: "🚩 Failed hidden correctness test — Execution capped" },
-            inconclusive: { bg: "#fff8ec", color: "#b54708", text: "⚠ Hidden test couldn't run — flagged for review" },
+            passed:           { bg: "#ecfdf3", color: "#067647", text: "✓ Verified correct — hidden tests passed" },
+            pass:             { bg: "#ecfdf3", color: "#067647", text: "✓ Verified correct — hidden tests passed" },
+            critical_failed:  { bg: "#fef3f2", color: "#b42318", text: `🚩 Failed hidden verification — score capped at ${s.scoreTotal ?? "—"}` },
+            fail:             { bg: "#fef3f2", color: "#b42318", text: "🚩 Failed hidden verification" },
+            regression_failed:{ bg: "#fff8ec", color: "#b54708", text: "⚠ Passed core verification, but broke a related case — see below" },
+            build_failed:     { bg: "#fff8ec", color: "#b54708", text: "⚠ Candidate's code didn't build under CI — flagged for review" },
+            timeout:          { bg: "#fff8ec", color: "#b54708", text: "⚠ Hidden test run timed out — flagged for review" },
+            error:            { bg: "#fff8ec", color: "#b54708", text: "⚠ Hidden test couldn't run — flagged for review" },
+            inconclusive:     { bg: "#fff8ec", color: "#b54708", text: "⚠ Hidden test couldn't run — flagged for review" },
           };
           const gc = g ? gMap[g] : undefined;
           const pastes = s.pasteAttempts ?? 0;
