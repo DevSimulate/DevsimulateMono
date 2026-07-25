@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
+import { Check, Trophy } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Badge, BadgeTone } from "@/components/ui/Badge";
+import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
@@ -20,6 +26,8 @@ interface Campaign {
   codebase: { name: string; stack: string };
   _count: { candidates: number };
 }
+
+const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "good", CLOSED: "neutral", DRAFT: "warn" };
 
 export default function DevFestDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -45,88 +53,58 @@ export default function DevFestDashboard() {
   const tags = [...new Set(campaigns.map((c) => c.devFestTag).filter((t): t is string => !!t))];
 
   return (
-    <div style={page}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
+    <div className="max-w-3xl mx-auto px-5 py-8 text-ink">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0 }}>DevFest events</h1>
-          <p style={{ fontSize: 14, color: "#6B7280", margin: "4px 0 0" }}>
+          <h1 className="font-display text-2xl font-bold">DevFest events</h1>
+          <p className="text-sm text-muted mt-1">
             Public contests. Anyone with the share link can enter, and results appear on a live public leaderboard.
           </p>
         </div>
-        <Link href="/employer/campaigns/new" style={primaryBtn}>+ New track</Link>
+        <Link href="/employer/campaigns/new"><Button variant="primary">New track</Button></Link>
       </div>
 
       {tags.length > 0 && (
-        <div style={{ ...card, marginTop: 20, background: "#F5F5FF", borderColor: "#C7D2FE" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#4338CA", marginBottom: 8 }}>
-            Public leaderboards
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Card className="p-4 mb-5" style={{ background: "rgba(11,122,94,0.05)", borderColor: "rgba(11,122,94,0.25)" }}>
+          <div className="text-[11px] font-bold uppercase tracking-widest text-emerald mb-2">Public leaderboards</div>
+          <div className="flex gap-2 flex-wrap">
             {tags.map((t) => (
-              <Link key={t} href={`/devfest/${t}`} style={ghostBtn}>🏆 {t}</Link>
+              <Link key={t} href={`/devfest/${t}`}>
+                <Button variant="secondary" size="sm"><Trophy size={13} className="text-amber" /> {t}</Button>
+              </Link>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
-      <div style={{ marginTop: 22 }}>
-        {loading && <p style={{ color: "#6B7280", fontSize: 14 }}>Loading…</p>}
-
-        {!loading && campaigns.length === 0 && (
-          <div style={{ ...card, textAlign: "center", padding: 32, color: "#6B7280" }}>
-            No DevFest tracks yet. Create one and tag it to publish a leaderboard.
-          </div>
-        )}
-
-        {campaigns.map((c) => (
-          <div key={c.id} style={{ ...card, marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ minWidth: 220 }}>
-                <div style={{ fontWeight: 700, fontSize: 15.5 }}>{c.roleName}</div>
-                <div style={{ fontSize: 12.5, color: "#6B7280", marginTop: 3 }}>
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {[1, 2].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+        </div>
+      ) : campaigns.length === 0 ? (
+        <EmptyState title="No DevFest tracks yet" description="Create one and tag it to publish a leaderboard." />
+      ) : (
+        <div className="rounded border border-hairline bg-surface divide-y divide-hairline">
+          {campaigns.map((c) => (
+            <div key={c.id} className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div className="min-w-[220px]">
+                <div className="text-sm font-semibold">{c.roleName}</div>
+                <div className="text-xs text-muted mt-0.5">
                   {c.codebase?.name} · {c.difficulty} · {c._count?.candidates ?? 0} participants
                   {c.devFestTag ? ` · ${c.devFestTag}` : " · no tag (won't show on a leaderboard)"}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span style={statusPill(c.status)}>{c.status}</span>
-                <button onClick={() => copy(c.shareableSlug, c.id)} style={{ ...ghostBtn, border: "1.5px solid #C7D2FE", cursor: "pointer" }}>
-                  {copied === c.id ? "✓ Copied" : "Copy entry link"}
-                </button>
-                <Link href={`/employer/campaigns/${c.id}/results`} style={primaryBtn}>Results</Link>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge tone={STATUS_TONE[c.status]}>{c.status[0] + c.status.slice(1).toLowerCase()}</Badge>
+                <Button variant="secondary" size="sm" onClick={() => copy(c.shareableSlug, c.id)}>
+                  {copied === c.id ? <><Check size={13} className="text-emerald" /> Copied</> : "Copy entry link"}
+                </Button>
+                <Link href={`/employer/campaigns/${c.id}/results`}><Button variant="primary" size="sm">Results</Button></Link>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
-
-const page: React.CSSProperties = {
-  maxWidth: 920, margin: "0 auto", padding: "32px 20px",
-  fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#1A1A2E",
-};
-const card: React.CSSProperties = {
-  background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16,
-};
-const primaryBtn: React.CSSProperties = {
-  background: "#4F46E5", color: "#fff", borderRadius: 9, padding: "8px 14px",
-  fontSize: 13.5, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap",
-};
-const ghostBtn: React.CSSProperties = {
-  background: "#fff", color: "#4F46E5", border: "1.5px solid #C7D2FE", borderRadius: 9,
-  padding: "8px 14px", fontSize: 13.5, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap",
-};
-function statusPill(s: string): React.CSSProperties {
-  const map: Record<string, { bg: string; fg: string }> = {
-    ACTIVE: { bg: "#DCFCE7", fg: "#15803D" },
-    CLOSED: { bg: "#F1F5F9", fg: "#475569" },
-    DRAFT:  { bg: "#EEF0FF", fg: "#4338CA" },
-  };
-  const c = map[s] ?? map.DRAFT;
-  return {
-    background: c.bg, color: c.fg, borderRadius: 20, padding: "6px 12px",
-    fontSize: 11.5, fontWeight: 700, alignSelf: "center",
-  };
 }

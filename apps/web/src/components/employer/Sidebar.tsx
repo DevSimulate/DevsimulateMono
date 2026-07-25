@@ -12,7 +12,6 @@ import {
   Settings,
   LogOut,
   Megaphone,
-  CreditCard,
   Trophy,
   Mail,
 } from "lucide-react";
@@ -44,7 +43,6 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
     label: "Workspace",
     items: [
       { href: "/employer/team",     label: "Team",            icon: Building2 },
-      { href: "/employer/pricing",  label: "Plans & Billing", icon: CreditCard },
       { href: "/employer/settings", label: "Settings",        icon: Settings },
     ],
   },
@@ -130,7 +128,7 @@ export default function Sidebar() {
           <div className="flex-1 min-w-0">
             <div className="text-[13px] font-semibold text-white truncate">{org}</div>
             <div className="text-[11px] truncate" style={{ color: "var(--p-sidebar-dim)" }}>
-              {profile?.email ?? (profile ? `@${profile.githubUsername}` : "Not signed in")} · Pro
+              {profile?.email ?? (profile ? `@${profile.githubUsername}` : "Not signed in")}
             </div>
           </div>
         </div>

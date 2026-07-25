@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { getToken } from "@/lib/auth";
 import { UserPlus, Trash2, Shield } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { Badge, BadgeTone } from "@/components/ui/Badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -10,11 +14,9 @@ interface Member {
   id: string; role: string; githubUsername: string; email: string | null; isMe: boolean;
 }
 
-const ROLE_STYLE: Record<string, { bg: string; color: string }> = {
-  ADMIN:   { bg: "#eef0fd", color: "#4338ca" },
-  MANAGER: { bg: "#ecfdf3", color: "#067647" },
-  MEMBER:  { bg: "#eef1f5", color: "#5a6472" },
-};
+const ROLE_TONE: Record<string, BadgeTone> = { ADMIN: "good", MANAGER: "neutral", MEMBER: "neutral" };
+
+const SELECT_CLASS = "rounded border border-hairline bg-surface px-2.5 py-2 text-sm text-ink outline-none focus:border-emerald";
 
 export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -69,57 +71,58 @@ export default function TeamPage() {
   const isAdmin = myRole === "ADMIN";
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ color: "#131722" }}>
-      <header className="px-8 py-4" style={{ background: "#f5f6f8", borderBottom: "1px solid #eef1f5" }}>
-        <h1 className="text-lg font-bold text-[#131722]">Team</h1>
-        <p className="text-xs" style={{ color: "#8a93a3" }}>People who can review candidates and manage campaigns</p>
+    <div className="flex flex-col min-h-screen bg-paper text-ink">
+      <header className="px-8 py-4 bg-surface border-b border-hairline">
+        <h1 className="font-display text-lg font-bold">Team</h1>
+        <p className="text-xs text-muted">People who can review candidates and manage campaigns</p>
       </header>
 
       <main className="flex-1 px-8 py-6 max-w-3xl">
         {isAdmin && (
-          <div className="rounded-xl p-5 mb-6" style={{ background: "#ffffff", border: "1px solid #222" }}>
-            <div className="text-sm font-bold text-[#131722] mb-3 flex items-center gap-2"><UserPlus size={15} /> Add a team member</div>
+          <Card className="p-5 mb-6">
+            <div className="text-sm font-bold mb-3 flex items-center gap-2"><UserPlus size={15} /> Add a team member</div>
             <div className="flex gap-2">
-              <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their GitHub username"
-                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0", color: "#131722" }} />
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded-lg px-3 py-2 text-sm outline-none" style={{ background: "#f2f4f7", border: "1px solid #d5d9e0", color: "#131722" }}>
+              <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Their GitHub username" className="flex-1" />
+              <select value={role} onChange={(e) => setRole(e.target.value)} className={SELECT_CLASS}>
                 <option value="MEMBER">Member</option>
                 <option value="MANAGER">Manager</option>
                 <option value="ADMIN">Admin</option>
               </select>
-              <button onClick={invite} disabled={busy} className="px-4 py-2 rounded-lg text-sm font-semibold text-[#131722] disabled:opacity-50" style={{ background: "#4338ca" }}>Add</button>
+              <Button variant="primary" onClick={invite} disabled={busy}>Add</Button>
             </div>
-            {error && <div className="text-xs mt-2" style={{ color: "#b42318" }}>{error}</div>}
-            <div className="text-xs mt-2" style={{ color: "#8a93a3" }}>They must have signed in to DevSimulate at least once.</div>
-          </div>
+            {error && <div className="text-xs mt-2 text-red">{error}</div>}
+            <div className="text-xs mt-2 text-muted">They must have signed in to DevSimulate at least once.</div>
+          </Card>
         )}
 
-        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #222" }}>
-          {loading ? <div className="px-5 py-8 text-center text-sm" style={{ color: "#8a93a3" }}>Loading…</div> :
+        <Card className="overflow-hidden">
+          {loading ? <div className="px-5 py-8 text-center text-sm text-muted">Loading…</div> :
             members.map((m, i) => (
-              <div key={m.id} className="flex items-center gap-3 px-5 py-3.5" style={{ background: "#f2f4f7", borderBottom: i < members.length - 1 ? "1px solid #eef1f5" : "none" }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: "#eef0fd", color: "#4338ca" }}>{m.githubUsername.charAt(0).toUpperCase()}</div>
+              <div key={m.id} className={`flex items-center gap-3 px-5 py-3.5 ${i < members.length - 1 ? "border-b border-hairline" : ""}`}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-emerald-weak text-emerald">
+                  {m.githubUsername.charAt(0).toUpperCase()}
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-[#131722]">{m.githubUsername} {m.isMe && <span className="text-xs" style={{ color: "#8a93a3" }}>(you)</span>}</div>
-                  <div className="text-xs" style={{ color: "#8a93a3" }}>{m.email ?? "—"}</div>
+                  <div className="text-sm font-semibold">{m.githubUsername} {m.isMe && <span className="text-xs text-muted">(you)</span>}</div>
+                  <div className="text-xs text-muted">{m.email ?? "—"}</div>
                 </div>
                 {isAdmin && !m.isMe ? (
-                  <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className="rounded-lg px-2.5 py-1.5 text-xs outline-none" style={{ background: "#eef1f5", border: "1px solid #d5d9e0", color: "#131722" }}>
+                  <select value={m.role} onChange={(e) => changeRole(m.id, e.target.value)} className={SELECT_CLASS}>
                     <option value="MEMBER">Member</option>
                     <option value="MANAGER">Manager</option>
                     <option value="ADMIN">Admin</option>
                   </select>
                 ) : (
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1" style={{ background: ROLE_STYLE[m.role]?.bg, color: ROLE_STYLE[m.role]?.color }}>
+                  <Badge tone={ROLE_TONE[m.role]}>
                     {m.role === "ADMIN" && <Shield size={10} />}{m.role[0] + m.role.slice(1).toLowerCase()}
-                  </span>
+                  </Badge>
                 )}
                 {isAdmin && !m.isMe && (
-                  <button onClick={() => remove(m.id)} className="p-1.5 rounded-lg" style={{ color: "#8a93a3" }} title="Remove"><Trash2 size={14} /></button>
+                  <button onClick={() => remove(m.id)} className="p-1.5 rounded text-muted hover:text-red" title="Remove"><Trash2 size={14} /></button>
                 )}
               </div>
             ))}
-        </div>
+        </Card>
       </main>
     </div>
   );

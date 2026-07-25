@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge, BadgeTone } from "@/components/ui/Badge";
+import { Table, Thead, Th, Tr, Td } from "@/components/ui/Table";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -17,11 +22,11 @@ interface Invite {
   remindedAt: string | null;
 }
 
-const STATUS_STYLE: Record<Invite["status"], { bg: string; fg: string }> = {
-  INVITED:   { bg: "#F1F5F9", fg: "#475569" },
-  STARTED:   { bg: "#FEF3C7", fg: "#B45309" },
-  COMPLETED: { bg: "#DCFCE7", fg: "#15803D" },
-  EXPIRED:   { bg: "#FEE2E2", fg: "#B91C1C" },
+const STATUS_TONE: Record<Invite["status"], BadgeTone> = {
+  INVITED: "neutral",
+  STARTED: "warn",
+  COMPLETED: "good",
+  EXPIRED: "bad",
 };
 
 /** Parses pasted "Name, email" / "email" lines (also handles CSV with a header). */
@@ -131,119 +136,112 @@ export default function CampaignInvitesPage() {
   }, {});
 
   return (
-    <div style={{ maxWidth: 920, margin: "0 auto", padding: "32px 20px", fontFamily: "'Segoe UI', system-ui, sans-serif", color: "#1A1A2E" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>Candidate invitations</h1>
-      <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 24 }}>
-        Paste your candidate list — one per line, <code>Name, email</code> or just the email.
+    <div className="max-w-3xl mx-auto px-5 py-8 text-ink">
+      <h1 className="font-display text-2xl font-bold mb-1">Candidate invitations</h1>
+      <p className="text-sm text-muted mb-6">
+        Paste your candidate list — one per line, <span className="font-mono">Name, email</span> or just the email.
         Each person gets their own tracked link.
       </p>
 
       {error && <Banner tone="error">{error}</Banner>}
       {msg && <Banner tone="ok">{msg}</Banner>}
 
-      <div style={card}>
+      <Card className="p-4">
         {/* Drop zone / file picker — the primary way to load candidates. */}
         <label
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); void readFile(e.dataTransfer.files?.[0]); }}
+          className="block rounded border-2 border-dashed px-4 py-6 text-center cursor-pointer transition-colors duration-150"
           style={{
-            display: "block", border: `2px dashed ${dragging ? "#4F46E5" : "#CBD5E1"}`,
-            background: dragging ? "#EEF0FF" : "#F8FAFC", borderRadius: 12,
-            padding: "26px 18px", textAlign: "center", cursor: "pointer",
+            borderColor: dragging ? "var(--emerald)" : "var(--hairline)",
+            background: dragging ? "rgba(11,122,94,0.06)" : "var(--paper)",
           }}
         >
           <input
             type="file"
             accept=".csv,text/csv,text/plain"
-            style={{ display: "none" }}
+            className="hidden"
             onChange={(e) => { void readFile(e.target.files?.[0]); e.currentTarget.value = ""; }}
           />
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
-            {fileName ? `📄 ${fileName}` : "Upload your candidate file"}
+          <div className="text-sm font-semibold mb-1">
+            {fileName ? `File selected: ${fileName}` : "Upload your candidate file"}
           </div>
-          <div style={{ fontSize: 12.5, color: "#6B7280" }}>
-            Click to choose a <strong>.csv</strong> file, or drag it here.<br />
+          <div className="text-xs text-muted leading-relaxed">
+            Click to choose a <span className="font-semibold">.csv</span> file, or drag it here.<br />
             In Excel: <em>File → Save As → CSV</em>. Columns: name, email (a header row is fine).
           </div>
         </label>
 
-        <details style={{ marginTop: 12 }}>
-          <summary style={{ fontSize: 12.5, color: "#6B7280", cursor: "pointer" }}>
-            or paste the list manually
-          </summary>
+        <details className="mt-3">
+          <summary className="text-xs text-muted cursor-pointer">or paste the list manually</summary>
           <textarea
             value={raw}
             onChange={(e) => { setRaw(e.target.value); setFileName(null); }}
             rows={6}
             placeholder={"Ali Raza, ali@example.com\nSara Khan, sara@example.com\nomar@example.com"}
-            style={{ width: "100%", boxSizing: "border-box", marginTop: 8, border: "1.5px solid #E5E7EB", borderRadius: 10, padding: 12, fontSize: 14, fontFamily: "monospace", resize: "vertical" }}
+            className="w-full mt-2 rounded border border-hairline bg-surface px-3 py-2.5 text-sm font-mono resize-y focus:border-emerald focus:outline-none focus:ring-2 focus:ring-[rgba(11,122,94,0.25)]"
           />
         </details>
 
         {parsed.length > 0 && (
-          <div style={{ marginTop: 12, background: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: 10, padding: "10px 12px", maxHeight: 132, overflowY: "auto" }}>
+          <div className="mt-3 rounded border border-hairline bg-paper px-3 py-2.5 max-h-32 overflow-y-auto">
             {parsed.slice(0, 5).map((c, i) => (
-              <div key={i} style={{ fontSize: 12.5, color: "#475569" }}>
+              <div key={i} className="text-xs text-muted font-mono">
                 {c.name ? `${c.name} — ` : ""}{c.email}
               </div>
             ))}
             {parsed.length > 5 && (
-              <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
-                …and {parsed.length - 5} more
-              </div>
+              <div className="text-xs text-muted mt-1">…and {parsed.length - 5} more</div>
             )}
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
-          <span style={{ fontSize: 13, color: "#6B7280" }}>
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-muted">
             {parsed.length} valid {parsed.length === 1 ? "address" : "addresses"} detected
           </span>
-          <button onClick={send} disabled={busy || !parsed.length} style={btn(!busy && parsed.length > 0)}>
+          <Button variant="primary" onClick={send} disabled={busy || !parsed.length}>
             {busy ? "Sending…" : `Send ${parsed.length || ""} invitation${parsed.length === 1 ? "" : "s"}`}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
-      <div style={{ display: "flex", gap: 10, margin: "22px 0 14px", flexWrap: "wrap", alignItems: "center" }}>
+      <div className="flex gap-2.5 my-5 flex-wrap items-center">
         {(["INVITED", "STARTED", "COMPLETED", "EXPIRED"] as const).map((s) => (
-          <span key={s} style={{ ...pill(STATUS_STYLE[s]), fontSize: 12 }}>
-            {s} · {counts[s] ?? 0}
-          </span>
+          <Badge key={s} tone={STATUS_TONE[s]}>
+            {s[0] + s.slice(1).toLowerCase()} · <span className="font-mono">{counts[s] ?? 0}</span>
+          </Badge>
         ))}
-        <button onClick={remind} disabled={busy} style={{ ...btn(!busy), marginLeft: "auto", background: "#fff", color: "#4F46E5", border: "1.5px solid #C7D2FE" }}>
+        <Button variant="secondary" onClick={remind} disabled={busy} className="ml-auto">
           Remind non-starters
-        </button>
+        </Button>
       </div>
 
-      <div style={{ ...card, padding: 0, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-          <thead>
-            <tr>
-              {["Candidate", "Email", "GitHub", "Status", "Score"].map((h) => (
-                <th key={h} style={th}>{h}</th>
+      {invites.length === 0 ? (
+        <EmptyState title="No invitations sent yet" description="Upload a candidate file above to send tracked invitation links." />
+      ) : (
+        <Table>
+          <Thead>
+            <Tr>
+              {["Candidate", "Email", "GitHub", "Status", "Score"].map((h, i) => (
+                <Th key={h} numeric={i === 4}>{h}</Th>
               ))}
-            </tr>
-          </thead>
+            </Tr>
+          </Thead>
           <tbody>
-            {invites.length === 0 && (
-              <tr><td colSpan={5} style={{ ...td, color: "#9CA3AF", textAlign: "center", padding: 24 }}>
-                No invitations sent yet.
-              </td></tr>
-            )}
             {invites.map((i) => (
-              <tr key={i.id}>
-                <td style={td}>{i.name ?? "—"}</td>
-                <td style={{ ...td, color: "#6B7280" }}>{i.email}</td>
-                <td style={{ ...td, color: "#6B7280" }}>{i.githubUsername ?? "—"}</td>
-                <td style={td}><span style={pill(STATUS_STYLE[i.status])}>{i.status}</span></td>
-                <td style={{ ...td, fontWeight: 700 }}>{i.score ?? "—"}</td>
-              </tr>
+              <Tr key={i.id}>
+                <Td>{i.name ?? "—"}</Td>
+                <Td className="text-muted">{i.email}</Td>
+                <Td className="text-muted">{i.githubUsername ?? "—"}</Td>
+                <Td><Badge tone={STATUS_TONE[i.status]}>{i.status[0] + i.status.slice(1).toLowerCase()}</Badge></Td>
+                <Td numeric className="font-bold">{i.score ?? "—"}</Td>
+              </Tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      )}
     </div>
   );
 }
@@ -251,34 +249,15 @@ export default function CampaignInvitesPage() {
 function Banner({ tone, children }: { tone: "ok" | "error"; children: React.ReactNode }) {
   const ok = tone === "ok";
   return (
-    <div style={{
-      background: ok ? "#ECFDF5" : "#FEF2F2",
-      border: `1px solid ${ok ? "#A7F3D0" : "#FECACA"}`,
-      color: ok ? "#065F46" : "#B91C1C",
-      borderRadius: 10, padding: "11px 14px", fontSize: 13.5, marginBottom: 16,
-    }}>{children}</div>
+    <div
+      className="rounded border px-3.5 py-2.5 text-sm mb-4"
+      style={{
+        background: ok ? "rgba(11,122,94,0.06)" : "rgba(179,55,47,0.06)",
+        borderColor: ok ? "rgba(11,122,94,0.25)" : "rgba(179,55,47,0.25)",
+        color: ok ? "var(--emerald)" : "var(--signal-red)",
+      }}
+    >
+      {children}
+    </div>
   );
-}
-
-const card: React.CSSProperties = {
-  background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16,
-};
-const th: React.CSSProperties = {
-  textAlign: "left", fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase",
-  color: "#6B7280", fontWeight: 700, padding: "10px 14px", borderBottom: "2px solid #E5E7EB",
-};
-const td: React.CSSProperties = { padding: "10px 14px", borderBottom: "1px solid #F1F5F9" };
-
-function pill(s: { bg: string; fg: string }): React.CSSProperties {
-  return {
-    background: s.bg, color: s.fg, borderRadius: 20, padding: "3px 10px",
-    fontSize: 11.5, fontWeight: 700, display: "inline-block",
-  };
-}
-function btn(enabled: boolean): React.CSSProperties {
-  return {
-    background: enabled ? "#4F46E5" : "#C7C9D1", color: "#fff", border: "none",
-    borderRadius: 9, padding: "9px 16px", fontSize: 13.5, fontWeight: 700,
-    cursor: enabled ? "pointer" : "not-allowed",
-  };
 }
