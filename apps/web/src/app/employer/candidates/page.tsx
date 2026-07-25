@@ -36,7 +36,7 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     const token = getToken();
-    fetch(`${API}/employer/candidates`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/employer/candidates?type=HIRING`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => setRows(j.data ?? []))
       .catch(() => null)

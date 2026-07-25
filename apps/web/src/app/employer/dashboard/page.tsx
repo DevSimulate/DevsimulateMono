@@ -51,7 +51,7 @@ export default function EmployerDashboard() {
 
   useEffect(() => {
     const token = getToken();
-    fetch(`${API}/employer/dashboard-summary`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/employer/dashboard-summary?type=HIRING`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => setData(j.data))
       .catch(() => null)

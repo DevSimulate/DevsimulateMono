@@ -29,9 +29,9 @@ export default function HiringDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/employer/campaigns`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${API}/employer/campaigns?type=HIRING`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then((r) => r.json())
-      .then((j) => setCampaigns((j.data ?? []).filter((c: Campaign) => c.type === "HIRING")))
+      .then((j) => setCampaigns(j.data ?? []))
       .catch(() => null)
       .finally(() => setLoading(false));
   }, []);

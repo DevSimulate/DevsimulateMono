@@ -7,6 +7,7 @@ import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail, assessmentInviteEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
+import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 import { computeHiringSignals } from "../lib/hiring-signals";
 import { generateInterviewQuestions } from "../services/review.service";
 
@@ -515,17 +516,28 @@ router.get("/ticket-library", async (req: Request, res: Response): Promise<void>
 });
 
 /**
- * GET /campaigns
- * Lists all campaigns for the current user's organisation.
+ * GET /campaigns?type=HIRING|CONTEST
+ * Lists campaigns for the current user's organisation. The Hiring and
+ * DevFest sections of the app must never show each other's campaigns or
+ * candidates, so `type` scopes the query server-side — the caller decides
+ * which section it's rendering, not a client-side filter after the fact.
+ * Omit `type` for the "All campaigns" view, which shows both.
  */
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
+  let typeWhere: ReturnType<typeof campaignTypeWhere>;
+  try {
+    typeWhere = campaignTypeWhere(parseCampaignType(req.query.type));
+  } catch {
+    res.status(400).json({ error: "type must be HIRING or CONTEST" });
+    return;
+  }
   try {
     const orgId = await getOrgForUser(userId);
     if (!orgId) { res.json({ data: [] }); return; }
 
     const campaigns = await prisma.campaign.findMany({
-      where: { orgId },
+      where: { orgId, ...typeWhere },
       include: {
         codebase: { select: { name: true, stack: true } },
         _count: { select: { candidates: true } },

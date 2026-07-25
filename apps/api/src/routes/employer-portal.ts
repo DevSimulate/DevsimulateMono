@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
 import { OrgRole, CampaignStatus, CandidateStatus } from "@prisma/client";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
+import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 
 const router = Router();
 router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
@@ -41,11 +42,21 @@ function verdict(total: number, auth: number, flag: boolean): string {
 // ─── Dashboard summary ───────────────────────────────────────────────────────
 
 /**
- * GET /employer/dashboard-summary
+ * GET /employer/dashboard-summary?type=HIRING|CONTEST
  * Real campaign-driven stats + recent campaigns + recent scored candidates.
+ * `type` scopes every count/list to one campaign type — the Hiring dashboard
+ * must never fold DevFest (CONTEST) candidates into its numbers, and vice
+ * versa. Omit `type` only for a genuinely cross-type view (none currently).
  */
 router.get("/dashboard-summary", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
+  let typeFilter: ReturnType<typeof campaignTypeWhere>;
+  try {
+    typeFilter = campaignTypeWhere(parseCampaignType(req.query.type));
+  } catch {
+    res.status(400).json({ error: "type must be HIRING or CONTEST" });
+    return;
+  }
   try {
     const orgId = await getOrgId(userId);
     if (!orgId) {
@@ -54,18 +65,18 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
     }
 
     const [activeCampaigns, campaigns] = await Promise.all([
-      prisma.campaign.count({ where: { orgId, status: CampaignStatus.ACTIVE } }),
+      prisma.campaign.count({ where: { orgId, status: CampaignStatus.ACTIVE, ...typeFilter } }),
       prisma.campaign.findMany({
-        where: { orgId },
+        where: { orgId, ...typeFilter },
         include: { codebase: { select: { name: true } }, _count: { select: { candidates: true } } },
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
     ]);
 
-    // All candidates across the org's campaigns
+    // All candidates across the org's campaigns of this type
     const candidates = await prisma.campaignCandidate.findMany({
-      where: { campaign: { orgId } },
+      where: { campaign: { orgId, ...typeFilter } },
       include: {
         user: { select: { githubUsername: true } },
         campaign: { select: { roleName: true, codebaseId: true, ticketIds: true } },
@@ -126,17 +137,26 @@ router.get("/dashboard-summary", async (req: Request, res: Response): Promise<vo
 // ─── Candidates (cross-campaign) ─────────────────────────────────────────────
 
 /**
- * GET /employer/candidates
- * Every candidate across all of the org's campaigns, scored + ranked.
+ * GET /employer/candidates?type=HIRING|CONTEST
+ * Every candidate across the org's campaigns of the given type, scored +
+ * ranked. This page lives under the "Hiring" nav group, so the frontend
+ * always passes type=HIRING — DevFest candidates must never appear here.
  */
 router.get("/candidates", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
+  let typeWhere: ReturnType<typeof campaignTypeWhere>;
+  try {
+    typeWhere = campaignTypeWhere(parseCampaignType(req.query.type));
+  } catch {
+    res.status(400).json({ error: "type must be HIRING or CONTEST" });
+    return;
+  }
   try {
     const orgId = await getOrgId(userId);
     if (!orgId) { res.json({ data: [] }); return; }
 
     const rows = await prisma.campaignCandidate.findMany({
-      where: { campaign: { orgId } },
+      where: { campaign: { orgId, ...typeWhere } },
       include: {
         user: { select: { githubUsername: true, email: true } },
         campaign: { select: { id: true, roleName: true, codebaseId: true, ticketIds: true } },

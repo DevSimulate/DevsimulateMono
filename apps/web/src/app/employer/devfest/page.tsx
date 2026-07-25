@@ -35,9 +35,9 @@ export default function DevFestDashboard() {
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API}/employer/campaigns`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${API}/employer/campaigns?type=CONTEST`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then((r) => r.json())
-      .then((j) => setCampaigns((j.data ?? []).filter((c: Campaign) => c.type === "CONTEST")))
+      .then((j) => setCampaigns(j.data ?? []))
       .catch(() => null)
       .finally(() => setLoading(false));
   }, []);
