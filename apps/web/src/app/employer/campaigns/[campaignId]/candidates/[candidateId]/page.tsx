@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge, TierBadge, tierForScore } from "@/components/ui/Badge";
 import { ScoreReceipt, ScoreReceiptDeduction } from "@/components/ui/ScoreReceipt";
 import { Tabs } from "@/components/ui/Tabs";
+import { useToast } from "@/components/ui/Toast";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -105,6 +106,7 @@ export default function CandidateDetailPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("NEW");
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     const token = getToken();
@@ -131,11 +133,14 @@ export default function CandidateDetailPage() {
 
   async function invite() {
     const token = getToken();
-    await fetch(`${API}/employer/campaigns/${campaignId}/invite`, {
+    const r = await fetch(`${API}/employer/campaigns/${campaignId}/invite`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ candidateIds: [candidateId] }),
     });
+    const j = await r.json().catch(() => ({}));
+    if (j.data?.emailed) toast.show("Interview invite sent", "good");
+    else if (j.data?.missingEmail) toast.show("Shortlisted — candidate has no email on file, so no invite was sent", "bad");
     setStatus("SHORTLISTED");
   }
 

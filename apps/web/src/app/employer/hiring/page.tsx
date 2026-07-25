@@ -45,7 +45,7 @@ export default function HiringDashboard() {
             Private, invite-only assessments for open roles. Candidates are invited by email and results stay confidential.
           </p>
         </div>
-        <Link href="/employer/campaigns/new"><Button variant="primary">New role</Button></Link>
+        <Link href="/employer/campaigns/new?type=HIRING"><Button variant="primary">New role</Button></Link>
       </div>
 
       {loading ? (

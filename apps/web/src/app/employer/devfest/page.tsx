@@ -61,7 +61,7 @@ export default function DevFestDashboard() {
             Public contests. Anyone with the share link can enter, and results appear on a live public leaderboard.
           </p>
         </div>
-        <Link href="/employer/campaigns/new"><Button variant="primary">New track</Button></Link>
+        <Link href="/employer/campaigns/new?type=CONTEST"><Button variant="primary">New track</Button></Link>
       </div>
 
       {tags.length > 0 && (

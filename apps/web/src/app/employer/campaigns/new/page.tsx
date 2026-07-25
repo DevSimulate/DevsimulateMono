@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import { ArrowLeft, Copy, Check, ExternalLink, Briefcase, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input, Field } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
@@ -21,8 +22,17 @@ const TYPE_META = {
   CONTEST: { icon: Trophy,    title: "DevFest / Contest", desc: "Public contest — compete on a live leaderboard, crown winners" },
 } as const;
 
-export default function NewCampaignPage() {
-  const router = useRouter();
+function isValidType(v: string | null): v is "HIRING" | "CONTEST" {
+  return v === "HIRING" || v === "CONTEST";
+}
+
+function NewCampaignForm() {
+  const searchParams = useSearchParams();
+  // Arriving from the Hiring or DevFest section locks the type to that
+  // section — the two flows shouldn't cross, so there's no picker to
+  // second-guess it. Arriving from "All campaigns" still gets the choice.
+  const lockedType = isValidType(searchParams.get("type")) ? searchParams.get("type") as "HIRING" | "CONTEST" : null;
+
   const [codebases, setCodebases] = useState<Codebase[]>([]);
   const [form, setForm] = useState({
     roleName: "",
@@ -31,9 +41,8 @@ export default function NewCampaignPage() {
     candidateLimit: 100,
     deadline: "",
     companyName: "",
-    bookingLink: "",
     devFestTag: "",
-    type: "HIRING" as "HIRING" | "CONTEST",
+    type: lockedType ?? ("HIRING" as "HIRING" | "CONTEST"),
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,13 +202,15 @@ export default function NewCampaignPage() {
     );
   }
 
+  const backHref = lockedType === "CONTEST" ? "/employer/devfest" : lockedType === "HIRING" ? "/employer/hiring" : "/employer/campaigns";
+
   // Form view
   return (
     <div className="flex flex-col min-h-screen bg-paper text-ink">
       <header className="px-8 py-4 flex items-center gap-4 bg-surface border-b border-hairline">
-        <Link href="/employer/campaigns" className="text-muted hover:text-ink transition-colors duration-150"><ArrowLeft size={18} /></Link>
+        <Link href={backHref} className="text-muted hover:text-ink transition-colors duration-150"><ArrowLeft size={18} /></Link>
         <div>
-          <h1 className="font-display text-lg font-bold">New campaign</h1>
+          <h1 className="font-display text-lg font-bold">{isContest ? "New DevFest track" : "New role"}</h1>
           <p className="text-xs text-muted">{isContest ? "Create a public DevFest contest" : "Create a hiring assessment campaign"}</p>
         </div>
       </header>
@@ -213,26 +224,35 @@ export default function NewCampaignPage() {
             </div>
           )}
 
-          {/* Campaign type — Hiring vs DevFest/Contest, each its own clearly labelled flow */}
-          <Field label="Campaign type">
-            <div className="grid grid-cols-2 gap-3">
-              {(Object.keys(TYPE_META) as Array<"HIRING" | "CONTEST">).map((v) => {
-                const meta = TYPE_META[v];
-                const Icon = meta.icon;
-                const active = form.type === v;
-                return (
-                  <button key={v} type="button" onClick={() => setForm({ ...form, type: v })}
-                    className={`text-left rounded border p-3 transition-colors duration-150 ${active ? "border-brand bg-brand-weak" : "border-hairline bg-surface hover:bg-paper"}`}>
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <Icon size={14} className={active ? "text-brand" : "text-muted"} />
-                      <div className={`text-sm font-semibold ${active ? "text-brand" : "text-ink"}`}>{meta.title}</div>
-                    </div>
-                    <div className="text-xs text-muted">{meta.desc}</div>
-                  </button>
-                );
-              })}
+          {/* Campaign type — locked when arriving from the Hiring or DevFest
+              section (they're different flows and shouldn't cross); an open
+              choice only from the neutral "All campaigns" entry point. */}
+          {lockedType ? (
+            <div className="flex items-center gap-2">
+              {(() => { const Icon = TYPE_META[lockedType].icon; return <Icon size={14} className="text-brand" />; })()}
+              <Badge tone="neutral">{TYPE_META[lockedType].title} campaign</Badge>
             </div>
-          </Field>
+          ) : (
+            <Field label="Campaign type">
+              <div className="grid grid-cols-2 gap-3">
+                {(Object.keys(TYPE_META) as Array<"HIRING" | "CONTEST">).map((v) => {
+                  const meta = TYPE_META[v];
+                  const Icon = meta.icon;
+                  const active = form.type === v;
+                  return (
+                    <button key={v} type="button" onClick={() => setForm({ ...form, type: v })}
+                      className={`text-left rounded border p-3 transition-colors duration-150 ${active ? "border-brand bg-brand-weak" : "border-hairline bg-surface hover:bg-paper"}`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Icon size={14} className={active ? "text-brand" : "text-muted"} />
+                        <div className={`text-sm font-semibold ${active ? "text-brand" : "text-ink"}`}>{meta.title}</div>
+                      </div>
+                      <div className="text-xs text-muted">{meta.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
 
           {/* Shared basics */}
           <Card className="p-5 flex flex-col gap-4">
@@ -283,8 +303,9 @@ export default function NewCampaignPage() {
             </div>
           </Card>
 
-          {/* Type-specific section — this is what keeps Hiring and DevFest visually distinct */}
-          {isContest ? (
+          {/* DevFest gets its own section; Hiring has nothing extra to
+              collect — interviews are invited by email, not a booking link. */}
+          {isContest && (
             <Card className="p-5 flex flex-col gap-3">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
                 <Trophy size={13} /> DevFest details
@@ -295,16 +316,6 @@ export default function NewCampaignPage() {
               >
                 <Input value={form.devFestTag} onChange={(e) => setForm({ ...form, devFestTag: e.target.value })}
                   placeholder="e.g. lmkr-devfest-2025" />
-              </Field>
-            </Card>
-          ) : (
-            <Card className="p-5 flex flex-col gap-3">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                <Briefcase size={13} /> Hiring details
-              </div>
-              <Field label="Interview booking link (optional)" helper="Calendly or similar — shown to candidates you shortlist.">
-                <Input value={form.bookingLink} onChange={(e) => setForm({ ...form, bookingLink: e.target.value })}
-                  placeholder="https://calendly.com/your-team/interview" />
               </Field>
             </Card>
           )}
@@ -352,5 +363,13 @@ export default function NewCampaignPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function NewCampaignPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-paper flex items-center justify-center text-sm text-muted">Loading…</div>}>
+      <NewCampaignForm />
+    </Suspense>
   );
 }

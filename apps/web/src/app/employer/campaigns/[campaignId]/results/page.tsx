@@ -707,15 +707,13 @@ export default function ResultsPage() {
             Hi [Candidate],<br /><br />
             You performed strongly on the {campaign?.companyName} {campaign?.roleName} assessment on DevSimulate.
             We&apos;d like to invite you for an interview.<br /><br />
-            Book your slot: <span className="font-mono" style={{ color: EMERALD }}>{campaign?.bookingLink ?? "[booking link]"}</span><br /><br />
+            {campaign?.bookingLink
+              ? <>Book your slot: <span className="font-mono" style={{ color: EMERALD }}>{campaign.bookingLink}</span></>
+              : <>The hiring team will reach out with next steps.</>}
+            <br /><br />
             {campaign?.companyName} Hiring Team
           </p>
         </div>
-        {!campaign?.bookingLink && (
-          <div className="rounded px-3 py-2 text-xs" style={{ background: AMBER_WEAK, color: AMBER }}>
-            No booking link set on this campaign. Candidates will be shortlisted but the email won&apos;t include a link.
-          </div>
-        )}
       </Modal>
     </div>
   );
