@@ -9,6 +9,7 @@ import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail 
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 import { HIRING_CERTIFICATE_MIN_SCORE } from "../config/certificates";
+import { APPEAL_WINDOW_DAYS, REVIEW_CONTACT_EMAIL } from "../config/appeals";
 import { computeHiringSignals } from "../lib/hiring-signals";
 import { generateInterviewQuestions } from "../services/review.service";
 
@@ -984,12 +985,15 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
         certificateUrl = `${appUrl}/certificate/${cert.id}`;
       }
 
+      const appealDeadline = new Date(Date.now() + APPEAL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
       const { subject, html } = rejectionEmail({
         candidateName: current.user.githubUsername ?? "Candidate",
         companyName: campaign.companyName,
         roleName: campaign.roleName,
         score,
         certificateUrl,
+        reviewEmail: REVIEW_CONTACT_EMAIL,
+        appealDeadline,
       });
       emailed = await sendEmail({ to: current.user.email, subject, html });
     }

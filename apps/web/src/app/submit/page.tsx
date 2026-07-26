@@ -259,6 +259,7 @@ function SubmitPageInner() {
   const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
   // Hiring candidates never see their score — only a generic "received" message.
   const [hideResults,  setHideResults]  = useState(false);
+  const [hiringMeta,   setHiringMeta]   = useState<{ roleName: string; companyName: string } | null>(null);
   const [disqualified, setDisqualified] = useState(false);
   // "paste" is deliberately absent — paste attempts flag for review, they no
   // longer disqualify. Only repeated assessment-abandonment ends a run.
@@ -467,6 +468,7 @@ function SubmitPageInner() {
       .then((data) => {
         if (data.proctoring) setProctoring(data.proctoring);
         setHideResults(!!data.hideResults);
+        if (data.hideResults && data.campaign) setHiringMeta(data.campaign);
         if (data.data) {
           setTicket(data.data);
           setStage(data.data.stack === "SYSTEM_DESIGN" ? "sd_write" : "describe");
@@ -999,6 +1001,14 @@ function SubmitPageInner() {
         setVerbalBusy(false);
         setError("Couldn't score your explanation — please try again.");
         setStage("verbal_review");
+        return;
+      }
+      // Hiring candidates never see a score — the server returns only a
+      // completion marker, so go straight to the received-state.
+      if (hideResults || d.data.hideResults) {
+        setVerbalBusy(false);
+        setError(null);
+        setStage("score");
         return;
       }
       // The audio wasn't clear enough to score. Not the candidate's fault and
@@ -1577,12 +1587,14 @@ function SubmitPageInner() {
 
             {hideResults ? (
               <Card className="p-10 text-center">
+                <div className="text-3xl mb-4">✓</div>
                 <div className="font-display font-semibold text-lg mb-3 text-ink">
-                  Thanks — your assessment has been received
+                  {hiringMeta
+                    ? `Your assessment for ${hiringMeta.roleName} at ${hiringMeta.companyName} is complete and has been received.`
+                    : "Your assessment is complete and has been received."}
                 </div>
                 <p className="text-sm leading-relaxed text-muted max-w-md mx-auto">
-                  We&apos;ve recorded your submission. The employer will review it and reach out
-                  directly if there&apos;s a fit — no action needed from you right now.
+                  The hiring team is reviewing all candidates. You&apos;ll hear the outcome by email.
                 </p>
               </Card>
             ) : (
@@ -1678,10 +1690,14 @@ function SubmitPageInner() {
               <Button variant="primary" size="lg" className="w-full">Back to dashboard →</Button>
             </Link>
 
-            {/* Request human review — quiet action, always available */}
-            <a href="mailto:ossama@devsimulate.com?subject=Requesting review of my assessment" className="text-center text-xs text-muted hover:text-ink underline underline-offset-2">
-              Request human review
-            </a>
+            {/* Request human review — quiet action. For hiring candidates this
+                moves to the employer's decision email (they don't see a result
+                page), so it's shown here only when the result IS visible. */}
+            {!hideResults && (
+              <a href="mailto:ossama@devsimulate.com?subject=Requesting review of my assessment" className="text-center text-xs text-muted hover:text-ink underline underline-offset-2">
+                Request human review
+              </a>
+            )}
 
             {/* Feedback */}
             {!feedbackSent ? (

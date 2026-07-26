@@ -230,8 +230,12 @@ export function rejectionEmail(opts: {
   roleName: string;
   score?: number | null;
   certificateUrl?: string | null;
+  /** Address a "request human review" reply is directed to. */
+  reviewEmail?: string | null;
+  /** Last day the candidate can appeal their result (7 days out by default). */
+  appealDeadline?: Date | null;
 }): { subject: string; html: string } {
-  const { candidateName, companyName, roleName, score, certificateUrl } = opts;
+  const { candidateName, companyName, roleName, score, certificateUrl, reviewEmail, appealDeadline } = opts;
   const subject = `Your DevSimulate results — ${roleName} at ${companyName}`;
 
   const scoreBlock = score != null
@@ -245,6 +249,21 @@ export function rejectionEmail(opts: {
     ? `<div style="margin:20px 0;">
          <a href="${certificateUrl}" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">View your certificate →</a>
          <p style="font-size:13px;color:#888;line-height:1.6;margin-top:10px;">It&rsquo;s yours to keep — share it on LinkedIn or anywhere proof of your ability matters.</p>
+       </div>`
+    : "";
+
+  // The candidate has no result page, so this email is the one place they can
+  // ask for a human to re-check their result — within the appeal window.
+  const reviewBlock = reviewEmail
+    ? `<div style="margin:20px 0;padding:14px 18px;border:1px solid #eee;border-radius:8px;">
+         <p style="font-size:13px;color:#555;line-height:1.6;margin:0;">
+           Think your result doesn&rsquo;t reflect your work?
+           <a href="mailto:${reviewEmail}?subject=${encodeURIComponent(`Review request — ${roleName} at ${companyName}`)}" style="color:#4F46E5;text-decoration:none;font-weight:600;">Request a human review</a>${
+             appealDeadline
+               ? ` by <strong>${appealDeadline.toDateString()}</strong>.`
+               : "."
+           }
+         </p>
        </div>`
     : "";
 
@@ -269,6 +288,7 @@ export function rejectionEmail(opts: {
       We&rsquo;d love to see you take on another ticket on DevSimulate whenever you&rsquo;re ready —
       every assessment sharpens the same skills, and the next one could be the one that lands.
     </p>
+    ${reviewBlock}
     <p style="font-size:13px;color:#888;line-height:1.6;">
       — The ${companyName} Hiring Team
     </p>

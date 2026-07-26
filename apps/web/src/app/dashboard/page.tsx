@@ -61,6 +61,8 @@ function SubmissionCard({ submission }: { submission: Submission }) {
   const ticketTitle = sub.ticket?.title ?? "Unknown ticket";
   const graderResult = sub.graderResult as { result?: string } | undefined;
   const hideResults = !!sub.hideResults;
+  const campaignRole = sub.campaignRole as string | null | undefined;
+  const campaignCompany = sub.campaignCompany as string | null | undefined;
 
   const prBase = (submission.scoreDiagnosis ?? 0) + (submission.scoreDesign ?? 0) +
                  (submission.scoreCommunication ?? 0) + (submission.scoreExecution ?? 0);
@@ -105,8 +107,11 @@ function SubmissionCard({ submission }: { submission: Submission }) {
       {/* Reviewed content */}
       {isReviewed && hideResults && (
         <div className="rounded border border-hairline bg-paper px-4 py-3 text-xs leading-relaxed text-muted">
-          Thanks — this assessment has been received. The employer will review it and reach out
-          directly if there&apos;s a fit.
+          <span className="font-semibold text-ink">Received ✓ </span>
+          {campaignRole && campaignCompany
+            ? `Your assessment for ${campaignRole} at ${campaignCompany} is complete and has been received. `
+            : "Your assessment is complete and has been received. "}
+          The hiring team is reviewing all candidates — you&apos;ll hear the outcome by email.
         </div>
       )}
 

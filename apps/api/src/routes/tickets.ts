@@ -115,7 +115,17 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     const candidacy = await prisma.campaignCandidate.findFirst({
       where: { userId, campaign: { ticketIds: { has: ticket.id } } },
       orderBy: { joinedAt: "desc" },
-      select: { campaign: { select: { blockPaste: true, requireFullscreen: true, type: true } } },
+      select: {
+        campaign: {
+          select: {
+            blockPaste: true,
+            requireFullscreen: true,
+            type: true,
+            roleName: true,
+            companyName: true,
+          },
+        },
+      },
     });
     const proctoring = candidacy?.campaign
       ? {
@@ -124,11 +134,15 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         }
       : { blockPaste: true, requireFullscreen: true };
     // Hiring candidates never see their score/feedback — only a generic
-    // "we received it" message. DevFest/contest candidates still see the full
-    // breakdown (that's the point of the leaderboard/certificate flow).
+    // "we received it" message (with the role/company for context). DevFest/
+    // contest candidates still see the full breakdown (that's the point of
+    // the leaderboard/certificate flow).
     const hideResults = candidacy?.campaign?.type === "HIRING";
+    const campaign = hideResults
+      ? { roleName: candidacy!.campaign.roleName, companyName: candidacy!.campaign.companyName }
+      : null;
 
-    res.json({ data: ticket, proctoring, hideResults });
+    res.json({ data: ticket, proctoring, hideResults, campaign });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch ticket";
     res.status(500).json({ error: message });

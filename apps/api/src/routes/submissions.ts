@@ -10,6 +10,12 @@ import { consensusVerbal, gatherRuns, SCORING_RUNS } from "../services/consensus
 import { isLowConfidence, MIN_CONFIDENCE } from "../services/transcript-confidence";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
+import {
+  submissionForCandidate,
+  redactFollowUpEvaluation,
+  canCandidateSeeEvaluation,
+  campaignVisibilityInclude,
+} from "../lib/evaluation-visibility";
 
 const router = Router();
 
@@ -369,7 +375,7 @@ router.get("/latest", async (req: Request, res: Response): Promise<void> => {
     const submission = await prisma.submission.findFirst({
       where: { userId },
       orderBy: { submittedAt: "desc" },
-      include: { ticket: { include: { codebase: true } } },
+      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
     });
 
     if (!submission) {
@@ -377,7 +383,7 @@ router.get("/latest", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ data: submission });
+    res.json({ data: submissionForCandidate(submission) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch submission";
     res.status(500).json({ error: message });
@@ -398,19 +404,14 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
       include: {
         ticket: true,
         followUp: true,
-        campaignCandidates: { select: { campaign: { select: { type: true } } } },
+        ...campaignVisibilityInclude,
       },
     });
 
-    // Hiring candidates never see their score/feedback on the dashboard either
-    // — only a generic "we received it" message. Contest/DevFest submissions
-    // are unaffected.
-    const withHideFlag = submissions.map(({ campaignCandidates, ...sub }) => ({
-      ...sub,
-      hideResults: campaignCandidates.some((cc) => cc.campaign.type === "HIRING"),
-    }));
-
-    res.json({ data: withHideFlag });
+    // Hiring candidates never see the evaluation — strip scores/feedback here
+    // (not just in the UI) so it can't be read from the network tab. Contest/
+    // DevFest submissions pass through unchanged.
+    res.json({ data: submissions.map(submissionForCandidate) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list submissions";
     res.status(500).json({ error: message });
@@ -427,7 +428,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
-      include: { ticket: { include: { codebase: true } } },
+      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
     });
 
     if (!submission) {
@@ -435,7 +436,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ data: submission });
+    res.json({ data: submissionForCandidate(submission) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch submission";
     res.status(500).json({ error: message });
@@ -515,6 +516,7 @@ router.get("/:id/followup", async (req: Request, res: Response): Promise<void> =
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
+      include: campaignVisibilityInclude,
     });
 
     if (!submission) {
@@ -531,7 +533,11 @@ router.get("/:id/followup", async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    res.json({ data: followUp });
+    // Hiring candidates get the questions/their own answers, never the scoring.
+    const payload = canCandidateSeeEvaluation(submission)
+      ? followUp
+      : redactFollowUpEvaluation(followUp);
+    res.json({ data: payload });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch follow-up";
     res.status(500).json({ error: message });
@@ -566,7 +572,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
-      include: { ticket: { include: { codebase: true } } },
+      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
     });
 
     if (!submission) {
@@ -582,6 +588,8 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ error: "Follow-up questions not found" });
       return;
     }
+
+    const hideEvaluation = !canCandidateSeeEvaluation(submission);
 
     // Behavioral integrity signals raise the risk score:
     //  - paste attempts into the Q&A boxes (+20 each, cap 60)
@@ -673,6 +681,13 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
         : aiDeclaration === "AI_USED_FOR_UNDERSTANDING"
         ? `You used AI to understand the concepts and answered in your own words. No penalty.`
         : null;
+
+    // Hiring candidates never see feedback/scoring — return only a completion
+    // marker so the client advances to the received-state, not a receipt.
+    if (hideEvaluation) {
+      res.json({ data: { hideResults: true } });
+      return;
+    }
 
     res.json({
       data: {
@@ -904,10 +919,16 @@ async function processVerbal(
 ): Promise<{ status: number; body: object }> {
   const sub = await prisma.submission.findUnique({
     where: { id: submissionId },
-    include: { followUp: true },
+    include: { followUp: true, ...campaignVisibilityInclude },
   });
   if (!sub || sub.userId !== userId) return { status: 404, body: { error: "Submission not found" } };
   if (!sub.followUp) return { status: 400, body: { error: "Complete the follow-up first" } };
+
+  // Hiring candidates never see the verbal score, penalty, or resulting total —
+  // the scoring still happens and is finalized server-side, but every success
+  // path returns only a completion marker for them.
+  const hideEvaluation = !canCandidateSeeEvaluation(sub);
+  const completionBody = { status: 200, body: { data: { hideResults: true, completed: true } } };
 
   // ONLY a genuinely empty transcript (mic denied / silence / STT failure) is "not
   // captured" — don't penalise a technical issue. A real short answer like "I don't
@@ -923,6 +944,7 @@ async function processVerbal(
       },
     });
     await flagForHumanReview(sub.id, "No spoken answer captured — verbal step needs manual review");
+    if (hideEvaluation) return completionBody;
     return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
   }
 
@@ -946,6 +968,7 @@ async function processVerbal(
     await flagForHumanReview(sub.id, "low-confidence transcript");
     console.log(`[verbal] ${sub.id} routed to human review — confidence ${confidence}`);
 
+    if (hideEvaluation) return completionBody;
     return {
       status: 200,
       body: {
@@ -1027,6 +1050,7 @@ async function processVerbal(
     data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
   });
 
+  if (hideEvaluation) return completionBody;
   return {
     status: 200,
     body: {
