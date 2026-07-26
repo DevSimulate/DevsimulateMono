@@ -5,17 +5,11 @@ import { DIAGNOSIS, EXECUTION } from "../prompts/anchors";
 
 export type HiddenTestStatus =
   | "passed"
-  // Objective Floor v2: the repro script still reproduces the planted bug.
-  // Routed identically to the legacy "critical_failed" (cap at 45).
-  | "bug_not_fixed"
   | "critical_failed"
   | "regression_failed"
   | "build_failed"
   | "timeout"
   | "error";
-
-/** Statuses that mean "the reported issue was not actually fixed" → cap at 45. */
-const BUG_UNFIXED_STATUSES: readonly HiddenTestStatus[] = ["bug_not_fixed", "critical_failed"];
 
 export interface HiddenTestCase {
   name: string;
@@ -35,11 +29,6 @@ export interface HiddenTestCallbackBody {
   status: HiddenTestStatus;
   tests: HiddenTestCase[];
   counts: HiddenTestCounts;
-  // Objective Floor v2 additions (optional, advisory). The repro outcome and
-  // the names (module-level only) of visible-suite tests that newly fail vs the
-  // base baseline. Never carries script contents or assertions.
-  reproFixed?: boolean;
-  regressions?: string[];
   at?: string;
 }
 
@@ -56,7 +45,7 @@ export function isRichGraderBody(body: unknown): body is HiddenTestCallbackBody 
 /** Coarse pass/fail/inconclusive mirror of `status`, kept for UI code that only knows the old shape. */
 export function legacyResultFor(status: HiddenTestStatus): "pass" | "fail" | "inconclusive" {
   if (status === "passed") return "pass";
-  if (status === "bug_not_fixed" || status === "critical_failed" || status === "regression_failed") return "fail";
+  if (status === "critical_failed" || status === "regression_failed") return "fail";
   return "inconclusive"; // build_failed | timeout | error
 }
 
@@ -126,10 +115,7 @@ export function decideHiddenTestOutcome(
     };
   }
 
-  // "the reported issue still reproduces" — bug_not_fixed (Objective Floor v2)
-  // and the legacy critical_failed share the cap-at-45 path and the same
-  // human-review valve.
-  if (BUG_UNFIXED_STATUSES.includes(status)) {
+  if (status === "critical_failed") {
     const valveFires =
       inTopBand(current.scoreExecution, EXECUTION.bands[0].band) &&
       inTopBand(current.scoreDiagnosis, DIAGNOSIS.bands[0].band);
@@ -138,9 +124,9 @@ export function decideHiddenTestOutcome(
       return {
         needsAttention: true,
         needsAttentionReason:
-          "The reported issue still reproduced, but the AI review rated Execution and Diagnosis in " +
-          "their top bands — possible valid alternative fix the repro script doesn't cover. Not " +
-          "auto-capped; needs human review, and is a signal to improve the repro script.",
+          "Hidden tests failed a critical case, but the AI review rated Execution and Diagnosis in " +
+          "their top bands — possible valid alternative fix the suite doesn't cover. Not auto-capped; " +
+          "needs human review, and is a signal to improve the hidden-test suite.",
       };
     }
 
@@ -178,10 +164,6 @@ export async function applyHiddenTestResult(body: HiddenTestCallbackBody): Promi
     result: legacyResultFor(body.status), // back-compat for existing UI reading `.result`
     counts: body.counts,
     tests: body.tests,
-    // Objective Floor v2: repro outcome + names of newly-failing visible tests
-    // (module-level only) for the employer's regression surface. Advisory.
-    ...(body.reproFixed !== undefined ? { reproFixed: body.reproFixed } : {}),
-    ...(body.regressions ? { regressions: body.regressions } : {}),
     at: body.at ?? new Date().toISOString(),
   } as object;
 
