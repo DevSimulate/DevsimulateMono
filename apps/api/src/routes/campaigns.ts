@@ -8,6 +8,7 @@ import { preForkForUser } from "../lib/github-fork";
 import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
+import { HIRING_CERTIFICATE_MIN_SCORE } from "../config/certificates";
 import { computeHiringSignals } from "../lib/hiring-signals";
 import { generateInterviewQuestions } from "../services/review.service";
 
@@ -964,13 +965,31 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
     });
 
     // Newly rejected (not re-saving an already-rejected candidate) → notify
-    // by email, best-effort. Plain and respectful — no score or flags in it.
+    // by email, best-effort. A rejection isn't a dead end: if a final score
+    // exists, it's included; if it cleared the certificate threshold, a
+    // certificate is issued (same as the manual "Issue certificates" action
+    // would) and linked in the same email. No flags/advisory signals ever go in it.
     let emailed = false;
     if (status === CandidateStatus.REJECTED && current.status !== CandidateStatus.REJECTED && current.user.email) {
+      const score = sub?.scoreTotal ?? null;
+      let certificateUrl: string | null = null;
+
+      if (campaign.type === CampaignType.HIRING && score != null && score >= HIRING_CERTIFICATE_MIN_SCORE) {
+        const cert = await prisma.certificate.upsert({
+          where: { userId_campaignId: { userId: current.userId, campaignId: campaign.id } },
+          create: { userId: current.userId, campaignId: campaign.id, score },
+          update: { score },
+        });
+        const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+        certificateUrl = `${appUrl}/certificate/${cert.id}`;
+      }
+
       const { subject, html } = rejectionEmail({
         candidateName: current.user.githubUsername ?? "Candidate",
         companyName: campaign.companyName,
         roleName: campaign.roleName,
+        score,
+        certificateUrl,
       });
       emailed = await sendEmail({ to: current.user.email, subject, html });
     }

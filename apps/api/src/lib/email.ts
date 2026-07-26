@@ -202,16 +202,33 @@ export function interviewInviteEmail(opts: {
 
 /**
  * Builds the rejection email for a candidate the employer has passed on.
- * Plain and respectful — states the decision and nothing more; never
- * references score, flags, or any advisory signal.
+ * Respectful about the decision itself — but a rejection isn't a dead end:
+ * if a final score was recorded, it's included, and if it cleared the
+ * certificate threshold, the certificate link is too. No flags or advisory
+ * signals are ever mentioned, only the score they can already see.
  */
 export function rejectionEmail(opts: {
   candidateName: string;
   companyName: string;
   roleName: string;
+  score?: number | null;
+  certificateUrl?: string | null;
 }): { subject: string; html: string } {
-  const { candidateName, companyName, roleName } = opts;
+  const { candidateName, companyName, roleName, score, certificateUrl } = opts;
   const subject = `Update on your ${roleName} application — ${companyName}`;
+
+  const scoreBlock = score != null
+    ? `<div style="margin:20px 0;padding:16px 20px;background:#f7f7f8;border-radius:8px;">
+         <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.04em;">Your score</div>
+         <div style="font-size:28px;font-weight:800;color:#1a1a1a;">${score}<span style="font-size:14px;font-weight:400;color:#888;"> / 100</span></div>
+       </div>`
+    : "";
+
+  const certBlock = certificateUrl
+    ? `<div style="margin:20px 0;">
+         <a href="${certificateUrl}" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">View your certificate →</a>
+       </div>`
+    : "";
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
@@ -223,6 +240,8 @@ export function rejectionEmail(opts: {
       <strong>${companyName}</strong> on DevSimulate. After careful review, the team has decided
       to move forward with other candidates for this role.
     </p>
+    ${scoreBlock}
+    ${certBlock}
     <p style="font-size:15px;line-height:1.6;color:#333;">
       We appreciate the effort you put in, and we&rsquo;d encourage you to apply again for future
       openings.
