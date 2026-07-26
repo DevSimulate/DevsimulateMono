@@ -188,8 +188,22 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 
       // Fire the hidden-test grader (best-effort, non-blocking) — objective
       // correctness check that runs the candidate's fix on a private CI runner.
+      //
+      // repoOwner/repoName above (parsed from the PR URL) are the BASE repo —
+      // correct for the GitHub API PR-diff fetch the AI review does, since a
+      // PR URL always shows under the base repo regardless of where the head
+      // branch lives. But candidates work on their own fork (preForkForUser),
+      // so their branch physically exists on {candidateUsername}/{repoName},
+      // NOT on the base repo — a literal `git checkout` of branchName against
+      // the base repo fails with "couldn't find remote ref". The grader does
+      // exactly that checkout, so it needs the fork's coordinates instead.
+      const candidateUser = await prisma.user.findUnique({ where: { id: userId }, select: { githubUsername: true } });
       void triggerHiddenTest({
-        repoOwner, repoName, branch: branchName!, ticketId, submissionId: submission.id,
+        repoOwner: candidateUser?.githubUsername ?? repoOwner,
+        repoName,
+        branch: branchName!,
+        ticketId,
+        submissionId: submission.id,
         graderRepo: submission.ticket.codebase.graderRepo,
       });
 
