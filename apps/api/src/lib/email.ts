@@ -1,6 +1,23 @@
 import axios from "axios";
 
 /**
+ * The DevSimulate lockup for transactional email — the real icon (hosted at
+ * /icon.svg, the same mark used as the site favicon) next to the wordmark,
+ * laid out with inline-block + vertical-align instead of flexbox so it holds
+ * together in Outlook, not just Gmail/Apple Mail. Used on every DevSimulate-
+ * branded email; the employer-branded assessment invite uses the hiring
+ * org's own logo instead (see assessmentInviteEmail).
+ */
+function devSimulateHeader(): string {
+  const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+  return `
+  <div style="margin-bottom:24px;">
+    <img src="${appUrl}/icon.svg" width="28" height="28" alt="DevSimulate" style="vertical-align:middle;border-radius:7px;display:inline-block;">
+    <span style="font-weight:800;font-size:18px;color:#1a1a1a;vertical-align:middle;margin-left:8px;">DevSimulate</span>
+  </div>`;
+}
+
+/**
  * Sends transactional email via Resend (https://resend.com).
  * Set RESEND_API_KEY and (optionally) EMAIL_FROM in the environment.
  * No-ops gracefully if no key is configured, so the app never crashes —
@@ -133,7 +150,7 @@ export function stuckAssessmentEmail(opts: {
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
-    <div style="font-weight:800;font-size:18px;margin-bottom:24px;color:#5B5BD6;">DevSimulate</div>
+    ${devSimulateHeader()}
     <h1 style="font-size:22px;margin:0 0 16px;">You're one step from finishing</h1>
     <p style="font-size:15px;line-height:1.6;color:#333;">
       Hi ${greeting},<br><br>
@@ -180,7 +197,7 @@ export function interviewInviteEmail(opts: {
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
-    <div style="font-weight:800;font-size:18px;margin-bottom:24px;">⚡ DevSimulate</div>
+    ${devSimulateHeader()}
     <h1 style="font-size:22px;margin:0 0 16px;">You've been shortlisted 🎉</h1>
     <p style="font-size:15px;line-height:1.6;color:#333;">
       Hi ${candidateName},<br><br>
@@ -215,7 +232,7 @@ export function rejectionEmail(opts: {
   certificateUrl?: string | null;
 }): { subject: string; html: string } {
   const { candidateName, companyName, roleName, score, certificateUrl } = opts;
-  const subject = `Update on your ${roleName} application — ${companyName}`;
+  const subject = `Your DevSimulate results — ${roleName} at ${companyName}`;
 
   const scoreBlock = score != null
     ? `<div style="margin:20px 0;padding:16px 20px;background:#f7f7f8;border-radius:8px;">
@@ -227,24 +244,30 @@ export function rejectionEmail(opts: {
   const certBlock = certificateUrl
     ? `<div style="margin:20px 0;">
          <a href="${certificateUrl}" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">View your certificate →</a>
+         <p style="font-size:13px;color:#888;line-height:1.6;margin-top:10px;">It&rsquo;s yours to keep — share it on LinkedIn or anywhere proof of your ability matters.</p>
        </div>`
     : "";
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
-    <div style="font-weight:800;font-size:18px;margin-bottom:24px;">⚡ DevSimulate</div>
-    <h1 style="font-size:22px;margin:0 0 16px;">Thanks for completing the assessment</h1>
+    ${devSimulateHeader()}
+    <h1 style="font-size:22px;margin:0 0 16px;">Thanks for putting in the work</h1>
     <p style="font-size:15px;line-height:1.6;color:#333;">
       Hi ${candidateName},<br><br>
-      Thank you for taking the time to complete the <strong>${roleName}</strong> assessment for
-      <strong>${companyName}</strong> on DevSimulate. After careful review, the team has decided
-      to move forward with other candidates for this role.
+      Diagnosing a real bug under a timer and then defending your reasoning out loud isn&rsquo;t
+      easy — thank you for seeing the <strong>${roleName}</strong> assessment for
+      <strong>${companyName}</strong> all the way through. Here&rsquo;s what you earned:
     </p>
     ${scoreBlock}
     ${certBlock}
     <p style="font-size:15px;line-height:1.6;color:#333;">
-      We appreciate the effort you put in, and we&rsquo;d encourage you to apply again for future
-      openings.
+      After careful review, ${companyName}&rsquo;s team has decided to move forward with other
+      candidates for this particular role. That&rsquo;s about fit for this one opening, not a
+      verdict on your ability — the score and certificate above are real, and they&rsquo;re yours.
+    </p>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      We&rsquo;d love to see you take on another ticket on DevSimulate whenever you&rsquo;re ready —
+      every assessment sharpens the same skills, and the next one could be the one that lands.
     </p>
     <p style="font-size:13px;color:#888;line-height:1.6;">
       — The ${companyName} Hiring Team
