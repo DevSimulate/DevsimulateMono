@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { format } from "date-fns";
-import { getPublicCertificate } from "@/lib/api";
-import { tierForScore } from "@/components/ui/Badge";
+import { getPublicCertificate, PublicCertificate } from "@/lib/api";
+import { TierBadge, tierForScore } from "@/components/ui/Badge";
+import { BoltIcon } from "@/components/Logo";
 import { LMKR_SVG, DEVFEST_SVG, DEVSIM_SVG } from "@/components/certificate/certBrand";
 import { VerifyActions } from "@/components/certificate/VerifyActions";
 
@@ -19,9 +20,10 @@ interface VerifyPageProps {
   params: Promise<{ credentialId: string }>;
 }
 
-function credentialIdFor(id: string, issuedAt: string): string {
-  const year = new Date(issuedAt).getFullYear();
-  return `DS-${year}-DF-${id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()}`;
+function credentialIdFor(cert: PublicCertificate): string {
+  const year = new Date(cert.issuedAt).getFullYear();
+  const kind = cert.campaignType === "CONTEST" ? "DF" : "HR";
+  return `DS-${year}-${kind}-${cert.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()}`;
 }
 
 export async function generateMetadata({ params }: VerifyPageProps): Promise<Metadata> {
@@ -34,7 +36,9 @@ export async function generateMetadata({ params }: VerifyPageProps): Promise<Met
 
   const tier = TIER_LABEL[tierForScore(cert.score)];
   const title = `${cert.recipientName} — ${tier} — Verified by DevSimulate`;
-  const description = `${cert.recipientName} completed ${cert.campaignName} for ${cert.companyName}, verified by DevSimulate.`;
+  const description = cert.campaignType === "CONTEST"
+    ? `${cert.recipientName} completed ${cert.campaignName} for ${cert.companyName}, verified by DevSimulate.`
+    : `${cert.recipientName} completed a DevSimulate technical assessment, verified by DevSimulate.`;
 
   return {
     title,
@@ -57,10 +61,71 @@ export default async function VerifyPage({ params }: VerifyPageProps): Promise<R
     );
   }
 
+  const verifyUrl = `${APP_URL}/verify/${cert.id}`;
+  const credId = credentialIdFor(cert);
+
+  if (cert.campaignType === "HIRING") {
+    return <GenericVerify cert={cert} verifyUrl={verifyUrl} credId={credId} />;
+  }
+
+  return <DevFestVerify cert={cert} verifyUrl={verifyUrl} credId={credId} />;
+}
+
+/**
+ * The generic, DevSimulate-only verification page for Hiring certificates —
+ * tier + track + date only. Raw dimension numbers are never shown to a
+ * third party here, same rule as ScoreReceipt's public variant.
+ */
+function GenericVerify({ cert, verifyUrl, credId }: { cert: PublicCertificate; verifyUrl: string; credId: string }) {
   const tier = tierForScore(cert.score);
   const issued = format(new Date(cert.issuedAt), "MMMM d, yyyy");
-  const credId = credentialIdFor(cert.id, cert.issuedAt);
-  const verifyUrl = `${APP_URL}/verify/${cert.id}`;
+
+  return (
+    <div className="min-h-screen bg-paper flex flex-col items-center gap-6 px-4 py-10">
+      <div className="w-full max-w-lg rounded border border-hairline bg-surface p-10 text-center">
+        <div className="flex justify-center mb-6"><BoltIcon size={40} /></div>
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-weak text-emerald px-3 py-1 text-xs font-semibold uppercase tracking-wide mb-8">
+          ✓ Verified by DevSimulate
+        </div>
+
+        <div className="text-xs uppercase tracking-wide text-muted mb-2">This credential was issued to</div>
+        <h1 className="font-display text-4xl font-bold text-ink mb-8">{cert.recipientName || `@${cert.githubUsername}`}</h1>
+
+        <div className="flex items-center justify-center gap-8 mb-8">
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-muted font-semibold mb-1.5">Track</div>
+            <div className="text-sm font-semibold text-ink">{cert.category ?? cert.campaignName}</div>
+          </div>
+          <div className="w-px h-10 bg-hairline" />
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-muted font-semibold mb-1.5">Tier</div>
+            <TierBadge tier={tier} />
+          </div>
+          <div className="w-px h-10 bg-hairline" />
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-muted font-semibold mb-1.5">Date</div>
+            <div className="text-sm font-semibold text-ink">{issued}</div>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted leading-relaxed mb-6 border-t border-hairline pt-6">
+          Assessed via automated code review, pull request analysis, hidden test-case validation, and a spoken
+          defence of the solution, across four dimensions: Diagnosis, Design, Communication, Execution. Full
+          itemised scores are available to the candidate and the hiring team only.
+        </p>
+
+        <div className="font-mono text-sm text-ink">{credId}</div>
+      </div>
+
+      <VerifyActions url={verifyUrl} />
+    </div>
+  );
+}
+
+/** The branded DevFest verification page — unchanged rail-and-field template. */
+function DevFestVerify({ cert, verifyUrl, credId }: { cert: PublicCertificate; verifyUrl: string; credId: string }) {
+  const tier = tierForScore(cert.score);
+  const issued = format(new Date(cert.issuedAt), "MMMM d, yyyy");
 
   return (
     <>

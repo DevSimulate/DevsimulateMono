@@ -1323,7 +1323,8 @@ router.get("/:id/export", async (req: Request, res: Response): Promise<void> => 
 
 /**
  * PATCH /campaigns/:id/devfest-tag
- * Set or clear the DevFest tag on a campaign.
+ * Set or clear the DevFest tag on a campaign. DevFest (CONTEST) only — a
+ * Hiring campaign has no leaderboard or certificate eligibility to tag for.
  * Body: { devFestTag: string | null }
  */
 router.patch("/:id/devfest-tag", async (req: Request, res: Response): Promise<void> => {
@@ -1335,6 +1336,11 @@ router.patch("/:id/devfest-tag", async (req: Request, res: Response): Promise<vo
       where: { id: req.params.id, org: { members: { some: { userId } } } },
     });
     if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+
+    if (campaign.type !== CampaignType.CONTEST) {
+      res.status(403).json({ error: "Only DevFest campaigns can be tagged for a leaderboard" });
+      return;
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updated = await (prisma.campaign.update as any)({

@@ -125,6 +125,7 @@ interface Campaign {
   roleName: string;
   companyName: string;
   bookingLink: string | null;
+  type: "HIRING" | "CONTEST";
 }
 
 const SENIOR_BAR = 65;
@@ -304,6 +305,10 @@ export default function ResultsPage() {
     setTimeout(() => setInviteResult(null), 6000);
   }
 
+  // Hiring certificates are generic (DevSimulate-branded, no employer logo) and
+  // only go to candidates who scored 65+; DevFest keeps its own category-ranked
+  // issuance flow (via the campaigns list's DevFest tag panel) and issues to
+  // every participant regardless of score.
   async function issueCertificates() {
     setCertIssuing(true);
     const token = getToken();
@@ -311,7 +316,7 @@ export default function ResultsPage() {
       const r = await fetch(`${API}/certificates/employer/campaigns/${campaignId}/certificates`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ minScore: 0 }),
+        body: JSON.stringify({ minScore: campaign?.type === "HIRING" ? 65 : 0 }),
       });
       const j = await r.json();
       setCertResult(`${j.data?.issued ?? 0} certificates issued`);
@@ -348,8 +353,14 @@ export default function ResultsPage() {
         <Button variant="secondary" onClick={selectTopPicks} title="Select every clean Yes / Strong Yes candidate (flagged candidates excluded)">
           <Star size={14} className="mr-1.5" /> Select top picks
         </Button>
-        <Button variant="secondary" onClick={issueCertificates} disabled={certIssuing} title="Issue e-certificates to all reviewed candidates">
-          <Award size={14} className="mr-1.5" style={{ color: AMBER }} /> {certIssuing ? "Issuing…" : "Issue certificates"}
+        <Button
+          variant="secondary"
+          onClick={issueCertificates}
+          disabled={certIssuing}
+          title={campaign?.type === "HIRING" ? "Issue a DevSimulate certificate to every candidate scoring 65+" : "Issue e-certificates to all reviewed candidates"}
+        >
+          <Award size={14} className="mr-1.5" style={{ color: AMBER }} />
+          {certIssuing ? "Issuing…" : campaign?.type === "HIRING" ? "Issue certificates (65+)" : "Issue certificates"}
         </Button>
         <Button variant="secondary" onClick={exportCsv}>
           <Download size={14} className="mr-1.5" /> Export CSV

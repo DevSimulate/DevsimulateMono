@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";
 import { LMKR_SVG, DEVFEST_SVG, DEVSIM_SVG } from "@/components/certificate/certBrand";
+import { BoltIcon } from "@/components/Logo";
+import { TierBadge, tierForScore } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 
 const API     = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.devsimulate.com";
+
+interface Dimensions { diagnosis: number; design: number; communication: number; execution: number; }
 
 interface CertData {
   id:             string;
@@ -14,10 +19,12 @@ interface CertData {
   githubUsername: string;
   campaignName:   string;
   companyName:    string;
+  campaignType:   "HIRING" | "CONTEST";
   score:          number;
   rank:           number | null;
   category:       string | null;
   issuedAt:       string;
+  dimensions:     Dimensions | null;
   branding: {
     logoUrl:      string | null;
     primaryColor: string;
@@ -62,10 +69,135 @@ export default function CertificatePage() {
   }
 
   const certUrl = `${APP_URL}/certificate/${cert.id}`;
-  const issued  = format(new Date(cert.issuedAt), "MMMM d, yyyy");
   const year    = new Date(cert.issuedAt).getFullYear();
-  const credId  = `DS-${year}-DF-${cert.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()}`;
+  const credId  = `DS-${year}-${cert.campaignType === "CONTEST" ? "DF" : "HR"}-${cert.id.replace(/[^a-zA-Z0-9]/g, "").slice(-4).toUpperCase()}`;
+
+  function copyLink() {
+    navigator.clipboard.writeText(certUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  if (cert.campaignType === "HIRING") {
+    return (
+      <GenericCertificate cert={cert} certUrl={certUrl} credId={credId} copied={copied} onCopy={copyLink} />
+    );
+  }
+
+  return <DevFestCertificate cert={cert} certUrl={certUrl} credId={credId} copied={copied} onCopy={copyLink} />;
+}
+
+/**
+ * The generic, DevSimulate-only certificate for the Hiring flow — no
+ * employer logo or brand colours, just the candidate's score and real
+ * 4-dimension breakdown. The branded rail-and-field template below is
+ * reserved for DevFest.
+ */
+function GenericCertificate({
+  cert, certUrl, credId, copied, onCopy,
+}: {
+  cert: CertData; certUrl: string; credId: string; copied: boolean; onCopy: () => void;
+}) {
+  const issued = format(new Date(cert.issuedAt), "MMMM d, yyyy");
+  const tier = tierForScore(cert.score);
+  const dims = cert.dimensions;
+  const DIMS = dims
+    ? [
+        { label: "Diagnosis", value: dims.diagnosis, max: 40 },
+        { label: "Design", value: dims.design, max: 30 },
+        { label: "Communication", value: dims.communication, max: 20 },
+        { label: "Execution", value: dims.execution, max: 10 },
+      ]
+    : [];
+
+  const linkedInUrl = [
+    "https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME",
+    `&name=${encodeURIComponent("DevSimulate Certified Developer")}`,
+    `&issueYear=${new Date(cert.issuedAt).getFullYear()}`,
+    `&issueMonth=${new Date(cert.issuedAt).getMonth() + 1}`,
+    `&certUrl=${encodeURIComponent(certUrl)}`,
+    `&certId=${encodeURIComponent(cert.id)}`,
+  ].join("");
+
+  return (
+    <div className="min-h-screen bg-paper flex flex-col items-center gap-6 px-4 py-10 print:bg-white print:py-0">
+      <div className="w-full max-w-lg rounded border border-hairline bg-surface p-10 text-center">
+        <div className="flex justify-center mb-6"><BoltIcon size={40} /></div>
+        <div className="text-[11px] uppercase tracking-widest text-muted font-semibold mb-1">Certificate of achievement</div>
+        <div className="text-xs text-muted mb-8">DevSimulate technical assessment</div>
+
+        <div className="text-xs uppercase tracking-wide text-muted mb-2">This certifies that</div>
+        <h1 className="font-display text-4xl font-bold text-ink mb-1">{cert.recipientName || `@${cert.githubUsername}`}</h1>
+        <div className="text-sm text-muted mb-8">completed the {cert.campaignName} assessment</div>
+
+        <div className="flex items-center justify-center gap-6 mb-8">
+          <div>
+            <div className="font-display text-5xl font-bold text-ink leading-none">{cert.score}</div>
+            <div className="text-xs text-muted mt-1">/ 100</div>
+          </div>
+          <div className="w-px h-12 bg-hairline" />
+          <TierBadge tier={tier} />
+        </div>
+
+        {DIMS.length > 0 && (
+          <div className="border-t border-hairline pt-6 mb-6 text-left">
+            <div className="text-[11px] uppercase tracking-widest text-muted font-semibold mb-4 text-center">Assessed across four dimensions</div>
+            <div className="flex flex-col gap-3">
+              {DIMS.map((d) => (
+                <div key={d.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-ink font-medium">{d.label}</span>
+                    <span className="font-mono text-muted">{d.value}/{d.max}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-hairline overflow-hidden">
+                    <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, (d.value / d.max) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="text-xs text-muted leading-relaxed mb-6">
+          Assessed via automated code review, pull request analysis, hidden test-case validation,
+          and a spoken defence of the solution.
+        </p>
+
+        <div className="border-t border-hairline pt-5 flex items-center justify-between text-left">
+          <div>
+            <div className="text-[9px] uppercase tracking-widest text-muted font-semibold">Issued</div>
+            <div className="text-sm text-ink">{issued}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[9px] uppercase tracking-widest text-muted font-semibold">Credential</div>
+            <div className="font-mono text-sm text-ink">{credId}</div>
+          </div>
+        </div>
+
+        <p className="text-center text-[11px] text-muted mt-4">Verified by DevSimulate — {certUrl.replace(/^https?:\/\//, "")}</p>
+      </div>
+
+      <div className="flex gap-2.5 print:hidden">
+        <a href={linkedInUrl} target="_blank" rel="noreferrer">
+          <Button variant="secondary">Add to LinkedIn</Button>
+        </a>
+        <Button variant="secondary" onClick={onCopy}>{copied ? "✓ Copied" : "Copy link"}</Button>
+        <Button variant="primary" onClick={() => window.print()}>Save as PDF</Button>
+      </div>
+    </div>
+  );
+}
+
+/** The branded DevFest certificate — unchanged rail-and-field template. */
+function DevFestCertificate({
+  cert, certUrl, credId, copied, onCopy,
+}: {
+  cert: CertData; certUrl: string; credId: string; copied: boolean; onCopy: () => void;
+}) {
+  const issued = format(new Date(cert.issuedAt), "MMMM d, yyyy");
   const verifyDisplay = certUrl.replace(/^https?:\/\//, "");
+  const year = new Date(cert.issuedAt).getFullYear();
 
   const linkedInUrl = [
     "https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME",
@@ -75,13 +207,6 @@ export default function CertificatePage() {
     `&certUrl=${encodeURIComponent(certUrl)}`,
     `&certId=${encodeURIComponent(cert.id)}`,
   ].join("");
-
-  function copyLink() {
-    navigator.clipboard.writeText(certUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
 
   return (
     <>
@@ -249,7 +374,7 @@ export default function CertificatePage() {
             </svg>
             Add to LinkedIn
           </a>
-          <button onClick={copyLink} className="btn btn-copy">{copied ? "✓ Copied!" : "Copy Link"}</button>
+          <button onClick={onCopy} className="btn btn-copy">{copied ? "✓ Copied!" : "Copy Link"}</button>
           <button onClick={() => window.print()} className="btn btn-pdf">Save as PDF</button>
         </div>
       </div>

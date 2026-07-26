@@ -216,11 +216,13 @@ export default function CampaignsListPage() {
                             onClick: () => toggleStatus(c),
                             disabled: busyId === c.id,
                           },
-                          {
+                          // DevFest tagging (and the certificate issuance it unlocks) is a
+                          // DevFest-only concept — a Hiring campaign has no leaderboard.
+                          ...(c.type === "CONTEST" ? [{
                             label: c.devFestTag ? `DevFest tag: ${c.devFestTag}` : "Tag for DevFest leaderboard",
                             icon: <Tag size={14} />,
                             onClick: () => { setTagPanel(tagPanel === c.id ? null : c.id); setTagInput(c.devFestTag ?? ""); },
-                          },
+                          }] : []),
                         ]}
                         destructiveItem={{
                           label: "Delete campaign",

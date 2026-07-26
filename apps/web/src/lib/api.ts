@@ -129,6 +129,7 @@ export interface PublicCertificate {
   githubUsername: string;
   campaignName: string;
   companyName: string;
+  campaignType: "HIRING" | "CONTEST";
   score: number;
   rank: number | null;
   category: string | null;

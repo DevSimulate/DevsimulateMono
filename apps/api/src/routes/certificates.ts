@@ -53,7 +53,9 @@ router.get(
 
 /**
  * POST /certificates/employer/campaigns/:campaignId/certificates  (AUTH — employer)
- * Issues certificates to all reviewed candidates in the campaign.
+ * Issues certificates to all reviewed candidates in the campaign scoring at
+ * least `minScore` (the employer app defaults this to 65 for Hiring
+ * campaigns — DevFest keeps its own category-ranked issuance flow).
  * Safe to call multiple times — upserts, will not duplicate.
  */
 router.post(
@@ -67,7 +69,7 @@ router.post(
     try {
       const campaign = await prisma.campaign.findUnique({
         where: { id: campaignId },
-        select: { orgId: true, codebaseId: true, ticketIds: true },
+        select: { orgId: true, codebaseId: true, ticketIds: true, type: true },
       });
       if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
 
@@ -264,6 +266,30 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
 
     if (!cert) { res.status(404).json({ error: "Certificate not found" }); return; }
 
+    // Hiring certificates are generic (DevSimulate-only, no employer
+    // branding) and show the real 4-dimension breakdown; DevFest keeps the
+    // branded template. Look up the same best-scoring reviewed submission
+    // the results page uses.
+    let dimensions: { diagnosis: number; design: number; communication: number; execution: number } | null = null;
+    if (cert.campaign.type === "HIRING") {
+      const sub = await prisma.submission.findFirst({
+        where: {
+          userId: cert.userId, status: "REVIEWED", finalized: true,
+          ...campaignSubmissionScope(cert.campaign),
+        },
+        orderBy: { scoreTotal: "desc" },
+        select: { scoreDiagnosis: true, scoreDesign: true, scoreCommunication: true, scoreExecution: true },
+      });
+      if (sub) {
+        dimensions = {
+          diagnosis: sub.scoreDiagnosis ?? 0,
+          design: sub.scoreDesign ?? 0,
+          communication: sub.scoreCommunication ?? 0,
+          execution: sub.scoreExecution ?? 0,
+        };
+      }
+    }
+
     res.json({
       data: {
         id:             cert.id,
@@ -271,10 +297,12 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
         githubUsername: cert.user.githubUsername ?? "Participant",
         campaignName:   cert.campaign.roleName,
         companyName:    cert.campaign.companyName,
+        campaignType:   cert.campaign.type,
         score:          cert.score,
         rank:           cert.rank,
         category:       cert.category,
         issuedAt:       cert.issuedAt,
+        dimensions,
         branding: {
           logoUrl:      cert.campaign.org.logoUrl      || null,
           primaryColor: cert.campaign.org.primaryColor || "#5B5BD6",
