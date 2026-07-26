@@ -74,6 +74,24 @@ test("critical_failed above the cap: capped and the deduction is recorded", () =
   assert.equal(outcome.needsAttention, undefined);
 });
 
+test("bug_not_fixed (Objective Floor v2) routes identically to critical_failed — caps at 45", () => {
+  const outcome = decideHiddenTestOutcome("bug_not_fixed", scores(80, 25, 5), CAP);
+  assert.equal(outcome.scoreTotal, 45);
+  assert.equal(outcome.hiddenTestPenalty, 35);
+  assert.equal(outcome.needsAttention, undefined);
+});
+
+test("bug_not_fixed honours the human-review valve too (top-band Diagnosis+Execution → flag, no cap)", () => {
+  const outcome = decideHiddenTestOutcome("bug_not_fixed", scores(90, 36, 10), CAP);
+  assert.equal(outcome.needsAttention, true);
+  assert.equal(outcome.scoreTotal, undefined);
+  assert.ok(outcome.needsAttentionReason?.includes("still reproduced"));
+});
+
+test("bug_not_fixed maps to a 'fail' legacy result for old UI", () => {
+  assert.equal(legacyResultFor("bug_not_fixed"), "fail");
+});
+
 test("critical_failed never RAISES a score already at or below the cap", () => {
   const atCap = decideHiddenTestOutcome("critical_failed", scores(45, 20, 5), CAP);
   assert.deepEqual(atCap, {});

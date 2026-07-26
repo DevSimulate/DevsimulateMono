@@ -63,6 +63,8 @@ interface CandidateDetail {
         result?: string; // legacy pass/fail/inconclusive mirror — always present
         status?: string; // richer status when the grader sent per-test results
         counts?: { critical?: { passed?: number; failed?: number }; regression?: { passed?: number; failed?: number } };
+        reproFixed?: boolean; // Objective Floor v2 — did the repro script report BUG FIXED
+        regressions?: string[]; // module-level names of visible tests newly failing vs base
       } | null;
       hiddenTestPenalty: number | null;
       pasteAttempts: number | null;
@@ -90,11 +92,12 @@ interface CandidateDetail {
 }
 
 const GRADER_META: Record<string, { tone: "good" | "warn" | "bad"; text: string }> = {
-  passed:            { tone: "good", text: "Verified correct — hidden tests passed" },
-  pass:              { tone: "good", text: "Verified correct — hidden tests passed" },
-  critical_failed:   { tone: "bad",  text: "Failed hidden verification" },
-  fail:              { tone: "bad",  text: "Failed hidden verification" },
-  regression_failed: { tone: "warn", text: "Passed core verification, but broke a related case" },
+  passed:            { tone: "good", text: "Verified correct — the reported issue no longer reproduces" },
+  pass:              { tone: "good", text: "Verified correct — the reported issue no longer reproduces" },
+  bug_not_fixed:     { tone: "bad",  text: "The reported issue still reproduces → capped at 45" },
+  critical_failed:   { tone: "bad",  text: "The reported issue still reproduces → capped at 45" },
+  fail:              { tone: "bad",  text: "The reported issue still reproduces → capped at 45" },
+  regression_failed: { tone: "warn", text: "Fix verified, but existing tests now fail" },
   build_failed:      { tone: "warn", text: "Candidate's code didn't build under CI" },
   timeout:           { tone: "warn", text: "Hidden test run timed out" },
   error:             { tone: "warn", text: "Hidden test couldn't run" },
@@ -187,6 +190,14 @@ export default function CandidateDetailPage() {
   // here has ever deducted a point, per the platform-wide rule.
   const flags: { text: string; tone: "good" | "warn" | "bad" }[] = [];
   if (graderMeta) flags.push({ text: graderMeta.text, tone: graderMeta.tone });
+  // Objective Floor v2 — name the modules whose existing tests newly fail, so
+  // the employer sees exactly what adjacent functionality broke.
+  {
+    const regs = s.graderResult?.regressions ?? [];
+    if (regs.length > 0) {
+      flags.push({ text: `${regs.length} existing test${regs.length > 1 ? "s" : ""} now fail: ${regs.join(", ")}`, tone: "warn" });
+    }
+  }
   if ((s.pasteAttempts ?? 0) > 0) flags.push({ text: `${s.pasteAttempts} paste attempt${s.pasteAttempts! > 1 ? "s" : ""} into answer fields`, tone: "warn" });
   if (candidate.flaggedForReview) flags.push({ text: `Flagged during assessment${candidate.flaggedReason ? ` — ${candidate.flaggedReason}` : ""}`, tone: "warn" });
   if (timing?.suspiciouslyFast) flags.push({ text: "Completed in under 20% of the estimated time", tone: "warn" });

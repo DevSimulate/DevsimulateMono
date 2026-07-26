@@ -46,10 +46,12 @@ interface FollowUp {
   verbalNote: string | null;
 }
 
+// Candidate-facing: category-level only — never the repro script, test names,
+// or cap mechanics.
 const GRADER_META: Record<string, { tone: BadgeTone; text: string }> = {
-  pass:         { tone: "good", text: "Verified correct under load — automated test passed" },
-  fail:         { tone: "bad",  text: "Failed automated correctness test — Execution capped to 0" },
-  inconclusive: { tone: "warn", text: "Automated test couldn't run (build issue) — flagged for review, score not penalised" },
+  pass:         { tone: "good", text: "Verified — the reported issue no longer reproduces" },
+  fail:         { tone: "bad",  text: "The reported issue could still be reproduced" },
+  inconclusive: { tone: "warn", text: "Automated verification couldn't run — flagged for review, no penalty" },
 };
 
 function SubmissionCard({ submission }: { submission: Submission }) {
