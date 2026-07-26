@@ -1093,20 +1093,26 @@ router.post(
       const mime = (req.headers["content-type"] as string) || "audio/webm";
       const { text, confidence, source } = await transcribeAudio(audio, mime);
 
+      // Pre-flight mic-check clips run the same STT path but must never touch the
+      // real answer's stored confidence — the test can't count against anyone.
+      const isPreflight = req.query.preflight === "true";
+
       // Persist the confidence server-side rather than round-tripping it through
       // the client, so the decision to skip scoring can't be influenced from the
       // browser. Scoped to the caller's own submission.
-      const owned = await prisma.submission.findFirst({
-        where: { id: req.params.id, userId },
-        select: { id: true },
-      });
-      if (owned) {
-        await prisma.followUpQuestion.updateMany({
-          where: { submissionId: owned.id },
-          data: { verbalConfidence: confidence },
+      if (!isPreflight) {
+        const owned = await prisma.submission.findFirst({
+          where: { id: req.params.id, userId },
+          select: { id: true },
         });
+        if (owned) {
+          await prisma.followUpQuestion.updateMany({
+            where: { submissionId: owned.id },
+            data: { verbalConfidence: confidence },
+          });
+        }
       }
-      console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source})`);
+      console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source})${isPreflight ? " [preflight]" : ""}`);
 
       res.json({ data: { transcript: text, confidence } });
     } catch (err) {

@@ -11,6 +11,7 @@ import { StageTracker } from "@/components/assessment/StageTracker";
 import { ProgressNarrative } from "@/components/assessment/ProgressNarrative";
 import { useAudioLevel } from "@/components/assessment/useAudioLevel";
 import { LevelMeter } from "@/components/assessment/LevelMeter";
+import { PreflightCheck } from "@/components/assessment/PreflightCheck";
 import { useLocalAutosave } from "@/components/assessment/useLocalAutosave";
 import { Button } from "@/components/ui/Button";
 import { Textarea, Field } from "@/components/ui/Input";
@@ -278,6 +279,8 @@ function SubmitPageInner() {
   // record→Whisper as a fallback when Web Speech isn't available)
   const [verbalQuestion, setVerbalQuestion] = useState("");
   const [verbalReady,    setVerbalReady]    = useState(false); // true after camera+mic granted
+  const [preflightPassed, setPreflightPassed] = useState(false); // mic-check confirmed
+  const [micDeviceId,    setMicDeviceId]    = useState<string | null>(null); // chosen input
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(300);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
@@ -887,10 +890,14 @@ function SubmitPageInner() {
     setError(null);
     chunksRef.current = [];
 
-    // Ask for camera AND mic up front in one prompt.
+    // Ask for camera AND mic up front in one prompt. Use the input the
+    // candidate validated in the pre-flight check, not the browser default.
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
+      });
     } catch {
       setError("Please allow camera and microphone access, then click Start.");
       return;
@@ -1463,20 +1470,29 @@ function SubmitPageInner() {
             )}
 
             {!verbalReady ? (
+              !preflightPassed ? (
+                <PreflightCheck
+                  apiUrl={API_URL}
+                  token={getToken() ?? ""}
+                  submissionId={submissionId ?? ""}
+                  onPassed={(id) => { setMicDeviceId(id); setPreflightPassed(true); }}
+                />
+              ) : (
               <>
+                <div className="rounded border border-emerald bg-emerald-weak px-4 py-3 mb-4 text-xs text-emerald">
+                  Microphone check passed ✓ — you&apos;re set. The question appears when you start.
+                </div>
                 <div className="rounded border border-hairline bg-paper p-4 mb-4">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">On-the-spot question</div>
                   <p className="text-sm leading-relaxed text-ink">
                     The question stays hidden until you start. Once you click Start, it appears and the <span className="font-semibold">5-minute timer begins</span> — so answer it aloud straight away, in your own words.
                   </p>
                 </div>
-                <div className="rounded border border-hairline px-4 py-3 mb-4 text-xs text-muted">
-                  When you click Start, your browser will ask for <span className="font-semibold text-ink">camera &amp; microphone</span> — this is the pre-flight check, so you can confirm both are live before the timer starts.
-                </div>
                 <Button variant="primary" size="lg" className="w-full" onClick={beginVerbal}>
-                  Start — reveal question &amp; allow camera &amp; mic →
+                  Start — reveal question &amp; begin →
                 </Button>
               </>
+              )
             ) : (
               <>
                 <div className="flex gap-4 mb-4 items-start">
