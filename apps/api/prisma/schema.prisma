@@ -191,6 +191,14 @@ model Submission {
   staleNotifiedAt    DateTime?
   needsAttention     Boolean             @default(false)
   needsAttentionReason String?
+  // How the spoken-defence step was completed. VOICE is the default gate;
+  // TYPED is only ever reached via a mic-failure trigger or an admin grant
+  // (never a candidate preference) — see defenceTrigger for which. Scoring is
+  // identical in both modes; the mode + keystroke-cadence summary are advisory
+  // signals for the employer only.
+  defenceMode        DefenceMode         @default(VOICE)
+  defenceTrigger     String?             // why typed mode was granted (preflight_failed | low_confidence_x2 | admin_grant)
+  typedCadence       Json?               // { charsPerMin, longestPauseMs, burstCount } — advisory, never scored
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
   user               User                @relation(fields: [userId], references: [id])
@@ -317,6 +325,13 @@ enum InviteStatus {
   STARTED
   COMPLETED
   EXPIRED
+}
+
+// Channel used for the spoken-defence step. TYPED is a mic-failure fallback,
+// reached only via a trigger or admin grant — never a candidate preference.
+enum DefenceMode {
+  VOICE
+  TYPED
 }
 
 // An emailed assessment invitation. Exists BEFORE the candidate has an account —
