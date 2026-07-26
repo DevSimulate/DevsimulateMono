@@ -199,3 +199,40 @@ export function interviewInviteEmail(opts: {
 
   return { subject, html };
 }
+
+/**
+ * Builds the rejection email for a candidate the employer has passed on.
+ * Plain and respectful — states the decision and nothing more; never
+ * references score, flags, or any advisory signal.
+ */
+export function rejectionEmail(opts: {
+  candidateName: string;
+  companyName: string;
+  roleName: string;
+}): { subject: string; html: string } {
+  const { candidateName, companyName, roleName } = opts;
+  const subject = `Update on your ${roleName} application — ${companyName}`;
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="font-weight:800;font-size:18px;margin-bottom:24px;">⚡ DevSimulate</div>
+    <h1 style="font-size:22px;margin:0 0 16px;">Thanks for completing the assessment</h1>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      Hi ${candidateName},<br><br>
+      Thank you for taking the time to complete the <strong>${roleName}</strong> assessment for
+      <strong>${companyName}</strong> on DevSimulate. After careful review, the team has decided
+      to move forward with other candidates for this role.
+    </p>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      We appreciate the effort you put in, and we&rsquo;d encourage you to apply again for future
+      openings.
+    </p>
+    <p style="font-size:13px;color:#888;line-height:1.6;">
+      — The ${companyName} Hiring Team
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#aaa;">Sent via DevSimulate on behalf of ${companyName}.</p>
+  </div>`;
+
+  return { subject, html };
+}

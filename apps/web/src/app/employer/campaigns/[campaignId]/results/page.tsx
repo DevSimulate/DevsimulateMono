@@ -182,6 +182,7 @@ export default function ResultsPage() {
   const [inviteResult,  setInviteResult]  = useState<string | null>(null);
   const [certIssuing,   setCertIssuing]   = useState(false);
   const [certResult,    setCertResult]    = useState<string | null>(null);
+  const [rejectResult,  setRejectResult]  = useState<string | null>(null);
 
   // Filters
   const [minScore, setMinScore] = useState(0);
@@ -273,15 +274,21 @@ export default function ResultsPage() {
 
   async function bulkStatus(status: string) {
     const token = getToken();
-    await Promise.all(
+    const count = selected.size;
+    const results = await Promise.all(
       [...selected].map((id) =>
         fetch(`${API}/employer/campaigns/${campaignId}/candidates/${id}`, {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ status }),
-        })
+        }).then((r) => r.json()).catch(() => ({}))
       )
     );
+    if (status === "REJECTED") {
+      const emailed = results.filter((r) => r?.data?.emailed).length;
+      setRejectResult(`${count} rejected — ${emailed} emailed`);
+      setTimeout(() => setRejectResult(null), 6000);
+    }
     setSelected(new Set());
     load();
   }
@@ -375,6 +382,11 @@ export default function ResultsPage() {
       {inviteResult && (
         <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2" style={{ background: EMERALD_WEAK, color: EMERALD, borderBottom: `1px solid ${HAIRLINE}` }}>
           <Check size={15} /> Invites sent — {inviteResult}
+        </div>
+      )}
+      {rejectResult && (
+        <div className="px-8 py-2.5 text-sm font-semibold flex items-center gap-2" style={{ background: RED_WEAK, color: RED, borderBottom: `1px solid ${HAIRLINE}` }}>
+          <X size={15} /> {rejectResult}
         </div>
       )}
 
@@ -680,6 +692,9 @@ export default function ResultsPage() {
           style={{ background: SURFACE, border: `1px solid ${HAIRLINE}`, marginLeft: "120px" }}>
           <span className="text-sm font-bold" style={{ color: INK }}>{selected.size} selected</span>
           <div className="w-px h-6" style={{ background: HAIRLINE }} />
+          <Button variant="destructive" size="sm" onClick={() => bulkStatus("REJECTED")}>
+            <X size={13} className="mr-1.5" /> Reject
+          </Button>
           <Button variant="primary" size="sm" onClick={() => setShowInvite(true)}>
             <Mail size={13} className="mr-1.5" /> Invite to interview
           </Button>
@@ -688,9 +703,6 @@ export default function ResultsPage() {
           </Button>
           <Button variant="secondary" size="sm" onClick={() => bulkStatus("REVIEWED")}>
             <CheckCircle2 size={13} className="mr-1.5" /> Mark reviewed
-          </Button>
-          <Button variant="destructive" size="sm" onClick={() => bulkStatus("REJECTED")}>
-            <X size={13} className="mr-1.5" /> Reject
           </Button>
           <button onClick={() => setSelected(new Set())} className="text-xs font-medium" style={{ color: MUTED }}>
             Clear

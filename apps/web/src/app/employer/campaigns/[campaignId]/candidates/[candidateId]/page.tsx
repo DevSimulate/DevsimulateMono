@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
-import { ArrowLeft, Github, Mail, ExternalLink } from "lucide-react";
+import { ArrowLeft, Github, Mail, MailX, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge, TierBadge, tierForScore } from "@/components/ui/Badge";
@@ -144,6 +144,19 @@ export default function CandidateDetailPage() {
     setStatus("SHORTLISTED");
   }
 
+  async function reject() {
+    const token = getToken();
+    const r = await fetch(`${API}/employer/campaigns/${campaignId}/candidates/${candidateId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "REJECTED" }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.data?.emailed) toast.show("Rejection email sent", "good");
+    else toast.show("Rejected — candidate has no email on file, so no email was sent", "bad");
+    setStatus("REJECTED");
+  }
+
   if (loading) return <div className="p-10 text-sm" style={{ color: MUTED }}>Loading…</div>;
   if (!data?.candidate?.submission) return <div className="p-10 text-sm" style={{ color: MUTED }}>No data.</div>;
 
@@ -186,6 +199,9 @@ export default function CandidateDetailPage() {
           </h1>
           <p className="text-xs" style={{ color: MUTED }}>{campaign.roleName} · {campaign.companyName}</p>
         </div>
+        <Button variant="destructive" onClick={reject}>
+          <MailX size={14} className="mr-1.5" /> Reject
+        </Button>
         <Button variant="primary" onClick={invite}>
           <Mail size={14} className="mr-1.5" /> Invite to interview
         </Button>

@@ -5,7 +5,7 @@ import prisma from "../lib/prisma";
 import { Difficulty, CampaignStatus, CandidateStatus, CampaignType, InviteStatus } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
-import { sendEmail, interviewInviteEmail, assessmentInviteEmail } from "../lib/email";
+import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 import { computeHiringSignals } from "../lib/hiring-signals";
@@ -933,6 +933,7 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
 
     const current = await prisma.campaignCandidate.findUnique({
       where: { id: req.params.candidateId },
+      include: { user: { select: { email: true, githubUsername: true } } },
     });
     if (!current) { res.status(404).json({ error: "Candidate not found" }); return; }
 
@@ -962,7 +963,19 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
       },
     });
 
-    res.json({ data: updated });
+    // Newly rejected (not re-saving an already-rejected candidate) → notify
+    // by email, best-effort. Plain and respectful — no score or flags in it.
+    let emailed = false;
+    if (status === CandidateStatus.REJECTED && current.status !== CandidateStatus.REJECTED && current.user.email) {
+      const { subject, html } = rejectionEmail({
+        candidateName: current.user.githubUsername ?? "Candidate",
+        companyName: campaign.companyName,
+        roleName: campaign.roleName,
+      });
+      emailed = await sendEmail({ to: current.user.email, subject, html });
+    }
+
+    res.json({ data: { ...updated, emailed } });
   } catch (err) {
     res.status(500).json({ error: "Failed to update candidate" });
   }
