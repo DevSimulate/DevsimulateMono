@@ -83,6 +83,7 @@ type Stage =
   | "q2"
   | "verbal"
   | "verbal_review"
+  | "verbal_typed"
   | "scoring"
   | "score"
   | "upgrade";
@@ -107,6 +108,7 @@ function stepIndex(stage: Stage): number {
     q2:         3,
     verbal:     4,
     verbal_review: 4,
+    verbal_typed: 4,
     scoring:    5,
     score:      5,
     upgrade:    0,
@@ -281,6 +283,14 @@ function SubmitPageInner() {
   const [verbalReady,    setVerbalReady]    = useState(false); // true after camera+mic granted
   const [preflightPassed, setPreflightPassed] = useState(false); // mic-check confirmed
   const [micDeviceId,    setMicDeviceId]    = useState<string | null>(null); // chosen input
+  // Typed-defence fallback — only ever entered via a server-granted mic-failure
+  // trigger (never a candidate choice). Same question, typed channel.
+  const [typedReady,     setTypedReady]     = useState(false); // camera granted for typed mode
+  const [typedAnswer,    setTypedAnswer]    = useState("");
+  const [typedTimeLeft,  setTypedTimeLeft]  = useState(300);
+  const typedTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const keyTimestampsRef = useRef<number[]>([]);
+  const TYPED_SECONDS    = 300; // UX countdown; server owns the authoritative limit
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(300);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
@@ -436,7 +446,9 @@ function SubmitPageInner() {
         const vqd = await vq.json();
         if (vq.ok && vqd.data?.question) {
           setVerbalQuestion(vqd.data.question);
-          setStage("verbal");
+          // Resume into whichever channel was active before the tab closed.
+          if (j.data.defenceMode === "TYPED") enterTypedMode();
+          else setStage("verbal");
         } else {
           setError("Couldn't load the final question. Please refresh, or contact the administrator.");
           setStage("describe");
@@ -524,7 +536,7 @@ function SubmitPageInner() {
     setDesignDoc(composed);
   }, [designFields]);
 
-  const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2"];
+  const WATCHED_STAGES = ["describe", "sd_write", "q1", "q2", "verbal_typed"];
   useEffect(() => {
     const active = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified;
 
@@ -928,6 +940,118 @@ function SubmitPageInner() {
     }, 1000);
   }
 
+  // ── Typed-defence fallback ────────────────────────────────────────────────
+  // Entered ONLY when the server has granted typed mode (mic failure). Same
+  // question, typed answer channel, stricter conditions (timer + paste block +
+  // fullscreen + camera). Scoring is identical to voice.
+  function enterTypedMode() {
+    stopVerbalMedia();
+    setError(null);
+    setPendingReview(null);
+    setTypedAnswer("");
+    keyTimestampsRef.current = [];
+    setTypedReady(false);
+    setStage("verbal_typed");
+  }
+
+  function stopTypedMedia() {
+    if (typedTimerRef.current) { clearInterval(typedTimerRef.current); typedTimerRef.current = null; }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+
+  // Camera stays on for presence exactly as in voice mode (no mic — it failed).
+  async function beginTypedDefence() {
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch {
+      setError("Please allow camera access to continue — it stays on for presence, exactly as in voice mode.");
+      return;
+    }
+    streamRef.current = stream;
+    if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); }
+    keyTimestampsRef.current = [];
+    setTypedReady(true);
+    setTypedTimeLeft(TYPED_SECONDS);
+    typedTimerRef.current = setInterval(() => {
+      setTypedTimeLeft((s) => (s <= 1 ? 0 : s - 1));
+    }, 1000);
+  }
+
+  // Paste is ALWAYS blocked in typed mode — it's an integrity fallback, so the
+  // campaign's paste policy doesn't relax it.
+  function handleTypedPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    e.preventDefault();
+    const next = pasteCount + 1;
+    setPasteCount(next);
+    if (next >= 3) void flagForReview("paste attempts (typed defence)");
+    setPasteWarn(true);
+    setTimeout(() => setPasteWarn(false), 7000);
+  }
+
+  function recordKeystroke() {
+    keyTimestampsRef.current.push(Date.now());
+  }
+
+  async function submitTypedAnswer() {
+    if (verbalBusy) return;
+    if (typedAnswer.trim().split(/\s+/).filter(Boolean).length < 2) {
+      setError("Please type a fuller answer before submitting.");
+      return;
+    }
+    setVerbalBusy(true);
+    setScoringMsg("Scoring your typed defence…");
+    const token = getToken();
+    try {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/typed-answer`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: verbalQuestion,
+          answer: typedAnswer,
+          keyTimestamps: keyTimestampsRef.current,
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.data) {
+        setVerbalBusy(false);
+        setError(d.error ?? "Couldn't score your answer — please try again.");
+        return;
+      }
+      stopTypedMedia();
+      const zero: ReviewResult = {
+        scoreTotal: 0, scoreDiagnosis: 0, scoreDesign: 0, scoreCommunication: 0, scoreExecution: 0,
+        claudeReview: null, followUpFeedback: null, scoreBonus: 0,
+        declarationMismatch: false, mismatchPenalty: 0, bonusNote: null,
+      };
+      if (hideResults || d.data.hideResults) {
+        setResult((prev) => prev ?? zero);
+        setVerbalBusy(false);
+        setError(null);
+        setStage("score");
+        return;
+      }
+      setResult((prev) => ({
+        ...(prev ?? zero),
+        scoreTotal:     d.data.newScoreTotal ?? prev?.scoreTotal ?? 0,
+        scoreDiagnosis: d.data.scoreDiagnosis ?? prev?.scoreDiagnosis ?? 0,
+        scoreDesign:    d.data.scoreDesign ?? prev?.scoreDesign ?? 0,
+        verbalNote:     d.data.note,
+        verbalScore:    d.data.score,
+        verbalPenalty:  d.data.penalty ?? 0,
+      }));
+      setVerbalBusy(false);
+      setError(null);
+      setStage("score");
+    } catch {
+      setVerbalBusy(false);
+      setError("Couldn't reach the server — please try again.");
+    }
+  }
+
   function stopAndGetAudio(): Promise<Blob> {
     return new Promise((resolve) => {
       const rec = recorderRef.current;
@@ -1010,6 +1134,14 @@ function SubmitPageInner() {
         setStage("verbal_review");
         return;
       }
+      // Mic failed twice on this question — the server granted typed mode.
+      // Switch channels for the same question (checked before hiring/score so a
+      // hiring candidate still gets to actually complete the defence).
+      if (d.data.typedGranted) {
+        setVerbalBusy(false);
+        enterTypedMode();
+        return;
+      }
       // Hiring candidates never see a score — the server returns only a
       // completion marker, so go straight to the received-state.
       if (hideResults || d.data.hideResults) {
@@ -1082,6 +1214,20 @@ function SubmitPageInner() {
     if (stage === "verbal" && verbalReady && verbalTimeLeft === 0 && !verbalBusy) stopAndReview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verbalTimeLeft, stage, verbalReady]);
+
+  // Typed defence: the hard timer auto-submits whatever's typed at zero — the
+  // timer is what keeps typed answers as spontaneous as spoken ones.
+  useEffect(() => {
+    if (stage === "verbal_typed" && typedReady && typedTimeLeft === 0 && !verbalBusy) void submitTypedAnswer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedTimeLeft, stage, typedReady]);
+
+  // Clean up typed-mode media if the stage changes away.
+  useEffect(() => {
+    if (stage !== "verbal_typed") return;
+    return () => stopTypedMedia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage]);
 
   const mins      = Math.floor(timeLeft / 60).toString().padStart(2, "0");
   const secs      = (timeLeft % 60).toString().padStart(2, "0");
@@ -1476,6 +1622,7 @@ function SubmitPageInner() {
                   token={getToken() ?? ""}
                   submissionId={submissionId ?? ""}
                   onPassed={(id) => { setMicDeviceId(id); setPreflightPassed(true); }}
+                  onRepeatedFailure={enterTypedMode}
                 />
               ) : (
               <>
@@ -1557,6 +1704,75 @@ function SubmitPageInner() {
                 {verbalRetries > 0 ? `Re-record (${verbalRetries} left)` : "No re-records left"}
               </Button>
             </div>
+          </Card>
+        )}
+
+        {/* ── Stage: Typed defence (mic-failure fallback) ── */}
+        {stage === "verbal_typed" && (
+          <Card className="p-6">
+            <div className="rounded border border-brand bg-brand-weak px-4 py-3 mb-4 text-xs text-brand leading-relaxed">
+              <span className="font-semibold">You&apos;re completing the defence in typed mode.</span>{" "}
+              Your microphone couldn&apos;t be used, so you&apos;ll type this answer instead.{" "}
+              <span className="font-semibold">Scoring is identical.</span>
+            </div>
+            <h2 className="font-display text-lg font-semibold mb-1 text-ink">Explain it in writing</h2>
+            <p className="text-xs mb-4 text-muted leading-relaxed">
+              Same question, typed. There&apos;s a <span className="font-semibold text-ink">5-minute timer</span>,
+              pasting is disabled, and your camera stays on — exactly the conditions of the spoken defence.
+            </p>
+            {error && (
+              <div className="text-xs mb-4 rounded border border-amber bg-amber-weak px-3 py-2 text-amber">{error}</div>
+            )}
+            {pasteWarn && (
+              <div className="text-xs mb-4 rounded border border-amber bg-amber-weak px-3 py-2 text-amber">
+                Pasting is disabled in typed mode — please answer in your own words.
+              </div>
+            )}
+
+            {!typedReady ? (
+              <>
+                <div className="rounded border border-hairline bg-paper p-4 mb-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-1">On-the-spot question</div>
+                  <p className="text-sm leading-relaxed text-ink">
+                    The question appears when you start, and the <span className="font-semibold">5-minute timer begins</span> — so answer straight away, in your own words.
+                  </p>
+                </div>
+                <Button variant="primary" size="lg" className="w-full" onClick={beginTypedDefence}>
+                  Start — reveal question &amp; allow camera →
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="flex gap-4 mb-4 items-start">
+                  <video ref={videoRef} muted autoPlay playsInline
+                    className="rounded shrink-0" style={{ width: 160, height: 120, objectFit: "cover", background: "#000", transform: "scaleX(-1)" }} />
+                  <div className="flex-1 rounded border border-hairline bg-paper p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted">Answer in writing</span>
+                      <span className={cn("font-mono text-sm font-semibold", typedTimeLeft <= 30 ? "text-amber" : "text-muted")}>
+                        {Math.floor(typedTimeLeft / 60)}:{(typedTimeLeft % 60).toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                    <p className="font-display text-base font-semibold leading-relaxed text-ink">{verbalQuestion}</p>
+                  </div>
+                </div>
+
+                <Textarea
+                  value={typedAnswer}
+                  onChange={(e) => setTypedAnswer(e.target.value)}
+                  onPaste={handleTypedPaste}
+                  onKeyDown={recordKeystroke}
+                  placeholder="Explain your fix and how you know it works…"
+                  rows={8}
+                  autoFocus
+                  className="mb-4"
+                />
+
+                <Button variant="primary" size="lg" className="w-full" onClick={submitTypedAnswer} disabled={verbalBusy}>
+                  {verbalBusy ? "Scoring…" : "Submit my defence →"}
+                </Button>
+              </>
+            )}
           </Card>
         )}
 

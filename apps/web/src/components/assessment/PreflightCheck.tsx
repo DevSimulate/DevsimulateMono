@@ -174,10 +174,11 @@ export function PreflightCheck({
       const text = (r.ok && d.data?.transcript ? (d.data.transcript as string) : "").trim();
       setTranscript(text);
       if (text.split(/\s+/).filter(Boolean).length < 2) {
-        const next = failCount + 1;
-        setFailCount(next);
-        if (next >= maxFails) onRepeatedFailure?.();
+        setFailCount((n) => n + 1);
       }
+      // The SERVER counts garbled clips and decides when typed mode is granted
+      // (authoritative — the client can't fake it). Honour its signal.
+      if (d.data?.typedGranted) onRepeatedFailure?.();
     } catch {
       setTranscript("");
     } finally {

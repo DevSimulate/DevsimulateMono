@@ -66,6 +66,9 @@ interface CandidateDetail {
       } | null;
       hiddenTestPenalty: number | null;
       pasteAttempts: number | null;
+      defenceMode?: "VOICE" | "TYPED" | null;
+      defenceTrigger?: string | null;
+      typedCadence?: { charsPerMin?: number; longestPauseMs?: number; burstCount?: number; keystrokes?: number } | null;
       submittedAt: string;
       ticket: { title: string; difficulty: string };
       followUp: {
@@ -187,6 +190,22 @@ export default function CandidateDetailPage() {
   if ((s.pasteAttempts ?? 0) > 0) flags.push({ text: `${s.pasteAttempts} paste attempt${s.pasteAttempts! > 1 ? "s" : ""} into answer fields`, tone: "warn" });
   if (candidate.flaggedForReview) flags.push({ text: `Flagged during assessment${candidate.flaggedReason ? ` — ${candidate.flaggedReason}` : ""}`, tone: "warn" });
   if (timing?.suspiciouslyFast) flags.push({ text: "Completed in under 20% of the estimated time", tone: "warn" });
+
+  // Typed-defence advisory — a mic-failure fallback, NOT a deduction. Shows the
+  // mode + why + a keystroke-cadence summary (machine-generated prose tends to
+  // arrive in a few bursts with near-zero pause variance).
+  const cad = s.typedCadence;
+  if (s.defenceMode === "TYPED") {
+    const trigger =
+      s.defenceTrigger === "preflight_failed" ? "microphone failed the mic check"
+      : s.defenceTrigger === "low_confidence_x2" ? "microphone audio was unusable twice"
+      : s.defenceTrigger === "admin_grant" ? "granted by an administrator"
+      : "microphone failure";
+    const cadenceText = cad
+      ? ` — typed at ${cad.charsPerMin ?? 0} chars/min in ${cad.burstCount ?? 0} burst${cad.burstCount === 1 ? "" : "s"}, longest pause ${Math.round((cad.longestPauseMs ?? 0) / 1000)}s`
+      : "";
+    flags.push({ text: `Defence mode: typed (${trigger}) — nothing deducted${cadenceText}`, tone: "warn" });
+  }
 
   return (
     <div className="min-h-screen" style={{ color: INK, background: PAPER }}>

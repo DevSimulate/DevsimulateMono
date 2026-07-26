@@ -199,6 +199,11 @@ model Submission {
   defenceMode        DefenceMode         @default(VOICE)
   defenceTrigger     String?             // why typed mode was granted (preflight_failed | low_confidence_x2 | admin_grant)
   typedCadence       Json?               // { charsPerMin, longestPauseMs, burstCount } — advisory, never scored
+  // Server-authoritative failure counters that gate typed mode. Only the
+  // server (which runs the STT) increments these, so typed mode can never be
+  // self-selected — it's earned by real, server-classified audio failures.
+  preflightFails     Int                 @default(0)
+  verbalLowConfHits  Int                 @default(0)
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
   user               User                @relation(fields: [userId], references: [id])

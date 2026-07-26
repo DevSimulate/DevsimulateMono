@@ -16,6 +16,11 @@ import {
   canCandidateSeeEvaluation,
   campaignVisibilityInclude,
 } from "../lib/evaluation-visibility";
+import {
+  TYPED_DEFENCE_PREFLIGHT_FAILS,
+  TYPED_DEFENCE_LOWCONF_HITS,
+} from "../config/typed-defence";
+import { summarizeCadence } from "../services/cadence";
 
 const router = Router();
 
@@ -494,6 +499,9 @@ router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => 
       data: {
         resumable: true,
         stage: "verbal",
+        // Resume into whichever channel was active — a candidate who fell into
+        // typed mode before the tab closed comes back to typed mode, not voice.
+        defenceMode: submission.defenceMode,
         ticketId: submission.ticket.id,
         ticketTitle: submission.ticket.title,
         stack: submission.ticket.stack,
@@ -966,8 +974,28 @@ async function processVerbal(
       },
     });
     await flagForHumanReview(sub.id, "low-confidence transcript");
-    console.log(`[verbal] ${sub.id} routed to human review — confidence ${confidence}`);
 
+    // Server-authoritative typed-mode trigger (b): low-confidence spoken answers
+    // for the same question. After the threshold, grant typed mode so a failing
+    // microphone stops being a dead end.
+    const hits = sub.verbalLowConfHits + 1;
+    const typedGranted = sub.defenceMode === "TYPED" || hits >= TYPED_DEFENCE_LOWCONF_HITS;
+    await prisma.submission.update({
+      where: { id: sub.id },
+      data: {
+        verbalLowConfHits: hits,
+        ...(typedGranted && sub.defenceMode !== "TYPED"
+          ? { defenceMode: "TYPED", defenceTrigger: "low_confidence_x2" }
+          : {}),
+      },
+    });
+    console.log(`[verbal] ${sub.id} low-confidence ${confidence} — hits ${hits}, typedGranted ${typedGranted}`);
+
+    // Typed mode overrides the usual endings: the candidate continues the SAME
+    // question in typed mode, regardless of hiring (hiding applies at final).
+    if (typedGranted) {
+      return { status: 200, body: { data: { lowConfidence: true, typedGranted: true } } };
+    }
     if (hideEvaluation) return completionBody;
     return {
       status: 200,
@@ -1015,29 +1043,52 @@ async function processVerbal(
     scored = consensusVerbal(runs).result;
   }
 
-  // Graduated penalty — >=7: no change. Can't defend it aloud / inconsistent: full -20.
+  return applyDefenceScore(sub, scored, transcript, { hideEvaluation, completionBody });
+}
+
+/**
+ * The graduated-penalty + finalize tail shared by BOTH the spoken and typed
+ * defence paths — the penalty table is identical by construction, per the rule
+ * that typed mode is a channel change, not a scoring change.
+ *
+ * Graduated penalty — >=7: no change. Can't defend it / inconsistent: full -20.
+ * The deduction is attributed to the two "understanding" dimensions the defence
+ * actually tests — Diagnosis (40) and Design (30) — split 40:30, Diagnosis
+ * first, never below 0. Original per-dimension scores are preserved in the
+ * stored claudeReview JSON for audit.
+ */
+async function applyDefenceScore(
+  sub: {
+    id: string;
+    scoreTotal: number | null;
+    scoreDiagnosis: number | null;
+    scoreDesign: number | null;
+    followUp: { id: string } | null;
+  },
+  scored: { consistent: boolean; score: number; note: string },
+  transcript: string,
+  opts: {
+    hideEvaluation: boolean;
+    completionBody: { status: number; body: object };
+    /** Extra Submission fields to persist (e.g. typedCadence). */
+    extraSubmissionData?: Record<string, unknown>;
+  }
+): Promise<{ status: number; body: object }> {
   let verbalPenalty = 0;
   if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
   else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
 
-  // Attribute the deduction to the two "understanding" dimensions the verbal
-  // actually tests — Diagnosis (40) and Design (30) — instead of a flat hit on
-  // the total. Split 40:30, take from Diagnosis first, and never drive a
-  // dimension below 0. This keeps the breakdown coherent: a weak spoken defence
-  // lowers the very scores (root-cause understanding + design judgement) it
-  // calls into question. The original per-dimension scores are preserved in the
-  // stored claudeReview JSON for audit.
   const curDiag = sub.scoreDiagnosis ?? 0;
   const curDesign = sub.scoreDesign ?? 0;
   const actualPenalty = Math.min(verbalPenalty, curDiag + curDesign);
   let diagCut = Math.min(curDiag, Math.round(actualPenalty * (40 / 70)));
-  let designCut = Math.min(curDesign, actualPenalty - diagCut);
+  const designCut = Math.min(curDesign, actualPenalty - diagCut);
   diagCut = Math.min(curDiag, diagCut + (actualPenalty - diagCut - designCut)); // rounding spill → diagnosis
   const newDiag = curDiag - diagCut;
   const newDesign = curDesign - designCut;
   const newScoreTotal = Math.max(0, (sub.scoreTotal ?? 0) - actualPenalty);
 
-  // Verbal is scored — the assessment is now complete, so publish it through
+  // Defence is scored — the assessment is now complete, so publish it through
   // the shared finalization path (also recomputes Skill Score post-deduction).
   await finalizeSubmission(sub.id, {
     scoreTotal: newScoreTotal,
@@ -1045,12 +1096,17 @@ async function processVerbal(
     scoreDesign: newDesign,
     verbalPenalty: actualPenalty,
   });
-  await prisma.followUpQuestion.update({
-    where: { id: sub.followUp.id },
-    data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
-  });
+  if (opts.extraSubmissionData) {
+    await prisma.submission.update({ where: { id: sub.id }, data: opts.extraSubmissionData });
+  }
+  if (sub.followUp) {
+    await prisma.followUpQuestion.update({
+      where: { id: sub.followUp.id },
+      data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
+    });
+  }
 
-  if (hideEvaluation) return completionBody;
+  if (opts.hideEvaluation) return opts.completionBody;
   return {
     status: 200,
     body: {
@@ -1078,6 +1134,79 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
 });
 
 /**
+ * POST /submissions/:id/typed-answer — body { question, answer, keyTimestamps }
+ *
+ * The mic-failure fallback. Only reachable when defenceMode is already TYPED
+ * (granted server-side by a real audio-failure trigger or an admin), so it can
+ * never be self-selected. Runs the SAME 3-pass median evaluation and the SAME
+ * graduated penalty as the spoken path — only the answer channel differs — then
+ * stores an advisory keystroke-cadence summary and finalizes.
+ */
+router.post("/:id/typed-answer", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { question, answer, keyTimestamps } = req.body as {
+    question?: string;
+    answer?: string;
+    keyTimestamps?: number[];
+  };
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: req.params.id },
+      include: { followUp: true, ...campaignVisibilityInclude },
+    });
+    if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
+    if (sub.defenceMode !== "TYPED") {
+      res.status(403).json({ error: "Typed defence is not enabled for this submission." });
+      return;
+    }
+    if (!sub.followUp) { res.status(400).json({ error: "Complete the follow-up first" }); return; }
+
+    const text = (answer ?? "").trim();
+    if (text.split(/\s+/).filter(Boolean).length < 2) {
+      res.status(400).json({ error: "Please type a fuller answer." });
+      return;
+    }
+
+    const hideEvaluation = !canCandidateSeeEvaluation(sub);
+    const completionBody = { status: 200, body: { data: { hideResults: true, completed: true } } };
+
+    // Same evaluation as the spoken path — the typed text is the "transcript".
+    let scored: Awaited<ReturnType<typeof scoreVerbalAnswer>>;
+    if (sub.designDoc) {
+      const designDoc = sub.designDoc;
+      const runs = await gatherRuns(
+        SCORING_RUNS,
+        () => scoreVerbalAnswerForDesign(question ?? "", text, sub.followUp!.answer1 ?? "", sub.followUp!.answer2 ?? "", designDoc),
+        `typed-sd ${sub.id}`
+      );
+      if (runs.length === 0) { res.status(502).json({ error: "Scoring is temporarily unavailable — please try again in a moment." }); return; }
+      scored = consensusVerbal(runs).result;
+    } else {
+      const m = sub.prUrl ? PR_RE.exec(sub.prUrl) : null;
+      if (!m) { res.status(400).json({ error: "No valid PR on this submission" }); return; }
+      const diff = await fetchPrDiff(m[1], m[2], parseInt(m[3], 10));
+      const runs = await gatherRuns(
+        SCORING_RUNS,
+        () => scoreVerbalAnswer(question ?? "", text, sub.followUp!.answer1 ?? "", sub.followUp!.answer2 ?? "", diff),
+        `typed-pr ${sub.id}`
+      );
+      if (runs.length === 0) { res.status(502).json({ error: "Scoring is temporarily unavailable — please try again in a moment." }); return; }
+      scored = consensusVerbal(runs).result;
+    }
+
+    const cadence = summarizeCadence(Array.isArray(keyTimestamps) ? keyTimestamps : [], text.length);
+    const r = await applyDefenceScore(sub, scored, text, {
+      hideEvaluation,
+      completionBody,
+      extraSubmissionData: { typedCadence: cadence as object },
+    });
+    res.status(r.status).json(r.body);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to score typed answer" });
+  }
+});
+
+/**
  * POST /submissions/:id/verbal-transcribe — raw audio body (audio/webm).
  * Transcribes with Whisper and returns the text ONLY (no scoring), so the
  * candidate can review exactly what was captured before it's scored.
@@ -1096,23 +1225,52 @@ router.post(
       // Pre-flight mic-check clips run the same STT path but must never touch the
       // real answer's stored confidence — the test can't count against anyone.
       const isPreflight = req.query.preflight === "true";
+      const garbled = text.trim().split(/\s+/).filter(Boolean).length < 2 || isLowConfidence(confidence);
+
+      if (isPreflight) {
+        // Server-authoritative typed-mode trigger (a): count clips WE classify as
+        // garbled. After the threshold, grant typed mode — the candidate can't
+        // fake this, since the server ran the STT. Confidence is NOT persisted.
+        let typedGranted = false;
+        const owned = await prisma.submission.findFirst({
+          where: { id: req.params.id, userId },
+          select: { id: true, preflightFails: true, defenceMode: true },
+        });
+        if (owned) {
+          if (owned.defenceMode === "TYPED") {
+            typedGranted = true;
+          } else if (garbled) {
+            const fails = owned.preflightFails + 1;
+            const grant = fails >= TYPED_DEFENCE_PREFLIGHT_FAILS;
+            await prisma.submission.update({
+              where: { id: owned.id },
+              data: {
+                preflightFails: fails,
+                ...(grant ? { defenceMode: "TYPED", defenceTrigger: "preflight_failed" } : {}),
+              },
+            });
+            typedGranted = grant;
+          }
+        }
+        console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source}) [preflight, garbled=${garbled}, typedGranted=${typedGranted}]`);
+        res.json({ data: { transcript: text, confidence, garbled, typedGranted } });
+        return;
+      }
 
       // Persist the confidence server-side rather than round-tripping it through
       // the client, so the decision to skip scoring can't be influenced from the
       // browser. Scoped to the caller's own submission.
-      if (!isPreflight) {
-        const owned = await prisma.submission.findFirst({
-          where: { id: req.params.id, userId },
-          select: { id: true },
+      const owned = await prisma.submission.findFirst({
+        where: { id: req.params.id, userId },
+        select: { id: true },
+      });
+      if (owned) {
+        await prisma.followUpQuestion.updateMany({
+          where: { submissionId: owned.id },
+          data: { verbalConfidence: confidence },
         });
-        if (owned) {
-          await prisma.followUpQuestion.updateMany({
-            where: { submissionId: owned.id },
-            data: { verbalConfidence: confidence },
-          });
-        }
       }
-      console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source})${isPreflight ? " [preflight]" : ""}`);
+      console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source})`);
 
       res.json({ data: { transcript: text, confidence } });
     } catch (err) {
