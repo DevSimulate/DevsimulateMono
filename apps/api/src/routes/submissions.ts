@@ -320,7 +320,13 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
 
   try {
     const submissions = await prisma.submission.findMany({
-      where: { userId, status: "REVIEWED" },
+      // Hiring candidates never see their score anywhere on the dashboard —
+      // exclude those submissions from the chart, not just the card.
+      where: {
+        userId,
+        status: "REVIEWED",
+        campaignCandidates: { none: { campaign: { type: "HIRING" } } },
+      },
       orderBy: { submittedAt: "asc" },
       take: limit,
       select: {
@@ -389,10 +395,22 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     const submissions = await prisma.submission.findMany({
       where: { userId },
       orderBy: { submittedAt: "desc" },
-      include: { ticket: true, followUp: true },
+      include: {
+        ticket: true,
+        followUp: true,
+        campaignCandidates: { select: { campaign: { select: { type: true } } } },
+      },
     });
 
-    res.json({ data: submissions });
+    // Hiring candidates never see their score/feedback on the dashboard either
+    // — only a generic "we received it" message. Contest/DevFest submissions
+    // are unaffected.
+    const withHideFlag = submissions.map(({ campaignCandidates, ...sub }) => ({
+      ...sub,
+      hideResults: campaignCandidates.some((cc) => cc.campaign.type === "HIRING"),
+    }));
+
+    res.json({ data: withHideFlag });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list submissions";
     res.status(500).json({ error: message });

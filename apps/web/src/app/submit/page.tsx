@@ -257,6 +257,8 @@ function SubmitPageInner() {
   const [pendingReview, setPendingReview] = useState<string | null>(null); // awaiting a human, no penalty
   // Proctoring policy — loaded from the ticket's campaign. Default strict until it loads.
   const [proctoring,   setProctoring]   = useState({ blockPaste: true, requireFullscreen: true });
+  // Hiring candidates never see their score — only a generic "received" message.
+  const [hideResults,  setHideResults]  = useState(false);
   const [disqualified, setDisqualified] = useState(false);
   // "paste" is deliberately absent — paste attempts flag for review, they no
   // longer disqualify. Only repeated assessment-abandonment ends a run.
@@ -464,6 +466,7 @@ function SubmitPageInner() {
       .then((r) => r.json())
       .then((data) => {
         if (data.proctoring) setProctoring(data.proctoring);
+        setHideResults(!!data.hideResults);
         if (data.data) {
           setTicket(data.data);
           setStage(data.data.stack === "SYSTEM_DESIGN" ? "sd_write" : "describe");
@@ -1572,89 +1575,103 @@ function SubmitPageInner() {
               </div>
             )}
 
-            {(() => {
-              const prBase = (result.scoreDiagnosis ?? 0) + (result.scoreDesign ?? 0) +
-                             (result.scoreCommunication ?? 0) + (result.scoreExecution ?? 0);
-              const deductions: { label: string; amount: number; note?: string }[] = [];
-              if ((result.verbalPenalty ?? 0) > 0) {
-                deductions.push({ label: "Verbal defence", amount: result.verbalPenalty!, note: result.verbalNote ?? undefined });
-              }
-              if (result.declarationMismatch && result.mismatchPenalty > 0) {
-                deductions.push({
-                  label: "Declaration mismatch",
-                  amount: result.mismatchPenalty,
-                  note: "Your answers show signs of AI generation but you declared little or no AI use.",
-                });
-              }
-              const dimLabel = (code: string, design: string) => (isDesign ? design : code);
-              return (
-                <ScoreReceipt
-                  variant="full"
-                  data={{
-                    prBaseScore: prBase,
-                    finalScore: result.scoreTotal,
-                    lineItems: [
-                      { label: dimLabel("Diagnosis", "Requirements"), weight: 40, score: result.scoreDiagnosis },
-                      { label: dimLabel("Design", "Architecture"), weight: 30, score: result.scoreDesign },
-                      { label: "Communication", weight: 20, score: result.scoreCommunication },
-                      { label: dimLabel("Execution", "Completeness"), weight: 10, score: result.scoreExecution },
-                    ],
-                    deductions,
-                  }}
-                />
-              );
-            })()}
-
-            {result.verbalNote && (() => {
-              const penalised = (result.verbalPenalty ?? 0) > 0;
-              const notCaptured = result.verbalScore === null || result.verbalScore === undefined;
-              const tone = penalised ? "bad" : notCaptured ? "warn" : "good";
-              const msg = penalised
-                ? "couldn't fully back your written answer aloud — reflected in the deduction above."
-                : notCaptured
-                  ? "no spoken answer captured — flagged for review."
-                  : "matched your written answer — understanding confirmed.";
-              return (
-                <div className={cn(
-                  "text-xs rounded border px-3 py-2",
-                  tone === "bad" ? "border-red bg-red-weak text-red" : tone === "warn" ? "border-amber bg-amber-weak text-amber" : "border-emerald bg-emerald-weak text-emerald"
-                )}>
-                  <span className="font-semibold">Spoken explanation: </span>{msg}
+            {hideResults ? (
+              <Card className="p-10 text-center">
+                <div className="font-display font-semibold text-lg mb-3 text-ink">
+                  Thanks — your assessment has been received
                 </div>
-              );
-            })()}
-
-            {result.claudeReview && (
-              <Card className="p-6">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-4">Feedback</div>
-                <p className="text-sm italic leading-relaxed mb-5 text-muted">
-                  &ldquo;{result.claudeReview.summary}&rdquo;
+                <p className="text-sm leading-relaxed text-muted max-w-md mx-auto">
+                  We&apos;ve recorded your submission. The employer will review it and reach out
+                  directly if there&apos;s a fit — no action needed from you right now.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded border border-emerald bg-emerald-weak p-4">
-                    <div className="text-xs font-semibold mb-2 text-emerald">Top strength</div>
-                    <div className="text-sm text-ink">{result.claudeReview.topStrength}</div>
-                  </div>
-                  <div className="rounded border border-amber bg-amber-weak p-4">
-                    <div className="text-xs font-semibold mb-2 text-amber">Top improvement</div>
-                    <div className="text-sm text-ink">{result.claudeReview.topImprovement}</div>
-                  </div>
-                </div>
               </Card>
-            )}
+            ) : (
+              <>
+                {(() => {
+                  const prBase = (result.scoreDiagnosis ?? 0) + (result.scoreDesign ?? 0) +
+                                 (result.scoreCommunication ?? 0) + (result.scoreExecution ?? 0);
+                  const deductions: { label: string; amount: number; note?: string }[] = [];
+                  if ((result.verbalPenalty ?? 0) > 0) {
+                    deductions.push({ label: "Verbal defence", amount: result.verbalPenalty!, note: result.verbalNote ?? undefined });
+                  }
+                  if (result.declarationMismatch && result.mismatchPenalty > 0) {
+                    deductions.push({
+                      label: "Declaration mismatch",
+                      amount: result.mismatchPenalty,
+                      note: "Your answers show signs of AI generation but you declared little or no AI use.",
+                    });
+                  }
+                  const dimLabel = (code: string, design: string) => (isDesign ? design : code);
+                  return (
+                    <ScoreReceipt
+                      variant="full"
+                      data={{
+                        prBaseScore: prBase,
+                        finalScore: result.scoreTotal,
+                        lineItems: [
+                          { label: dimLabel("Diagnosis", "Requirements"), weight: 40, score: result.scoreDiagnosis },
+                          { label: dimLabel("Design", "Architecture"), weight: 30, score: result.scoreDesign },
+                          { label: "Communication", weight: 20, score: result.scoreCommunication },
+                          { label: dimLabel("Execution", "Completeness"), weight: 10, score: result.scoreExecution },
+                        ],
+                        deductions,
+                      }}
+                    />
+                  );
+                })()}
 
-            {result.bonusNote && !result.declarationMismatch && (
-              <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
-                <span className="font-semibold text-ink">AI usage: </span>
-                <span className="text-muted">{result.bonusNote}</span>
-              </div>
-            )}
+                {result.verbalNote && (() => {
+                  const penalised = (result.verbalPenalty ?? 0) > 0;
+                  const notCaptured = result.verbalScore === null || result.verbalScore === undefined;
+                  const tone = penalised ? "bad" : notCaptured ? "warn" : "good";
+                  const msg = penalised
+                    ? "couldn't fully back your written answer aloud — reflected in the deduction above."
+                    : notCaptured
+                      ? "no spoken answer captured — flagged for review."
+                      : "matched your written answer — understanding confirmed.";
+                  return (
+                    <div className={cn(
+                      "text-xs rounded border px-3 py-2",
+                      tone === "bad" ? "border-red bg-red-weak text-red" : tone === "warn" ? "border-amber bg-amber-weak text-amber" : "border-emerald bg-emerald-weak text-emerald"
+                    )}>
+                      <span className="font-semibold">Spoken explanation: </span>{msg}
+                    </div>
+                  );
+                })()}
 
-            {result.followUpFeedback && (
-              <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
-                <span className="font-semibold text-ink">Assessment: </span>
-                <span className="text-muted">{result.followUpFeedback}</span>
-              </div>
+                {result.claudeReview && (
+                  <Card className="p-6">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-4">Feedback</div>
+                    <p className="text-sm italic leading-relaxed mb-5 text-muted">
+                      &ldquo;{result.claudeReview.summary}&rdquo;
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded border border-emerald bg-emerald-weak p-4">
+                        <div className="text-xs font-semibold mb-2 text-emerald">Top strength</div>
+                        <div className="text-sm text-ink">{result.claudeReview.topStrength}</div>
+                      </div>
+                      <div className="rounded border border-amber bg-amber-weak p-4">
+                        <div className="text-xs font-semibold mb-2 text-amber">Top improvement</div>
+                        <div className="text-sm text-ink">{result.claudeReview.topImprovement}</div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {result.bonusNote && !result.declarationMismatch && (
+                  <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
+                    <span className="font-semibold text-ink">AI usage: </span>
+                    <span className="text-muted">{result.bonusNote}</span>
+                  </div>
+                )}
+
+                {result.followUpFeedback && (
+                  <div className="rounded border border-hairline px-5 py-4 text-sm leading-relaxed">
+                    <span className="font-semibold text-ink">Assessment: </span>
+                    <span className="text-muted">{result.followUpFeedback}</span>
+                  </div>
+                )}
+              </>
             )}
 
             <Link href="/dashboard">

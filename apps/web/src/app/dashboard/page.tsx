@@ -60,6 +60,7 @@ function SubmissionCard({ submission }: { submission: Submission }) {
   const followUp = sub.followUp as FollowUp | null;
   const ticketTitle = sub.ticket?.title ?? "Unknown ticket";
   const graderResult = sub.graderResult as { result?: string } | undefined;
+  const hideResults = !!sub.hideResults;
 
   const prBase = (submission.scoreDiagnosis ?? 0) + (submission.scoreDesign ?? 0) +
                  (submission.scoreCommunication ?? 0) + (submission.scoreExecution ?? 0);
@@ -102,7 +103,14 @@ function SubmissionCard({ submission }: { submission: Submission }) {
       </div>
 
       {/* Reviewed content */}
-      {isReviewed && submission.scoreTotal !== null && (
+      {isReviewed && hideResults && (
+        <div className="rounded border border-hairline bg-paper px-4 py-3 text-xs leading-relaxed text-muted">
+          Thanks — this assessment has been received. The employer will review it and reach out
+          directly if there&apos;s a fit.
+        </div>
+      )}
+
+      {isReviewed && !hideResults && submission.scoreTotal !== null && (
         <div className="flex flex-col gap-3">
           <ScoreReceipt variant="full" animate={false} data={receiptData} />
 
@@ -280,9 +288,12 @@ export default function DashboardPage() {
 
   const reviewed = submissions.filter((s) => s.status === "REVIEWED");
   const visibleSubmissions = submissions.filter((s) => s.status === "REVIEWED" || s.status === "PENDING");
+  // Hiring candidates never see their score — exclude those submissions from
+  // the average too, not just the per-submission card.
+  const scoredForAvg = reviewed.filter((s) => !(s as unknown as { hideResults?: boolean }).hideResults);
   const avgScore =
-    reviewed.length > 0
-      ? Math.round(reviewed.reduce((sum, s) => sum + (s.scoreTotal ?? 0), 0) / reviewed.length)
+    scoredForAvg.length > 0
+      ? Math.round(scoredForAvg.reduce((sum, s) => sum + (s.scoreTotal ?? 0), 0) / scoredForAvg.length)
       : null;
 
   const stats = [

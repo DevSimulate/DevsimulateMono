@@ -115,7 +115,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
     const candidacy = await prisma.campaignCandidate.findFirst({
       where: { userId, campaign: { ticketIds: { has: ticket.id } } },
       orderBy: { joinedAt: "desc" },
-      select: { campaign: { select: { blockPaste: true, requireFullscreen: true } } },
+      select: { campaign: { select: { blockPaste: true, requireFullscreen: true, type: true } } },
     });
     const proctoring = candidacy?.campaign
       ? {
@@ -123,8 +123,12 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
           requireFullscreen: candidacy.campaign.requireFullscreen,
         }
       : { blockPaste: true, requireFullscreen: true };
+    // Hiring candidates never see their score/feedback — only a generic
+    // "we received it" message. DevFest/contest candidates still see the full
+    // breakdown (that's the point of the leaderboard/certificate flow).
+    const hideResults = candidacy?.campaign?.type === "HIRING";
 
-    res.json({ data: ticket, proctoring });
+    res.json({ data: ticket, proctoring, hideResults });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch ticket";
     res.status(500).json({ error: message });
