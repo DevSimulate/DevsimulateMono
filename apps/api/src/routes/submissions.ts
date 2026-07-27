@@ -396,6 +396,61 @@ router.get("/latest", async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /submissions/pending-action
+ *
+ * The single actionable state (if any) the candidate must be nudged about — an
+ * admin-enabled recovery, or a defence that's one step from done. Returns ONLY
+ * a message + the resolved resume link (no evaluation data — hiring-safe by
+ * construction), so the dashboard/extension can render a prominent action card.
+ * Registered before /:id so the literal path wins.
+ */
+router.get("/pending-action", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  try {
+    const subs = await prisma.submission.findMany({
+      where: { userId, finalized: false, status: "REVIEWED" },
+      orderBy: { submittedAt: "desc" },
+      include: { ticket: { select: { id: true } }, followUp: { select: { answeredAt: true } } },
+    });
+    // Actionable = admin unlocked recovery, or the verbal step is still pending
+    // (written follow-up done but the defence isn't).
+    const sub = subs.find((s) => s.pendingAction || s.followUp?.answeredAt);
+    if (!sub) { res.json({ data: null }); return; }
+
+    const candidacy = await prisma.campaignCandidate.findFirst({
+      where: { userId, campaign: { ticketIds: { has: sub.ticketId } } },
+      orderBy: { joinedAt: "desc" },
+      select: { campaign: { select: { roleName: true, companyName: true, deadline: true } } },
+    });
+    const deadline = candidacy?.campaign.deadline ?? null;
+    if (deadline && deadline < new Date()) { res.json({ data: null }); return; } // closed — don't nudge
+
+    const resume = resolveResumeStage({ id: sub.id, ticketId: sub.ticketId, defenceMode: sub.defenceMode });
+    const role = candidacy?.campaign.roleName ?? null;
+    const message =
+      sub.pendingAction === "recovery_enabled"
+        ? (sub.defenceMode === "TYPED"
+            ? "Typed answers have been enabled for your defence."
+            : "A retry of your verbal defence has been enabled.")
+        : role
+          ? `Your ${role} assessment has one step remaining.`
+          : "Your assessment has one step remaining.";
+
+    res.json({
+      data: {
+        submissionId: sub.id,
+        message,
+        url: resume.url,
+        roleName: role,
+        companyName: candidacy?.campaign.companyName ?? null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to fetch pending action" });
+  }
+});
+
+/**
  * GET /submissions
  * Returns all submissions for the authenticated user, newest first.
  */

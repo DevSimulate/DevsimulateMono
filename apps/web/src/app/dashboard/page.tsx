@@ -232,6 +232,7 @@ export default function DashboardPage() {
   const [nameInput,   setNameInput]   = useState("");
   const [nameSaving,  setNameSaving]  = useState(false);
   const [ticketsHref, setTicketsHref] = useState("/tickets");
+  const [pendingAction, setPendingAction] = useState<{ submissionId: string; message: string; url: string } | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("ds_selected_stack");
@@ -245,6 +246,10 @@ export default function DashboardPage() {
     const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
     const certsPromise = fetch(`${API_URL}/certificates/mine`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json()).then((j) => j.data ?? []).catch(() => []);
+    // Actionable-state nudge (verbal pending / admin-enabled recovery). No
+    // evaluation data — the endpoint is hiring-safe by construction.
+    fetch(`${API_URL}/submissions/pending-action`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then((j) => setPendingAction(j.data ?? null)).catch(() => {});
 
     Promise.all([getMe(token), getSubmissions(token), getAssignments(token), getScoreHistory(token), certsPromise])
       .then(([me, subs, assigns, hist, certList]) => {
@@ -325,6 +330,20 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
+
+        {/* Prominent action card — a step remaining / admin-enabled recovery.
+            Deep-links to the exact resume stage. Never carries evaluation data. */}
+        {pendingAction && (
+          <Card className="p-5 mb-8 flex items-center justify-between gap-4 !border-brand bg-brand-weak">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-brand">One step remaining</p>
+              <p className="text-xs mt-0.5 text-ink leading-relaxed">{pendingAction.message}</p>
+            </div>
+            <a href={pendingAction.url} className="shrink-0">
+              <Button variant="primary" size="sm">Continue →</Button>
+            </a>
+          </Card>
+        )}
 
         {/* Certificate name banner */}
         {!user.fullName && !nameEdit && (
