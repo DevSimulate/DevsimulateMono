@@ -11,6 +11,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import prisma from "../lib/prisma";
 import { finalizeSubmission } from "../services/score.service";
 import { sweepStuckSubmissions } from "../lib/stale-sweep";
+import { resumeUrl } from "../lib/resume";
+import { sendEmail, grantEmail } from "../lib/email";
 
 const router = Router();
 
@@ -115,23 +117,54 @@ router.post("/submissions/:id/grant-typed", async (req: Request, res: Response):
   try {
     const sub = await prisma.submission.findUnique({
       where: { id: req.params.id },
-      select: { id: true, finalized: true, defenceMode: true },
+      select: { id: true, ticketId: true, userId: true, finalized: true, defenceMode: true },
     });
     if (!sub) { res.status(404).json({ error: "Submission not found" }); return; }
     if (sub.finalized) { res.status(409).json({ error: "Submission is already finalized" }); return; }
 
     // Keep VOICE so the chooser appears on resume; the trigger unlocks recovery.
-    // (If the candidate already committed to TYPED, leave that as-is.)
+    // (If the candidate already committed to TYPED, leave that as-is.) pendingAction
+    // drives the dashboard/extension "one step remaining" card.
     const updated = await prisma.submission.update({
       where: { id: sub.id },
       data: {
         defenceTrigger: "admin_grant",
+        pendingAction: "recovery_enabled",
+        pendingActionAt: new Date(),
         ...(sub.defenceMode === "TYPED" ? {} : { defenceMode: "VOICE" }),
       },
       select: { defenceMode: true, defenceTrigger: true },
     });
     console.log(`[admin] unlocked defence recovery for ${sub.id}`);
-    res.json({ data: updated });
+
+    // Notify the candidate — the email is the nudge, the dashboard is the door.
+    let emailed = false;
+    const user = await prisma.user.findUnique({
+      where: { id: sub.userId },
+      select: { email: true, fullName: true, githubUsername: true },
+    });
+    if (user?.email) {
+      const candidacy = await prisma.campaignCandidate.findFirst({
+        where: { userId: sub.userId, campaign: { ticketIds: { has: sub.ticketId } } },
+        orderBy: { joinedAt: "desc" },
+        select: { campaign: { select: { roleName: true, companyName: true, deadline: true } } },
+      });
+      const actionLine = "A retry of your verbal defence has been enabled — you can answer aloud again or switch to typed answers";
+      const { subject, html } = grantEmail({
+        candidateName: user.fullName ?? user.githubUsername ?? null,
+        roleName: candidacy?.campaign.roleName ?? null,
+        companyName: candidacy?.campaign.companyName ?? null,
+        actionLine,
+        resumeLink: resumeUrl(sub.id, sub.ticketId),
+        deadline: candidacy?.campaign.deadline ?? null,
+      });
+      emailed = await sendEmail({
+        to: user.email, subject, html,
+        meta: { type: "GRANT", submissionId: sub.id, userId: sub.userId, actionLine },
+      });
+    }
+
+    res.json({ data: { ...updated, emailed } });
   } catch (err) {
     console.error("[admin] grant-typed error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to unlock defence recovery" });

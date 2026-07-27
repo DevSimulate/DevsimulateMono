@@ -18,6 +18,7 @@ import {
   hiringTicketIds,
 } from "../lib/evaluation-visibility";
 import { summarizeCadence } from "../services/cadence";
+import { resolveResumeStage } from "../lib/resume";
 
 const router = Router();
 
@@ -492,13 +493,16 @@ router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => 
       );
     }
 
+    // Single source of truth for where to resume + the deep link.
+    const resume = resolveResumeStage({
+      id: submission.id,
+      ticketId: submission.ticket.id,
+      defenceMode: submission.defenceMode,
+    });
     res.json({
       data: {
         resumable: true,
-        stage: "verbal",
-        // Resume into whichever channel was active — a candidate who fell into
-        // typed mode before the tab closed comes back to typed mode, not voice.
-        defenceMode: submission.defenceMode,
+        ...resume, // stage, defenceMode (whichever channel was active), url
         ticketId: submission.ticket.id,
         ticketTitle: submission.ticket.title,
         stack: submission.ticket.stack,

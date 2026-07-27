@@ -84,9 +84,12 @@ export async function finalizeSubmission(
     data: {
       ...scores,
       finalized: true,
-      // Completing the assessment clears any stuck-assessment flag.
+      // Completing the assessment clears any stuck-assessment flag and the
+      // pending-action nudge (the dashboard/extension card).
       needsAttention: false,
       needsAttentionReason: null,
+      pendingAction: null,
+      pendingActionAt: null,
     },
     select: { userId: true },
   });

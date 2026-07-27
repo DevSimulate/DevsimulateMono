@@ -9,16 +9,13 @@ import { redisConnection } from "./queue";
 import prisma from "./prisma";
 import { sendEmail, stuckAssessmentEmail } from "./email";
 import { stuckSubmissionWhere, SWEEP_INTERVAL_MS, STALE_AFTER_HOURS } from "../services/stale-submissions";
+import { resumeUrl } from "./resume";
 
 const QUEUE_NAME = "stale-sweep";
 const REPEAT_JOB_NAME = "sweep";
 
-const APP_URL = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
-
-/** Deep link back into the assessment, straight to the unfinished verbal step. */
-export function resumeLink(submissionId: string, ticketId: string): string {
-  return `${APP_URL}/submit?resume=${encodeURIComponent(submissionId)}&ticketId=${encodeURIComponent(ticketId)}`;
-}
+/** Deep link back into the assessment (single source of truth in lib/resume). */
+export const resumeLink = resumeUrl;
 
 /**
  * One sweep. Nudges each stuck candidate exactly once and raises the submission

@@ -220,6 +220,53 @@ export function stuckAssessmentEmail(opts: {
 }
 
 /**
+ * Grant notification — an admin enabled something on the candidate's assessment
+ * (a defence retry, typed answers, etc.). ONE template with a variable action
+ * line; the email is a nudge, the dashboard is the source of truth. Carries no
+ * evaluation data.
+ */
+export function grantEmail(opts: {
+  candidateName: string | null;
+  companyName?: string | null;
+  roleName?: string | null;
+  /** Plain-language statement of what was enabled. */
+  actionLine: string;
+  resumeLink: string;
+  deadline?: Date | null;
+}): { subject: string; html: string } {
+  const { candidateName, companyName, roleName, actionLine, resumeLink, deadline } = opts;
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const roleBit = roleName && companyName ? ` for the ${roleName} assessment at ${companyName}` : "";
+  const subject = "One step remaining on your DevSimulate assessment";
+
+  const deadlineLine = deadline
+    ? `<p style="font-size:13px;color:#666;line-height:1.6;">Please complete it by <strong>${deadline.toDateString()}</strong>.</p>`
+    : "";
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    ${devSimulateHeader()}
+    <h1 style="font-size:22px;margin:0 0 16px;">You have one step remaining</h1>
+    <p style="font-size:15px;line-height:1.6;color:#333;">
+      Hi ${greeting},<br><br>
+      ${actionLine}${roleBit ? ` — ${roleBit.trim()}` : ""}. You can pick up right where you left off.
+    </p>
+    <div style="margin:24px 0;">
+      <a href="${resumeLink}" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">
+        Continue your assessment →
+      </a>
+    </div>
+    ${deadlineLine}
+    <p style="font-size:12px;color:#888;line-height:1.6;">
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${resumeLink}</span>
+    </p>
+  </div>`;
+
+  return { subject, html };
+}
+
+/**
  * Builds the interview-invite email for a shortlisted candidate.
  */
 export function interviewInviteEmail(opts: {
