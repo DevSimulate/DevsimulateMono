@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { verifyGitHubWebhook } from "../middleware/webhook.middleware";
 import { reviewQueue } from "../lib/queue";
 import { GitHubPullRequestPayload, ReviewJobData } from "../types/index";
@@ -183,5 +184,71 @@ router.post(
     }
   }
 );
+
+/**
+ * Verifies a Resend (Svix-signed) webhook. Signed content is
+ * `${svix-id}.${svix-timestamp}.${rawBody}`, HMAC-SHA256 with the base64 secret
+ * (after the `whsec_` prefix), compared base64 against the space-separated
+ * `v1,<sig>` entries in svix-signature.
+ */
+function verifyResendSignature(rawBody: Buffer, headers: Request["headers"], secret: string): boolean {
+  const id = headers["svix-id"] as string | undefined;
+  const ts = headers["svix-timestamp"] as string | undefined;
+  const sigHeader = headers["svix-signature"] as string | undefined;
+  if (!id || !ts || !sigHeader) return false;
+
+  const secretBytes = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  const signedContent = `${id}.${ts}.${rawBody.toString("utf8")}`;
+  const expected = crypto.createHmac("sha256", secretBytes).update(signedContent).digest("base64");
+  const expectedBuf = Buffer.from(expected);
+
+  return sigHeader
+    .split(" ")
+    .map((part) => part.split(",")[1])
+    .filter(Boolean)
+    .some((sig) => {
+      const sigBuf = Buffer.from(sig);
+      return sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf);
+    });
+}
+
+/**
+ * POST /webhooks/resend
+ *
+ * Advances EmailDelivery rows as Resend reports delivery outcomes. Signature-
+ * verified with RESEND_WEBHOOK_SECRET (configure the webhook + secret in the
+ * Resend dashboard). Always returns 200 fast so Resend doesn't retry-storm.
+ */
+router.post("/resend", async (req: Request, res: Response): Promise<void> => {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!secret) {
+    res.status(503).json({ error: "Resend webhook is not configured" });
+    return;
+  }
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (!rawBody || !verifyResendSignature(rawBody, req.headers, secret)) {
+    res.status(401).json({ error: "Invalid signature" });
+    return;
+  }
+
+  try {
+    const evt = req.body as { type?: string; data?: { email_id?: string } };
+    const emailId = evt.data?.email_id;
+    const status =
+      evt.type === "email.delivered" ? "DELIVERED" :
+      evt.type === "email.bounced" ? "BOUNCED" :
+      evt.type === "email.complained" ? "COMPLAINED" : null;
+
+    if (emailId && status) {
+      await prisma.emailDelivery.updateMany({
+        where: { resendId: emailId },
+        data: { status, ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}) },
+      });
+    }
+  } catch (err) {
+    console.error("[webhook] resend processing error:", err instanceof Error ? err.message : err);
+  }
+  res.status(200).json({ ok: true });
+});
 
 export default router;

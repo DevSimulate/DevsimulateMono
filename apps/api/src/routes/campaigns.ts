@@ -995,7 +995,10 @@ router.patch("/:id/candidates/:candidateId", async (req: Request, res: Response)
         reviewEmail: REVIEW_CONTACT_EMAIL,
         appealDeadline,
       });
-      emailed = await sendEmail({ to: current.user.email, subject, html });
+      emailed = await sendEmail({
+        to: current.user.email, subject, html,
+        meta: { type: "REJECTION", campaignId: campaign.id, userId: current.userId },
+      });
     }
 
     res.json({ data: { ...updated, emailed } });
@@ -1096,7 +1099,7 @@ router.post("/:id/invites", async (req: Request, res: Response): Promise<void> =
       if (invite.token === freshToken) created++;
 
       const { subject, html } = await buildInvite(campaign, invite, ticket?.expectedMinutes ?? null);
-      const ok = await sendEmail({ to: email, subject, html });
+      const ok = await sendEmail({ to: email, subject, html, meta: { type: "INVITE", campaignId: campaign.id } });
       if (ok) emailed++; else failed++;
     }
 
@@ -1186,7 +1189,7 @@ router.post("/:id/invites/remind", async (req: Request, res: Response): Promise<
     let reminded = 0;
     for (const invite of pending) {
       const { subject, html } = await buildInvite(campaign, invite, ticket?.expectedMinutes ?? null);
-      if (await sendEmail({ to: invite.email, subject, html })) {
+      if (await sendEmail({ to: invite.email, subject, html, meta: { type: "INVITE", campaignId: campaign.id } })) {
         await prisma.campaignInvite.update({
           where: { id: invite.id },
           data: { remindedAt: new Date() },
@@ -1243,7 +1246,10 @@ router.post("/:id/invite", async (req: Request, res: Response): Promise<void> =>
         score: sub?.scoreTotal ?? 0,
         bookingLink: campaign.bookingLink,
       });
-      const ok = await sendEmail({ to: c.user.email, subject, html });
+      const ok = await sendEmail({
+        to: c.user.email, subject, html,
+        meta: { type: "INTERVIEW", campaignId: campaign.id, userId: c.userId },
+      });
       if (ok) emailed++;
     }
 

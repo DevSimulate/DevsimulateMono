@@ -55,7 +55,10 @@ export async function sweepStuckSubmissions(): Promise<{ found: number; emailed:
         resumeLink: resumeLink(sub.id, sub.ticket.id),
         deadline,
       });
-      if (await sendEmail({ to: sub.user.email, subject, html })) emailed++;
+      if (await sendEmail({
+        to: sub.user.email, subject, html,
+        meta: { type: "STUCK_SWEEP", submissionId: sub.id, userId: sub.userId },
+      })) emailed++;
     }
 
     await prisma.submission.update({
@@ -72,6 +75,47 @@ export async function sweepStuckSubmissions(): Promise<{ found: number; emailed:
 
   console.log(`[stale-sweep] ${stuck.length} stuck submission(s), ${emailed} candidate(s) emailed`);
   return { found: stuck.length, emailed };
+}
+
+const UNDELIVERED_AFTER_MS = 15 * 60 * 1000;
+
+/**
+ * Flags submissions whose grant/resume email never reached DELIVERED within 15
+ * minutes (bounced, complained, failed, or still just SENT). So no grant
+ * strands silently — the candidate shows up in the admin review queue and can
+ * be resent. Deduped by the reason text so it flags once, not every sweep.
+ */
+export async function sweepUndeliveredGrants(): Promise<{ flagged: number }> {
+  const cutoff = new Date(Date.now() - UNDELIVERED_AFTER_MS);
+  const undelivered = await prisma.emailDelivery.findMany({
+    where: {
+      type: { in: ["GRANT", "STUCK_SWEEP"] },
+      status: { not: "DELIVERED" },
+      createdAt: { lt: cutoff },
+      submissionId: { not: null },
+    },
+    take: 200,
+    select: { submissionId: true, status: true },
+  });
+
+  let flagged = 0;
+  for (const row of undelivered) {
+    if (!row.submissionId) continue;
+    const r = await prisma.submission.updateMany({
+      where: {
+        id: row.submissionId,
+        finalized: false,
+        NOT: { needsAttentionReason: { contains: "undelivered" } },
+      },
+      data: {
+        needsAttention: true,
+        needsAttentionReason: `Grant/resume email ${row.status.toLowerCase()} — undelivered after 15 min`,
+      },
+    });
+    flagged += r.count;
+  }
+  if (flagged) console.log(`[stale-sweep] flagged ${flagged} submission(s) with an undelivered grant/resume email`);
+  return { flagged };
 }
 
 /**
@@ -92,7 +136,7 @@ export function startStaleSweepWorker(): Worker {
 
   const worker = new Worker(
     QUEUE_NAME,
-    async (_job: Job) => { await sweepStuckSubmissions(); },
+    async (_job: Job) => { await sweepStuckSubmissions(); await sweepUndeliveredGrants(); },
     { connection: redisConnection, concurrency: 1 }
   );
 

@@ -247,6 +247,7 @@ router.post("/employer/magic-link", async (req: Request, res: Response): Promise
 
     await sendEmail({
       to: email,
+      meta: { type: "MAGIC_LINK" },
       subject: "Your DevSimulate sign-in link",
       html: `
         <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:24px;">

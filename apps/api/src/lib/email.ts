@@ -1,4 +1,40 @@
 import axios from "axios";
+import { EmailType, EmailStatus } from "@prisma/client";
+import prisma from "./prisma";
+
+/** Metadata that ties a send to its delivery-tracking row (Fix 4). */
+export interface EmailMeta {
+  type?: EmailType;
+  submissionId?: string | null;
+  campaignId?: string | null;
+  userId?: string | null;
+  actionLine?: string | null;
+}
+
+/** Best-effort delivery record — tracking must never break a send. */
+async function recordDelivery(
+  opts: { to: string; subject: string; meta?: EmailMeta },
+  status: EmailStatus,
+  resendId: string | null
+): Promise<void> {
+  try {
+    await prisma.emailDelivery.create({
+      data: {
+        resendId,
+        status,
+        type: opts.meta?.type ?? EmailType.OTHER,
+        toEmail: opts.to,
+        subject: opts.subject,
+        actionLine: opts.meta?.actionLine ?? null,
+        submissionId: opts.meta?.submissionId ?? null,
+        campaignId: opts.meta?.campaignId ?? null,
+        userId: opts.meta?.userId ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("[email] failed to record delivery:", err instanceof Error ? err.message : err);
+  }
+}
 
 /**
  * The DevSimulate lockup for transactional email — the real icon (hosted at
@@ -29,6 +65,8 @@ export async function sendEmail(opts: {
   html: string;
   /** Where candidate replies should go (e.g. the recruiter's own address). */
   replyTo?: string;
+  /** Delivery-tracking metadata (Fix 4). A row is written for every attempt. */
+  meta?: EmailMeta;
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM ?? "DevSimulate <onboarding@resend.dev>";
@@ -36,11 +74,12 @@ export async function sendEmail(opts: {
 
   if (!apiKey) {
     console.warn("[email] RESEND_API_KEY not set — skipping send to", opts.to);
+    await recordDelivery(opts, EmailStatus.FAILED, null);
     return false;
   }
 
   try {
-    await axios.post(
+    const res = await axios.post<{ id?: string }>(
       "https://api.resend.com/emails",
       {
         from,
@@ -51,10 +90,12 @@ export async function sendEmail(opts: {
       },
       { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" } }
     );
+    await recordDelivery(opts, EmailStatus.SENT, res.data?.id ?? null);
     return true;
   } catch (err) {
     const detail = axios.isAxiosError(err) ? JSON.stringify(err.response?.data) : String(err);
     console.error("[email] Failed to send to", opts.to, detail);
+    await recordDelivery(opts, EmailStatus.FAILED, null);
     return false;
   }
 }
