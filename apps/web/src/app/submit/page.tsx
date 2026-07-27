@@ -84,6 +84,7 @@ type Stage =
   | "verbal"
   | "verbal_review"
   | "verbal_typed"
+  | "verbal_recover"
   | "scoring"
   | "score"
   | "upgrade";
@@ -109,6 +110,7 @@ function stepIndex(stage: Stage): number {
     verbal:     4,
     verbal_review: 4,
     verbal_typed: 4,
+    verbal_recover: 4,
     scoring:    5,
     score:      5,
     upgrade:    0,
@@ -291,6 +293,8 @@ function SubmitPageInner() {
   const typedTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const keyTimestampsRef = useRef<number[]>([]);
   const TYPED_SECONDS    = 300; // UX countdown; server owns the authoritative limit
+  // Recovery chooser — shown at ANY defence failure (never as an upfront choice).
+  const [recoverInfo,    setRecoverInfo]    = useState<{ headline: string; trigger: string } | null>(null);
   const [verbalTimeLeft, setVerbalTimeLeft] = useState(300);
   const [verbalBusy,     setVerbalBusy]     = useState(false);
   const [scoringMsg,     setScoringMsg]     = useState("Calculating your score…");
@@ -446,9 +450,11 @@ function SubmitPageInner() {
         const vqd = await vq.json();
         if (vq.ok && vqd.data?.question) {
           setVerbalQuestion(vqd.data.question);
-          // Resume into whichever channel was active before the tab closed.
+          // Resume into whichever channel was active before the tab closed. A
+          // candidate already committed to typed stays typed; otherwise the
+          // defence was interrupted — open the recovery chooser (spec 3.1.d).
           if (j.data.defenceMode === "TYPED") enterTypedMode();
-          else setStage("verbal");
+          else openRecovery("Your session was interrupted.", "resume");
         } else {
           setError("Couldn't load the final question. Please refresh, or contact the administrator.");
           setStage("describe");
@@ -954,6 +960,77 @@ function SubmitPageInner() {
     setStage("verbal_typed");
   }
 
+  // ── Recovery chooser ──────────────────────────────────────────────────────
+  // Opened at ANY defence failure: pre-flight garble (handled inline in
+  // PreflightCheck), a low-confidence answer, a technical error, or an
+  // admin-unlocked resume. The candidate picks voice-retry or typed — never an
+  // upfront preference.
+  function openRecovery(headline: string, trigger: string) {
+    stopVerbalMedia();
+    setError(null);
+    setPendingReview(null);
+    setRecoverInfo({ headline, trigger });
+    setStage("verbal_recover");
+  }
+
+  // "Try again with voice" — record the choice, fetch a FRESH question, and
+  // return to the pre-flight/start so a retry never reuses a prepared answer.
+  async function recoverWithVoice(trigger: string) {
+    if (verbalBusy) return;
+    setVerbalBusy(true);
+    const token = getToken();
+    try {
+      await fetch(`${API_URL}/submissions/${submissionId}/defence-choice`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ choice: "voice", trigger }),
+      }).catch(() => {});
+      // Fresh question so retrying never helps content-wise (existing rule).
+      try {
+        const vq = await fetch(`${API_URL}/submissions/${submissionId}/verbal-question`, {
+          method: "POST", headers: { Authorization: `Bearer ${token}` },
+        });
+        const vqd = await vq.json();
+        if (vq.ok && vqd.data?.question) setVerbalQuestion(vqd.data.question);
+      } catch { /* keep the existing question if regeneration fails */ }
+      setRecoverInfo(null);
+      setReviewTranscript("");
+      setLiveCaption("");
+      setPreflightPassed(false); // re-run the mic check before the retry
+      setVerbalReady(false);
+      setVerbalBusy(false);
+      setStage("verbal");
+    } catch {
+      setVerbalBusy(false);
+      setError("Couldn't start a voice retry — please try again.");
+    }
+  }
+
+  // "Switch to typed answers" — record the choice, then enter typed mode.
+  async function recoverWithTyped(trigger: string) {
+    if (verbalBusy) return;
+    setVerbalBusy(true);
+    const token = getToken();
+    try {
+      const r = await fetch(`${API_URL}/submissions/${submissionId}/defence-choice`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ choice: "typed", trigger }),
+      });
+      if (!r.ok) {
+        setVerbalBusy(false);
+        setError("Couldn't switch to typed mode — please try again.");
+        return;
+      }
+      setRecoverInfo(null);
+      setVerbalBusy(false);
+      enterTypedMode();
+    } catch {
+      setVerbalBusy(false);
+      setError("Couldn't reach the server — please try again.");
+    }
+  }
+
   function stopTypedMedia() {
     if (typedTimerRef.current) { clearInterval(typedTimerRef.current); typedTimerRef.current = null; }
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -1089,9 +1166,9 @@ function SubmitPageInner() {
       const transcript = ((r.ok && d.data?.transcript) ? d.data.transcript : fallback).trim();
 
       if (!transcript) {
+        // Nothing captured — a technical/audio failure. Open the recovery chooser.
         setVerbalBusy(false);
-        setError("We couldn't capture your spoken answer — check your microphone and try again.");
-        setStage("verbal");
+        openRecovery("We couldn't capture reliable audio for that answer.", "no_audio");
         return;
       }
       setReviewTranscript(transcript);
@@ -1099,15 +1176,15 @@ function SubmitPageInner() {
       setError(null);
       setStage("verbal_review");
     } catch {
-      // Whisper unreachable — fall back to the live captions if we have them.
+      // Whisper unreachable — fall back to the live captions if we have them,
+      // otherwise treat it as a technical failure and open the recovery chooser.
       if (fallback) {
         setReviewTranscript(fallback);
         setVerbalBusy(false);
         setStage("verbal_review");
       } else {
         setVerbalBusy(false);
-        setError("Couldn't process your explanation — please try again.");
-        setStage("verbal");
+        openRecovery("Something went wrong capturing your answer.", "technical");
       }
     }
   }
@@ -1129,17 +1206,19 @@ function SubmitPageInner() {
       const d = await r.json().catch(() => ({}));
 
       if (!r.ok || !d.data) {
+        // Scoring call failed but the transcript is captured fine — let them
+        // retry submitting it rather than discarding a good answer.
         setVerbalBusy(false);
         setError("Couldn't score your explanation — please try again.");
         setStage("verbal_review");
         return;
       }
-      // Mic failed twice on this question — the server granted typed mode.
-      // Switch channels for the same question (checked before hiring/score so a
-      // hiring candidate still gets to actually complete the defence).
-      if (d.data.typedGranted) {
+      // Any capture failure (low-confidence audio, no audio) opens the recovery
+      // chooser: retry with voice, or switch to typed. Checked before hiding so
+      // a hiring candidate still gets to actually complete the defence.
+      if (d.data.recovery) {
         setVerbalBusy(false);
-        enterTypedMode();
+        openRecovery("We couldn't capture reliable audio for that answer.", d.data.trigger ?? "low_confidence");
         return;
       }
       // Hiring candidates never see a score — the server returns only a
@@ -1147,19 +1226,6 @@ function SubmitPageInner() {
       if (hideResults || d.data.hideResults) {
         setVerbalBusy(false);
         setError(null);
-        setStage("score");
-        return;
-      }
-      // The audio wasn't clear enough to score. Not the candidate's fault and
-      // not their answer's fault — say so neutrally and let them move on rather
-      // than looping them through re-records their microphone will keep failing.
-      if (d.data.lowConfidence) {
-        setVerbalBusy(false);
-        setError(null);
-        setPendingReview(
-          "Your response was recorded and is being reviewed. Audio quality was too low for automatic " +
-          "scoring, so no marks were deducted — a reviewer will confirm your result."
-        );
         setStage("score");
         return;
       }
@@ -1622,7 +1688,7 @@ function SubmitPageInner() {
                   token={getToken() ?? ""}
                   submissionId={submissionId ?? ""}
                   onPassed={(id) => { setMicDeviceId(id); setPreflightPassed(true); }}
-                  onRepeatedFailure={enterTypedMode}
+                  onSwitchToTyped={() => void recoverWithTyped("preflight_failed")}
                 />
               ) : (
               <>
@@ -1773,6 +1839,38 @@ function SubmitPageInner() {
                 </Button>
               </>
             )}
+          </Card>
+        )}
+
+        {/* ── Stage: Recovery chooser (any defence failure) ── */}
+        {stage === "verbal_recover" && recoverInfo && (
+          <Card className="p-6">
+            <h2 className="font-display text-lg font-semibold mb-1 text-ink">Recover your defence</h2>
+            <p className="text-sm mb-5 text-muted leading-relaxed">{recoverInfo.headline}</p>
+            {error && (
+              <div className="text-xs mb-4 rounded border border-amber bg-amber-weak px-3 py-2 text-amber">{error}</div>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="flex-1"
+                onClick={() => void recoverWithVoice(recoverInfo.trigger)}
+                disabled={verbalBusy}
+              >
+                Try again with voice
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                className="flex-1"
+                onClick={() => void recoverWithTyped(recoverInfo.trigger)}
+                disabled={verbalBusy}
+              >
+                Switch to typed answers
+              </Button>
+            </div>
+            <p className="text-xs text-center text-muted mt-3">Scoring is identical in both modes.</p>
           </Card>
         )}
 

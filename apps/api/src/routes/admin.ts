@@ -106,9 +106,10 @@ router.post("/submissions/:id/finalize", async (req: Request, res: Response): Pr
 /**
  * POST /admin/submissions/:id/grant-typed
  *
- * Manually grants the typed-defence fallback for a flagged submission (e.g. a
- * candidate whose mic failed but who never crossed the automatic thresholds).
- * Records the grant reason so it shows up in the typed-mode rate like any other.
+ * Unlocks defence recovery for a flagged submission (e.g. a candidate whose mic
+ * failed). This no longer forces typed mode — it opens the recovery chooser on
+ * the candidate's next resume (they still pick voice-retry or typed). Recorded
+ * as a chooser-open so it shows in the per-campaign recovery tripwire.
  */
 router.post("/submissions/:id/grant-typed", async (req: Request, res: Response): Promise<void> => {
   try {
@@ -119,25 +120,33 @@ router.post("/submissions/:id/grant-typed", async (req: Request, res: Response):
     if (!sub) { res.status(404).json({ error: "Submission not found" }); return; }
     if (sub.finalized) { res.status(409).json({ error: "Submission is already finalized" }); return; }
 
+    // Keep VOICE so the chooser appears on resume; the trigger unlocks recovery.
+    // (If the candidate already committed to TYPED, leave that as-is.)
     const updated = await prisma.submission.update({
       where: { id: sub.id },
-      data: { defenceMode: "TYPED", defenceTrigger: "admin_grant" },
+      data: {
+        defenceTrigger: "admin_grant",
+        ...(sub.defenceMode === "TYPED" ? {} : { defenceMode: "VOICE" }),
+      },
       select: { defenceMode: true, defenceTrigger: true },
     });
-    console.log(`[admin] granted typed defence for ${sub.id}`);
+    console.log(`[admin] unlocked defence recovery for ${sub.id}`);
     res.json({ data: updated });
   } catch (err) {
     console.error("[admin] grant-typed error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Failed to grant typed defence" });
+    res.status(500).json({ error: "Failed to unlock defence recovery" });
   }
 });
 
 /**
  * GET /admin/campaigns/typed-mode-rate
  *
- * Per-campaign share of submissions completed in typed mode. A rate above 10%
- * (with a meaningful sample) is a PRODUCT signal — a browser/device pattern to
- * investigate — not a candidate pattern, so it's surfaced here for admins.
+ * Per-campaign share of submissions that opened the defence-recovery chooser
+ * (a real audio/technical failure occurred — pre-flight garble, low-confidence
+ * answer, technical error, or an admin unlock — regardless of whether they then
+ * chose voice or typed). Above 10% (with a meaningful sample) is a PRODUCT
+ * signal — a browser/device capture pattern to investigate — not a candidate
+ * pattern, so it's surfaced here for admins.
  */
 router.get("/campaigns/typed-mode-rate", async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -147,22 +156,32 @@ router.get("/campaigns/typed-mode-rate", async (_req: Request, res: Response): P
         roleName: true,
         companyName: true,
         type: true,
-        candidates: { select: { submission: { select: { defenceMode: true } } } },
+        candidates: {
+          select: {
+            submission: {
+              select: { defenceMode: true, defenceTrigger: true, preflightFails: true, verbalLowConfHits: true },
+            },
+          },
+        },
       },
     });
+
+    // A chooser "open" = any server-observed defence failure/unlock.
+    const openedChooser = (s: { defenceMode: string; defenceTrigger: string | null; preflightFails: number; verbalLowConfHits: number }) =>
+      s.defenceMode === "TYPED" || s.defenceTrigger !== null || s.preflightFails > 0 || s.verbalLowConfHits > 0;
 
     const rows = campaigns
       .map((c) => {
         const withSub = c.candidates.filter((x) => x.submission);
         const total = withSub.length;
-        const typed = withSub.filter((x) => x.submission!.defenceMode === "TYPED").length;
-        const rate = total > 0 ? typed / total : 0;
+        const opened = withSub.filter((x) => openedChooser(x.submission!)).length;
+        const rate = total > 0 ? opened / total : 0;
         return {
           campaignId: c.id,
           roleName: c.roleName,
           companyName: c.companyName,
           type: c.type,
-          typed,
+          opened,
           total,
           rate: Math.round(rate * 1000) / 1000,
           flagged: total >= 5 && rate > 0.1,
@@ -173,8 +192,8 @@ router.get("/campaigns/typed-mode-rate", async (_req: Request, res: Response): P
 
     res.json({ data: rows });
   } catch (err) {
-    console.error("[admin] typed-mode-rate error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Failed to compute typed-mode rate" });
+    console.error("[admin] recovery-rate error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to compute defence-recovery rate" });
   }
 });
 

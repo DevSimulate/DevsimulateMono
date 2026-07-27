@@ -17,10 +17,6 @@ import {
   hiringInfoForTicket,
   hiringTicketIds,
 } from "../lib/evaluation-visibility";
-import {
-  TYPED_DEFENCE_PREFLIGHT_FAILS,
-  TYPED_DEFENCE_LOWCONF_HITS,
-} from "../config/typed-defence";
 import { summarizeCadence } from "../services/cadence";
 
 const router = Router();
@@ -952,8 +948,8 @@ async function processVerbal(
       },
     });
     await flagForHumanReview(sub.id, "No spoken answer captured — verbal step needs manual review");
-    if (hideEvaluation) return completionBody;
-    return { status: 200, body: { data: { score: null, consistent: null, note: "No spoken answer captured.", penalty: 0, newScoreTotal: sub.scoreTotal ?? 0 } } };
+    // No audio captured is a technical failure — open the recovery chooser.
+    return { status: 200, body: { data: { recovery: true, trigger: "no_audio" } } };
   }
 
   // The transcript came back but the AUDIO was unreliable — noise, a poor mic,
@@ -975,41 +971,17 @@ async function processVerbal(
     });
     await flagForHumanReview(sub.id, "low-confidence transcript");
 
-    // Server-authoritative typed-mode trigger (b): low-confidence spoken answers
-    // for the same question. After the threshold, grant typed mode so a failing
-    // microphone stops being a dead end.
-    const hits = sub.verbalLowConfHits + 1;
-    const typedGranted = sub.defenceMode === "TYPED" || hits >= TYPED_DEFENCE_LOWCONF_HITS;
+    // ANY low-confidence answer opens the recovery chooser (retry voice OR
+    // switch to typed) — no threshold, no auto-grant. Count the failure for the
+    // per-campaign chooser-open tripwire only.
     await prisma.submission.update({
       where: { id: sub.id },
-      data: {
-        verbalLowConfHits: hits,
-        ...(typedGranted && sub.defenceMode !== "TYPED"
-          ? { defenceMode: "TYPED", defenceTrigger: "low_confidence_x2" }
-          : {}),
-      },
+      data: { verbalLowConfHits: { increment: 1 } },
     });
-    console.log(`[verbal] ${sub.id} low-confidence ${confidence} — hits ${hits}, typedGranted ${typedGranted}`);
+    console.log(`[verbal] ${sub.id} low-confidence ${confidence} — recovery chooser opened`);
 
-    // Typed mode overrides the usual endings: the candidate continues the SAME
-    // question in typed mode, regardless of hiring (hiding applies at final).
-    if (typedGranted) {
-      return { status: 200, body: { data: { lowConfidence: true, typedGranted: true } } };
-    }
-    if (hideEvaluation) return completionBody;
-    return {
-      status: 200,
-      body: {
-        data: {
-          score: null,
-          consistent: null,
-          lowConfidence: true,
-          note: "Your response was recorded and is being reviewed.",
-          penalty: 0,
-          newScoreTotal: sub.scoreTotal ?? 0,
-        },
-      },
-    };
+    // The chooser body carries no scores, so hiding is moot here.
+    return { status: 200, body: { data: { lowConfidence: true, recovery: true, trigger: "low_confidence" } } };
   }
 
   // The verbal evaluation can cost 20 points, so it gets the same consensus
@@ -1134,6 +1106,44 @@ router.post("/:id/verbal", async (req: Request, res: Response): Promise<void> =>
 });
 
 /**
+ * POST /submissions/:id/defence-choice — body { choice: "voice"|"typed", trigger }
+ *
+ * Records the recovery chooser's decision. The chooser is only shown after a
+ * real failure (pre-flight garble, low-confidence answer, technical error, or
+ * an admin-unlocked resume), so typed is never an upfront preference. "typed"
+ * switches the remainder of the defence to the typed channel and stays typed;
+ * "voice" keeps voice. Anti-abuse is the per-campaign chooser-open tripwire
+ * (admin dashboard), not a hard gate — a spike is a capture bug to investigate.
+ */
+router.post("/:id/defence-choice", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { choice, trigger } = req.body as { choice?: string; trigger?: string };
+  if (choice !== "voice" && choice !== "typed") {
+    res.status(400).json({ error: "choice must be 'voice' or 'typed'" });
+    return;
+  }
+  try {
+    const sub = await prisma.submission.findFirst({
+      where: { id: req.params.id, userId },
+      select: { id: true, finalized: true },
+    });
+    if (!sub) { res.status(404).json({ error: "Submission not found" }); return; }
+    if (sub.finalized) { res.status(409).json({ error: "This assessment is already complete." }); return; }
+
+    const defenceMode = choice === "typed" ? "TYPED" : "VOICE";
+    const reason = (typeof trigger === "string" && trigger.trim() ? trigger.trim() : "recovery").slice(0, 64);
+    await prisma.submission.update({
+      where: { id: sub.id },
+      data: { defenceMode, defenceTrigger: reason },
+    });
+    console.log(`[verbal] ${sub.id} recovery choice: ${defenceMode} (trigger: ${reason})`);
+    res.json({ data: { defenceMode } });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to record defence choice" });
+  }
+});
+
+/**
  * POST /submissions/:id/typed-answer — body { question, answer, keyTimestamps }
  *
  * The mic-failure fallback. Only reachable when defenceMode is already TYPED
@@ -1228,32 +1238,22 @@ router.post(
       const garbled = text.trim().split(/\s+/).filter(Boolean).length < 2 || isLowConfidence(confidence);
 
       if (isPreflight) {
-        // Server-authoritative typed-mode trigger (a): count clips WE classify as
-        // garbled. After the threshold, grant typed mode — the candidate can't
-        // fake this, since the server ran the STT. Confidence is NOT persisted.
-        let typedGranted = false;
+        // A garbled pre-flight clip opens the recovery chooser client-side
+        // (retry voice OR switch to typed) — typed is NEVER auto-granted here.
+        // We only count the failure for the per-campaign chooser-open tripwire.
+        // Confidence is NOT persisted (the test can't count against scoring).
         const owned = await prisma.submission.findFirst({
           where: { id: req.params.id, userId },
-          select: { id: true, preflightFails: true, defenceMode: true },
+          select: { id: true, defenceMode: true },
         });
-        if (owned) {
-          if (owned.defenceMode === "TYPED") {
-            typedGranted = true;
-          } else if (garbled) {
-            const fails = owned.preflightFails + 1;
-            const grant = fails >= TYPED_DEFENCE_PREFLIGHT_FAILS;
-            await prisma.submission.update({
-              where: { id: owned.id },
-              data: {
-                preflightFails: fails,
-                ...(grant ? { defenceMode: "TYPED", defenceTrigger: "preflight_failed" } : {}),
-              },
-            });
-            typedGranted = grant;
-          }
+        if (garbled && owned) {
+          await prisma.submission.update({
+            where: { id: owned.id },
+            data: { preflightFails: { increment: 1 } },
+          });
         }
-        console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source}) [preflight, garbled=${garbled}, typedGranted=${typedGranted}]`);
-        res.json({ data: { transcript: text, confidence, garbled, typedGranted } });
+        console.log(`[verbal] transcribed ${req.params.id} — confidence ${confidence} (${source}) [preflight, garbled=${garbled}]`);
+        res.json({ data: { transcript: text, confidence, garbled, defenceMode: owned?.defenceMode ?? "VOICE" } });
         return;
       }
 

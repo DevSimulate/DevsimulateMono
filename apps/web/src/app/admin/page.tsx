@@ -39,7 +39,7 @@ interface TypedRateRow {
   campaignId: string;
   roleName: string;
   companyName: string;
-  typed: number;
+  opened: number;
   total: number;
   rate: number;
   flagged: boolean;
@@ -104,11 +104,11 @@ export default function AdminReviewQueuePage() {
         headers: { "x-admin-key": key },
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Failed to grant typed defence");
-      toast.show("Typed defence granted — the candidate can complete it typed", "good");
-      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, defenceMode: "TYPED", defenceTrigger: "admin_grant" } : row)));
+      if (!r.ok) throw new Error(j.error ?? "Failed to enable defence recovery");
+      toast.show("Defence recovery enabled — candidate can retry voice or switch to typed on resume", "good");
+      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, defenceTrigger: "admin_grant" } : row)));
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : "Failed to grant typed defence", "bad");
+      toast.show(e instanceof Error ? e.message : "Failed to enable defence recovery", "bad");
     } finally {
       setGrantingId(null);
     }
@@ -201,7 +201,7 @@ export default function AdminReviewQueuePage() {
             browser/device pattern to investigate, not a candidate pattern. */}
         {typedRates.length > 0 && (
           <div className="mb-6 rounded border border-hairline bg-surface p-5">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-3">Typed-defence rate by campaign</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted mb-3">Defence-recovery rate by campaign</div>
             <div className="flex flex-col gap-2">
               {typedRates.map((t) => (
                 <div key={t.campaignId} className="flex items-center justify-between gap-4 text-sm">
@@ -209,7 +209,7 @@ export default function AdminReviewQueuePage() {
                     {t.roleName} <span className="text-muted">· {t.companyName}</span>
                   </span>
                   <span className="flex items-center gap-3 shrink-0">
-                    <span className="text-muted font-mono text-xs">{t.typed}/{t.total}</span>
+                    <span className="text-muted font-mono text-xs">{t.opened}/{t.total}</span>
                     <span className={t.flagged ? "font-semibold text-amber" : "text-muted"}>
                       {Math.round(t.rate * 100)}%
                     </span>
@@ -264,7 +264,7 @@ export default function AdminReviewQueuePage() {
                       </Button>
                       {row.defenceMode !== "TYPED" && (
                         <Button variant="secondary" size="sm" onClick={() => void grantTyped(row.id)} disabled={grantingId === row.id}>
-                          {grantingId === row.id ? "Granting…" : "Grant typed defence"}
+                          {grantingId === row.id ? "Enabling…" : "Enable defence recovery"}
                         </Button>
                       )}
                     </div>

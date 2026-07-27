@@ -26,17 +26,15 @@ export function PreflightCheck({
   token,
   submissionId,
   onPassed,
-  onRepeatedFailure,
-  maxFails = 3,
+  onSwitchToTyped,
 }: {
   apiUrl: string;
   token: string;
   submissionId: string;
   /** Called with the chosen deviceId once the candidate confirms audio is good. */
   onPassed: (deviceId: string | null) => void;
-  /** Fired once the test has come back garbled `maxFails` times (Part 2 trigger a). */
-  onRepeatedFailure?: () => void;
-  maxFails?: number;
+  /** The recovery chooser's "typed" choice, offered whenever a test is garbled. */
+  onSwitchToTyped?: () => void;
 }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -46,7 +44,6 @@ export function PreflightCheck({
   const [transcript, setTranscript] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failCount, setFailCount] = useState(0);
   const [permError, setPermError] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -173,12 +170,6 @@ export function PreflightCheck({
       const d = await r.json().catch(() => ({}));
       const text = (r.ok && d.data?.transcript ? (d.data.transcript as string) : "").trim();
       setTranscript(text);
-      if (text.split(/\s+/).filter(Boolean).length < 2) {
-        setFailCount((n) => n + 1);
-      }
-      // The SERVER counts garbled clips and decides when typed mode is granted
-      // (authoritative — the client can't fake it). Honour its signal.
-      if (d.data?.typedGranted) onRepeatedFailure?.();
     } catch {
       setTranscript("");
     } finally {
@@ -307,15 +298,20 @@ export function PreflightCheck({
                   onClick={startTest}
                   disabled={busy}
                 >
-                  Retest
+                  Try again with voice
                 </Button>
               </div>
-              {failCount >= maxFails && (
-                <p className="text-xs text-muted mt-3 leading-relaxed">
-                  Still no luck after {failCount} tries? If you can hear yourself on playback you can
-                  continue anyway — otherwise a typed alternative will be offered so a mic problem
-                  never blocks you.
-                </p>
+              {garbled && onSwitchToTyped && (
+                <div className="mt-3 text-center">
+                  <button
+                    className="text-sm font-semibold text-brand hover:underline"
+                    onClick={onSwitchToTyped}
+                    disabled={busy}
+                  >
+                    Switch to typed answers →
+                  </button>
+                  <p className="text-xs text-muted mt-1">Scoring is identical in both modes.</p>
+                </div>
               )}
             </>
           )}
