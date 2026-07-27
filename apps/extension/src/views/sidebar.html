@@ -338,6 +338,11 @@
       <div id="section-pending-review" class="hidden">
         <div class="status-msg">⏳ Review pending — Claude is scoring your PR...</div>
       </div>
+
+      <div class="section hidden" id="section-submitted">
+        <h2>Assessment submitted ✓</h2>
+        <div class="status-msg" id="submitted-msg">The hiring team will contact you by email.</div>
+      </div>
     </div>
 
     <script nonce="{{NONCE}}">
@@ -397,15 +402,25 @@
             .join('');
         }
 
-        // Scores
-        const hasReview = state.submission && state.submission.status === 'REVIEWED';
-        const isPending = state.submission && state.submission.status === 'PENDING';
+        // Scores. Hiring submissions never show an evaluation — the API has
+        // already stripped the fields; show the submitted-confirmation instead.
+        const sub = state.submission;
+        const hiring = sub && sub.hideResults;
+        const hasReview = sub && sub.status === 'REVIEWED';
+        const isPending = sub && sub.status === 'PENDING';
 
-        document.getElementById('section-scores').classList.toggle('hidden', !hasReview);
-        document.getElementById('section-pending-review').classList.toggle('hidden', !isPending);
+        document.getElementById('section-scores').classList.toggle('hidden', hiring || !hasReview);
+        document.getElementById('section-pending-review').classList.toggle('hidden', hiring || !isPending);
+        document.getElementById('section-submitted').classList.toggle('hidden', !hiring);
 
-        if (hasReview) {
-          const s = state.submission;
+        if (hiring) {
+          const role = sub.campaignRole, company = sub.campaignCompany;
+          document.getElementById('submitted-msg').textContent =
+            (role && company)
+              ? 'Your ' + role + ' assessment for ' + company + ' has been submitted. The hiring team will contact you by email.'
+              : 'The hiring team will contact you by email.';
+        } else if (hasReview) {
+          const s = sub;
           document.getElementById('score-total').innerHTML = s.scoreTotal + '<span>/100</span>';
           setBar('diagnosis', s.scoreDiagnosis, 40);
           setBar('design', s.scoreDesign, 30);

@@ -58,7 +58,12 @@ export async function activate(
   context.subscriptions.push(
     vscode.commands.registerCommand("devsimulate.viewScore", async () => {
       const submission = await getLatestReview(context);
-      if (submission?.status === "REVIEWED" && submission.scoreTotal !== null) {
+      if (submission?.hideResults) {
+        // Hiring assessment — the score belongs to the employer's decision.
+        vscode.window.showInformationMessage(
+          "DevSimulate: Assessment submitted ✓ — the hiring team will contact you by email."
+        );
+      } else if (submission?.status === "REVIEWED" && submission.scoreTotal !== null) {
         vscode.window.showInformationMessage(
           `DevSimulate: Latest score — ${submission.scoreTotal}/100`
         );

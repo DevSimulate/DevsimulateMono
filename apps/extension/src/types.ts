@@ -87,6 +87,12 @@ export interface Submission {
   riskScore: number;
   submittedAt: string;
   reviewedAt: string | null;
+  // Hiring-privacy flags stamped by the API. When hideResults is true the
+  // evaluation fields above are already nulled server-side — show the
+  // submitted-confirmation, never a score panel.
+  hideResults?: boolean;
+  campaignRole?: string | null;
+  campaignCompany?: string | null;
   ticket?: Ticket;
   user?: User;
 }
