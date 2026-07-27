@@ -1,39 +1,73 @@
 import { CampaignType } from "@prisma/client";
+import prisma from "./prisma";
 
 /**
  * Single source of truth for the rule: in a HIRING campaign the evaluation
  * (scores, tiers, bands, receipt, deductions, risk, flags, feedback prose)
  * belongs to the employer's decision process — the candidate never sees it on
- * their dashboard or result page. CONTEST (DevFest) candidates see everything,
- * exactly as before.
+ * their dashboard, result page, or in the extension. CONTEST (DevFest)
+ * candidates see everything, exactly as before.
+ *
+ * DETECTION: a submission is "hiring" iff its ticket belongs to a HIRING
+ * campaign the user is a candidate in. We deliberately do NOT use
+ * CampaignCandidate.submissionId — the app never populates that column, so the
+ * old relation-based check silently returned "not hiring" for every real
+ * candidate and leaked their scores. Ticket membership is the same reliable
+ * signal /tickets/:id already uses.
  *
  * The rule lives here and nowhere else: the API strips fields with these
  * helpers before responding, and the UI reads the `hideResults` boolean the
- * API stamps on, so both sides agree without duplicating the campaign-type
- * check. A candidate's OWN artifacts (their write-up, answers, transcript) are
- * never hidden — only the evaluation of them.
+ * API stamps on. A candidate's OWN artifacts (write-up, answers, transcript,
+ * PR link) are never hidden — only the evaluation of them.
  */
 
-/** Anything carrying the campaign join we load to make the visibility decision. */
-export type CampaignTypeCarrier = {
-  campaignCandidates?: Array<{
-    campaign: { type: CampaignType; roleName?: string; companyName?: string };
-  }>;
-};
-
-/** false ⇒ this submission is part of a HIRING campaign; hide the evaluation. */
-export function canCandidateSeeEvaluation(sub: CampaignTypeCarrier): boolean {
-  const links = sub.campaignCandidates ?? [];
-  return !links.some((c) => c.campaign.type === CampaignType.HIRING);
+export interface HiringInfo {
+  roleName: string;
+  companyName: string;
 }
 
-/** The hiring campaign this submission belongs to (for "at {company}" copy), if any. */
-export function hiringCampaignOf(
-  sub: CampaignTypeCarrier
-): { roleName?: string; companyName?: string } | null {
-  return (
-    sub.campaignCandidates?.find((c) => c.campaign.type === CampaignType.HIRING)?.campaign ?? null
-  );
+/**
+ * Maps each of `ticketIds` that belongs to one of this user's HIRING campaigns
+ * to that campaign's role/company. Tickets not in a hiring campaign are absent
+ * from the map (⇒ contest/organic ⇒ evaluation visible).
+ */
+export async function hiringTicketMap(
+  userId: string,
+  ticketIds: string[]
+): Promise<Map<string, HiringInfo>> {
+  const map = new Map<string, HiringInfo>();
+  const unique = [...new Set(ticketIds)].filter(Boolean);
+  if (unique.length === 0) return map;
+
+  const candidacies = await prisma.campaignCandidate.findMany({
+    where: {
+      userId,
+      campaign: { type: CampaignType.HIRING, ticketIds: { hasSome: unique } },
+    },
+    orderBy: { joinedAt: "desc" },
+    select: { campaign: { select: { ticketIds: true, roleName: true, companyName: true } } },
+  });
+
+  const wanted = new Set(unique);
+  for (const c of candidacies) {
+    for (const t of c.campaign.ticketIds) {
+      // First (most recent) campaign wins for a shared ticket.
+      if (wanted.has(t) && !map.has(t)) {
+        map.set(t, { roleName: c.campaign.roleName, companyName: c.campaign.companyName });
+      }
+    }
+  }
+  return map;
+}
+
+/** Single-submission convenience: the hiring campaign for this user+ticket, or null. */
+export async function hiringInfoForTicket(userId: string, ticketId: string): Promise<HiringInfo | null> {
+  return (await hiringTicketMap(userId, [ticketId])).get(ticketId) ?? null;
+}
+
+/** The ticketIds (of those passed) that fall under a HIRING campaign for this user. */
+export async function hiringTicketIds(userId: string, ticketIds: string[]): Promise<string[]> {
+  return [...(await hiringTicketMap(userId, ticketIds)).keys()];
 }
 
 /** Nulls every evaluation field on a FollowUpQuestion; keeps the candidate's own words. */
@@ -79,29 +113,26 @@ export function redactSubmissionEvaluation<T extends Record<string, unknown>>(su
 }
 
 /**
- * Shapes ONE submission for a candidate response: drops the internal campaign
- * join, strips evaluation for hiring submissions, and stamps `hideResults` plus
- * (when hidden) the role/company for the received-state copy. Contest/organic
- * submissions pass through unchanged apart from `hideResults: false`.
+ * Shapes ONE submission for a candidate response (pure — takes the precomputed
+ * hiring map so lists resolve with a single query). Strips evaluation for
+ * hiring submissions and stamps `hideResults` plus (when hidden) the
+ * role/company for the received-state copy. Contest/organic submissions pass
+ * through unchanged apart from `hideResults: false`.
  */
-export function submissionForCandidate<T extends CampaignTypeCarrier>(sub: T) {
-  const canSee = canCandidateSeeEvaluation(sub);
+export function serializeSubmissionForCandidate<T extends { ticketId: string }>(
+  sub: T,
+  hiringMap: Map<string, HiringInfo>
+) {
+  // Never leak the internal join if a caller happened to include it.
   const { campaignCandidates: _drop, ...rest } = sub as T & { campaignCandidates?: unknown };
-  if (canSee) {
+  const hiring = hiringMap.get(sub.ticketId);
+  if (!hiring) {
     return { ...rest, hideResults: false as const };
   }
-  const hiring = hiringCampaignOf(sub);
   return {
     ...redactSubmissionEvaluation(rest),
     hideResults: true as const,
-    campaignRole: hiring?.roleName ?? null,
-    campaignCompany: hiring?.companyName ?? null,
+    campaignRole: hiring.roleName,
+    campaignCompany: hiring.companyName,
   };
 }
-
-/** The campaignCandidates include used across candidate-facing endpoints. */
-export const campaignVisibilityInclude = {
-  campaignCandidates: {
-    select: { campaign: { select: { type: true, roleName: true, companyName: true } } },
-  },
-} as const;

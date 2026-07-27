@@ -11,10 +11,11 @@ import { isLowConfidence, MIN_CONFIDENCE } from "../services/transcript-confiden
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
 import {
-  submissionForCandidate,
+  serializeSubmissionForCandidate,
   redactFollowUpEvaluation,
-  canCandidateSeeEvaluation,
-  campaignVisibilityInclude,
+  hiringTicketMap,
+  hiringInfoForTicket,
+  hiringTicketIds,
 } from "../lib/evaluation-visibility";
 import {
   TYPED_DEFENCE_PREFLIGHT_FAILS,
@@ -330,17 +331,12 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
   const limit = Math.min(Number(req.query.limit ?? 20), 50);
 
   try {
-    const submissions = await prisma.submission.findMany({
-      // Hiring candidates never see their score anywhere on the dashboard —
-      // exclude those submissions from the chart, not just the card.
-      where: {
-        userId,
-        status: "REVIEWED",
-        campaignCandidates: { none: { campaign: { type: "HIRING" } } },
-      },
+    const reviewed = await prisma.submission.findMany({
+      where: { userId, status: "REVIEWED" },
       orderBy: { submittedAt: "asc" },
       take: limit,
       select: {
+        ticketId: true,
         submittedAt: true,
         scoreTotal: true,
         scoreDiagnosis: true,
@@ -350,6 +346,12 @@ router.get("/history", async (req: Request, res: Response): Promise<void> => {
         ticket: { select: { title: true } },
       },
     });
+
+    // Hiring candidates never see their score anywhere on the dashboard —
+    // exclude hiring-ticket submissions from the chart (ticket membership, the
+    // reliable signal). The old campaignCandidates filter never matched.
+    const hidden = new Set(await hiringTicketIds(userId, reviewed.map((s) => s.ticketId)));
+    const submissions = reviewed.filter((s) => !hidden.has(s.ticketId));
 
     const data = submissions.map((s) => ({
       submittedAt: s.submittedAt,
@@ -380,7 +382,7 @@ router.get("/latest", async (req: Request, res: Response): Promise<void> => {
     const submission = await prisma.submission.findFirst({
       where: { userId },
       orderBy: { submittedAt: "desc" },
-      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
+      include: { ticket: { include: { codebase: true } } },
     });
 
     if (!submission) {
@@ -388,7 +390,8 @@ router.get("/latest", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ data: submissionForCandidate(submission) });
+    const hiring = await hiringTicketMap(userId, [submission.ticketId]);
+    res.json({ data: serializeSubmissionForCandidate(submission, hiring) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch submission";
     res.status(500).json({ error: message });
@@ -406,17 +409,14 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     const submissions = await prisma.submission.findMany({
       where: { userId },
       orderBy: { submittedAt: "desc" },
-      include: {
-        ticket: true,
-        followUp: true,
-        ...campaignVisibilityInclude,
-      },
+      include: { ticket: true, followUp: true },
     });
 
     // Hiring candidates never see the evaluation — strip scores/feedback here
-    // (not just in the UI) so it can't be read from the network tab. Contest/
-    // DevFest submissions pass through unchanged.
-    res.json({ data: submissions.map(submissionForCandidate) });
+    // (not just in the UI) so it can't be read from the network tab. One query
+    // resolves which of these submissions are hiring, by ticket membership.
+    const hiring = await hiringTicketMap(userId, submissions.map((s) => s.ticketId));
+    res.json({ data: submissions.map((s) => serializeSubmissionForCandidate(s, hiring)) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list submissions";
     res.status(500).json({ error: message });
@@ -433,7 +433,7 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
-      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
+      include: { ticket: { include: { codebase: true } } },
     });
 
     if (!submission) {
@@ -441,7 +441,8 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    res.json({ data: submissionForCandidate(submission) });
+    const hiring = await hiringTicketMap(userId, [submission.ticketId]);
+    res.json({ data: serializeSubmissionForCandidate(submission, hiring) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch submission";
     res.status(500).json({ error: message });
@@ -524,7 +525,7 @@ router.get("/:id/followup", async (req: Request, res: Response): Promise<void> =
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
-      include: campaignVisibilityInclude,
+      select: { id: true, ticketId: true },
     });
 
     if (!submission) {
@@ -542,9 +543,8 @@ router.get("/:id/followup", async (req: Request, res: Response): Promise<void> =
     }
 
     // Hiring candidates get the questions/their own answers, never the scoring.
-    const payload = canCandidateSeeEvaluation(submission)
-      ? followUp
-      : redactFollowUpEvaluation(followUp);
+    const isHiring = !!(await hiringInfoForTicket(userId, submission.ticketId));
+    const payload = isHiring ? redactFollowUpEvaluation(followUp) : followUp;
     res.json({ data: payload });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to fetch follow-up";
@@ -580,7 +580,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
   try {
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
-      include: { ticket: { include: { codebase: true } }, ...campaignVisibilityInclude },
+      include: { ticket: { include: { codebase: true } } },
     });
 
     if (!submission) {
@@ -597,7 +597,7 @@ router.post("/:id/followup", async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const hideEvaluation = !canCandidateSeeEvaluation(submission);
+    const hideEvaluation = !!(await hiringInfoForTicket(userId, submission.ticketId));
 
     // Behavioral integrity signals raise the risk score:
     //  - paste attempts into the Q&A boxes (+20 each, cap 60)
@@ -927,7 +927,7 @@ async function processVerbal(
 ): Promise<{ status: number; body: object }> {
   const sub = await prisma.submission.findUnique({
     where: { id: submissionId },
-    include: { followUp: true, ...campaignVisibilityInclude },
+    include: { followUp: true },
   });
   if (!sub || sub.userId !== userId) return { status: 404, body: { error: "Submission not found" } };
   if (!sub.followUp) return { status: 400, body: { error: "Complete the follow-up first" } };
@@ -935,7 +935,7 @@ async function processVerbal(
   // Hiring candidates never see the verbal score, penalty, or resulting total —
   // the scoring still happens and is finalized server-side, but every success
   // path returns only a completion marker for them.
-  const hideEvaluation = !canCandidateSeeEvaluation(sub);
+  const hideEvaluation = !!(await hiringInfoForTicket(userId, sub.ticketId));
   const completionBody = { status: 200, body: { data: { hideResults: true, completed: true } } };
 
   // ONLY a genuinely empty transcript (mic denied / silence / STT failure) is "not
@@ -1152,7 +1152,7 @@ router.post("/:id/typed-answer", async (req: Request, res: Response): Promise<vo
   try {
     const sub = await prisma.submission.findUnique({
       where: { id: req.params.id },
-      include: { followUp: true, ...campaignVisibilityInclude },
+      include: { followUp: true },
     });
     if (!sub || sub.userId !== userId) { res.status(404).json({ error: "Submission not found" }); return; }
     if (sub.defenceMode !== "TYPED") {
@@ -1167,7 +1167,7 @@ router.post("/:id/typed-answer", async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    const hideEvaluation = !canCandidateSeeEvaluation(sub);
+    const hideEvaluation = !!(await hiringInfoForTicket(userId, sub.ticketId));
     const completionBody = { status: 200, body: { data: { hideResults: true, completed: true } } };
 
     // Same evaluation as the spoken path — the typed text is the "transcript".
