@@ -204,6 +204,11 @@ model Submission {
   // self-selected — it's earned by real, server-classified audio failures.
   preflightFails     Int                 @default(0)
   verbalLowConfHits  Int                 @default(0)
+  // An actionable state the candidate must be nudged about (e.g. an admin
+  // enabled defence recovery). Drives the prominent dashboard/extension action
+  // card. Cleared once the step is completed. Never carries evaluation data.
+  pendingAction      String?             // recovery_enabled | verbal_pending | ...
+  pendingActionAt    DateTime?
   submittedAt        DateTime            @default(now())
   reviewedAt         DateTime?
   user               User                @relation(fields: [userId], references: [id])
@@ -472,4 +477,48 @@ model SurveyResponse {
   createdAt         DateTime @default(now())
 
   @@index([event])
+}
+
+// Which transactional email this was — governs the grant/resume delivery
+// tracking and the "undelivered grant" tripwire.
+enum EmailType {
+  GRANT        // an admin enabled a retry/recovery — must reach the candidate
+  STUCK_SWEEP  // stuck-assessment resume nudge
+  REJECTION    // employer decision
+  INTERVIEW    // shortlist / interview invite
+  INVITE       // assessment invitation
+  MAGIC_LINK   // sign-in link
+  OTHER
+}
+
+// Delivery lifecycle, advanced by the Resend webhook.
+enum EmailStatus {
+  SENT         // accepted by Resend (resendId captured)
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  FAILED       // never accepted (send threw / no API key)
+}
+
+// One row per transactional send, so no grant strands silently. resendId links
+// a row to the Resend webhook events that advance its status. Ids are stored as
+// plain columns (indexed, no FK relations) to keep the migration additive.
+model EmailDelivery {
+  id           String       @id @default(cuid())
+  resendId     String?      // Resend message id; null if the send failed outright
+  type         EmailType
+  status       EmailStatus  @default(SENT)
+  toEmail      String
+  subject      String
+  actionLine   String?      // for GRANT emails — what was enabled, in plain language
+  submissionId String?
+  campaignId   String?
+  userId       String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deliveredAt  DateTime?
+
+  @@index([resendId])
+  @@index([submissionId])
+  @@index([userId])
 }
