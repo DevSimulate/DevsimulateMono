@@ -12,7 +12,7 @@ import prisma from "../lib/prisma";
 import { finalizeSubmission } from "../services/score.service";
 import { sweepStuckSubmissions } from "../lib/stale-sweep";
 import { resumeUrl } from "../lib/resume";
-import { sendEmail, grantEmail } from "../lib/email";
+import { sendEmail, grantEmail, stuckAssessmentEmail } from "../lib/email";
 
 const router = Router();
 
@@ -168,6 +168,90 @@ router.post("/submissions/:id/grant-typed", async (req: Request, res: Response):
   } catch (err) {
     console.error("[admin] grant-typed error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to unlock defence recovery" });
+  }
+});
+
+/**
+ * GET /admin/submissions/:id/emails
+ * Send history for a submission — status chips + resend live off this.
+ */
+router.get("/submissions/:id/emails", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await prisma.emailDelivery.findMany({
+      where: { submissionId: req.params.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: {
+        id: true, type: true, status: true, toEmail: true, subject: true,
+        actionLine: true, createdAt: true, deliveredAt: true,
+      },
+    });
+    res.json({ data: rows });
+  } catch (err) {
+    console.error("[admin] email-history error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to load email history" });
+  }
+});
+
+/**
+ * POST /admin/emails/:id/resend
+ * One-click resend of a grant/resume email (rebuilt from the submission). Other
+ * types are re-triggered through their normal action, not here.
+ */
+router.post("/emails/:id/resend", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const row = await prisma.emailDelivery.findUnique({ where: { id: req.params.id } });
+    if (!row) { res.status(404).json({ error: "Email not found" }); return; }
+    if (row.type !== "GRANT" && row.type !== "STUCK_SWEEP") {
+      res.status(400).json({ error: "One-click resend supports grant/resume emails only." });
+      return;
+    }
+    if (!row.submissionId) { res.status(400).json({ error: "No submission context to rebuild from" }); return; }
+
+    const sub = await prisma.submission.findUnique({
+      where: { id: row.submissionId },
+      select: { id: true, ticketId: true, userId: true, ticket: { select: { title: true } } },
+    });
+    if (!sub) { res.status(404).json({ error: "Submission not found" }); return; }
+    const user = await prisma.user.findUnique({
+      where: { id: sub.userId },
+      select: { email: true, fullName: true, githubUsername: true },
+    });
+    if (!user?.email) { res.status(400).json({ error: "Candidate has no email on file" }); return; }
+
+    const candidacy = await prisma.campaignCandidate.findFirst({
+      where: { userId: sub.userId, campaign: { ticketIds: { has: sub.ticketId } } },
+      orderBy: { joinedAt: "desc" },
+      select: { campaign: { select: { roleName: true, companyName: true, deadline: true } } },
+    });
+    const deadline = candidacy?.campaign.deadline ?? null;
+    const link = resumeUrl(sub.id, sub.ticketId);
+
+    const built = row.type === "GRANT"
+      ? grantEmail({
+          candidateName: user.fullName ?? user.githubUsername ?? null,
+          roleName: candidacy?.campaign.roleName ?? null,
+          companyName: candidacy?.campaign.companyName ?? null,
+          actionLine: row.actionLine ?? "A step remains on your assessment",
+          resumeLink: link,
+          deadline,
+        })
+      : stuckAssessmentEmail({
+          candidateName: user.fullName,
+          ticketTitle: sub.ticket.title,
+          resumeLink: link,
+          deadline,
+        });
+
+    const ok = await sendEmail({
+      to: user.email, subject: built.subject, html: built.html,
+      meta: { type: row.type, submissionId: sub.id, userId: sub.userId, actionLine: row.actionLine },
+    });
+    console.log(`[admin] resent ${row.type} email for ${sub.id} — ${ok ? "sent" : "failed"}`);
+    res.json({ data: { resent: ok } });
+  } catch (err) {
+    console.error("[admin] resend error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to resend email" });
   }
 });
 

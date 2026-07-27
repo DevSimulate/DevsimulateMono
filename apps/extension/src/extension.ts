@@ -7,7 +7,7 @@ import { submitCommand } from "./commands/submit";
 import { pushAndCreatePRCommand } from "./commands/push";
 import { getCurrentUser, storeToken, getApiUrl, getToken, getGitHubToken, getHandoffCode } from "./services/auth.service";
 import { getAssignedTickets } from "./services/ticket.service";
-import { getLatestReview } from "./services/review.service";
+import { getLatestReview, getPendingAction } from "./services/review.service";
 import { ensureGitOnPath, watchForPush, cloneAndOpenCodebase, createPullRequest, rememberCreatedPr } from "./services/git.service";
 import { openInBrowser } from "./services/browser.service";
 import { LoginResponse, TicketAssignment, Ticket, Codebase } from "./types";
@@ -142,15 +142,17 @@ async function hydrateInitialState(
       return;
     }
 
-    const [assignments, submission] = await Promise.all([
+    const [assignments, submission, pendingAction] = await Promise.all([
       getAssignedTickets(context),
       getLatestReview(context),
+      getPendingAction(context),
     ]);
 
     sidebar.update({
       user,
       assignments,
       submission: submission ?? null,
+      pendingAction,
     });
   } catch {
     // Startup hydration failure is non-fatal — sidebar will show login view

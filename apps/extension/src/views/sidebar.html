@@ -300,6 +300,12 @@
       <hr />
 
       <!-- Latest review scores -->
+      <div class="section hidden" id="section-pending-action" style="border:1px solid var(--vscode-focusBorder,#4F46E5);border-radius:8px;padding:12px;">
+        <div style="font-weight:700;margin-bottom:4px;">One step remaining</div>
+        <div id="pending-action-msg" style="font-size:12px;opacity:0.85;margin-bottom:8px;"></div>
+        <a id="pending-action-link" href="#" style="font-size:12px;font-weight:600;">Continue in your browser →</a>
+      </div>
+
       <div class="section" id="section-scores" class="hidden">
         <h2>Latest Review</h2>
         <div class="score-section">
@@ -404,6 +410,17 @@
 
         // Scores. Hiring submissions never show an evaluation — the API has
         // already stripped the fields; show the submitted-confirmation instead.
+        // Pending-action nudge (one step remaining / admin-enabled recovery).
+        const pa = state.pendingAction;
+        const paEl = document.getElementById('section-pending-action');
+        if (pa) {
+          paEl.classList.remove('hidden');
+          document.getElementById('pending-action-msg').textContent = pa.message + ' Continue in your browser.';
+          document.getElementById('pending-action-link').href = pa.url;
+        } else {
+          paEl.classList.add('hidden');
+        }
+
         const sub = state.submission;
         const hiring = sub && sub.hideResults;
         const hasReview = sub && sub.status === 'REVIEWED';

@@ -35,6 +35,16 @@ interface NeedsAttentionRow {
   followUp: FollowUp | null;
 }
 
+interface EmailRow {
+  id: string;
+  type: string;
+  status: "SENT" | "DELIVERED" | "BOUNCED" | "COMPLAINED" | "FAILED";
+  toEmail: string;
+  subject: string;
+  createdAt: string;
+  deliveredAt: string | null;
+}
+
 interface TypedRateRow {
   campaignId: string;
   roleName: string;
@@ -59,6 +69,8 @@ export default function AdminReviewQueuePage() {
   const [busy, setBusy] = useState(false);
   const [sweeping, setSweeping] = useState(false);
   const [grantingId, setGrantingId] = useState<string | null>(null);
+  const [emails, setEmails] = useState<Record<string, EmailRow[]>>({});
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const toast = useToast();
 
@@ -111,6 +123,32 @@ export default function AdminReviewQueuePage() {
       toast.show(e instanceof Error ? e.message : "Failed to enable defence recovery", "bad");
     } finally {
       setGrantingId(null);
+    }
+  }
+
+  const loadEmails = async (subId: string) => {
+    if (!key || emails[subId]) return; // cached
+    try {
+      const r = await fetch(`${API}/admin/submissions/${subId}/emails`, { headers: { "x-admin-key": key } });
+      const j = await r.json();
+      if (r.ok) setEmails((prev) => ({ ...prev, [subId]: j.data ?? [] }));
+    } catch { /* non-critical */ }
+  };
+
+  async function resendEmail(emailId: string, subId: string) {
+    if (!key) return;
+    setResendingId(emailId);
+    try {
+      const r = await fetch(`${API}/admin/emails/${emailId}/resend`, { method: "POST", headers: { "x-admin-key": key } });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Resend failed");
+      toast.show(j.data?.resent ? "Email resent" : "Resend attempted — no email on file", j.data?.resent ? "good" : "bad");
+      setEmails((prev) => { const copy = { ...prev }; delete copy[subId]; return copy; }); // force refresh
+      void loadEmails(subId);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "Resend failed", "bad");
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -256,7 +294,7 @@ export default function AdminReviewQueuePage() {
                     </div>
 
                     <div className="flex items-center gap-2 mt-3">
-                      <Button variant="quiet" size="sm" onClick={() => setExpanded(isOpen ? null : row.id)}>
+                      <Button variant="quiet" size="sm" onClick={() => { const opening = !isOpen; setExpanded(opening ? row.id : null); if (opening) void loadEmails(row.id); }}>
                         {isOpen ? "Hide evidence" : "View evidence"}
                       </Button>
                       <Button variant="primary" size="sm" onClick={() => { setFinalizeTarget(row); setReason(""); }}>
@@ -284,6 +322,35 @@ export default function AdminReviewQueuePage() {
                             No verbal transcript on file — the candidate never completed the spoken defence. Finalizing
                             publishes the score without it, and without penalty.
                           </p>
+                        )}
+
+                        {/* Email send history — status chips + one-click resend for grant/resume mail */}
+                        {emails[row.id] && emails[row.id].length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-hairline font-sans normal-case">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">Email history</div>
+                            <div className="flex flex-col gap-2">
+                              {emails[row.id].map((em) => {
+                                const tone = em.status === "DELIVERED" ? "good"
+                                  : em.status === "SENT" ? "neutral" : "bad";
+                                const canResend = em.type === "GRANT" || em.type === "STUCK_SWEEP";
+                                return (
+                                  <div key={em.id} className="flex items-center justify-between gap-3 text-xs">
+                                    <span className="min-w-0 truncate text-ink">
+                                      <span className="text-muted">{em.type}</span> · {em.subject}
+                                    </span>
+                                    <span className="flex items-center gap-2 shrink-0">
+                                      <Badge tone={tone}>{em.status}</Badge>
+                                      {canResend && em.status !== "DELIVERED" && (
+                                        <Button variant="quiet" size="sm" onClick={() => void resendEmail(em.id, row.id)} disabled={resendingId === em.id}>
+                                          {resendingId === em.id ? "Resending…" : "Resend"}
+                                        </Button>
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}

@@ -9,6 +9,8 @@ export interface SidebarState {
   user: User | null;
   assignments: TicketAssignment[];
   submission: Submission | null;
+  /** Actionable nudge (one step remaining / admin-enabled recovery). No eval data. */
+  pendingAction: { message: string; url: string } | null;
   refreshing: boolean;
 }
 
@@ -19,6 +21,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     user: null,
     assignments: [],
     submission: null,
+    pendingAction: null,
     refreshing: false,
   };
 

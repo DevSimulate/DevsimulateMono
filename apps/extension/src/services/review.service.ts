@@ -31,6 +31,26 @@ export async function getLatestReview(
 }
 
 /**
+ * Fetches the candidate's single actionable nudge (one step remaining / an
+ * admin-enabled recovery), or null. Carries no evaluation data.
+ */
+export async function getPendingAction(
+  context: vscode.ExtensionContext
+): Promise<{ message: string; url: string } | null> {
+  const token = await getToken(context);
+  if (!token) return null;
+  try {
+    const response = await axios.get<{ data: { message: string; url: string } | null }>(
+      `${getApiUrl()}/submissions/pending-action`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Polls for a completed review on the given submission id.
  * Checks every 5 seconds for up to 5 minutes.
  * Shows a progress notification while waiting.
