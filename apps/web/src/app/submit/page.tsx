@@ -118,6 +118,52 @@ function stepIndex(stage: Stage): number {
   return map[stage];
 }
 
+/**
+ * Best-effort multi-display detection via the Window Management API
+ * (`screen.isExtended` — a no-prompt boolean that's true when the desktop spans
+ * more than one screen). Only ever returns true when we AFFIRMATIVELY detect an
+ * extended desktop, so browsers without the API (or a single screen) never
+ * false-block. Re-checks on display add/remove, focus, resize, and a slow poll,
+ * so unplugging the second monitor clears the block automatically.
+ */
+function detectExtendedDisplay(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const scr = window.screen as Screen & { isExtended?: boolean };
+    return scr.isExtended === true;
+  } catch {
+    return false;
+  }
+}
+
+function useMultiScreen(active: boolean): { multi: boolean; recheck: () => void } {
+  const [multi, setMulti] = useState(false);
+  const recheckRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!active) { setMulti(false); return; }
+    const check = () => setMulti(detectExtendedDisplay());
+    recheckRef.current = check;
+    check();
+    // The Window Management API fires `change` on Screen when displays are
+    // added/removed; the rest are belt-and-suspenders for browsers that don't.
+    const scr = window.screen as Screen & {
+      addEventListener?: (t: string, l: () => void) => void;
+      removeEventListener?: (t: string, l: () => void) => void;
+    };
+    try { scr.addEventListener?.("change", check); } catch { /* unsupported */ }
+    window.addEventListener("focus", check);
+    window.addEventListener("resize", check);
+    const iv = setInterval(check, 4000);
+    return () => {
+      try { scr.removeEventListener?.("change", check); } catch { /* unsupported */ }
+      window.removeEventListener("focus", check);
+      window.removeEventListener("resize", check);
+      clearInterval(iv);
+    };
+  }, [active]);
+  return { multi, recheck: () => recheckRef.current() };
+}
+
 // Faint tiled identity watermark over question text. Doesn't prevent a
 // screenshot, but makes any leaked screenshot traceable to the candidate.
 function Watermark({ text }: { text: string }) {
@@ -1351,6 +1397,14 @@ function SubmitPageInner() {
   const showGuard = proctoring.requireFullscreen && WATCHED_STAGES.includes(stage) && !disqualified && (!isFs || away);
   const isWarned = leaveCount > 0;
 
+  // Second-screen block — a strict-proctoring assessment must run on ONE display.
+  // Active across every live stage (so it blocks starting AND continuing); only
+  // for campaigns that require fullscreen, and only when we affirmatively detect
+  // an extended desktop. Takes precedence over the fullscreen guard.
+  const assessmentLive = !["loading", "score", "upgrade"].includes(stage) && !disqualified;
+  const { multi: multiScreen, recheck: recheckScreens } = useMultiScreen(proctoring.requireFullscreen && assessmentLive);
+  const showScreenGuard = proctoring.requireFullscreen && assessmentLive && multiScreen;
+
   // Timer shown in the persistent stage rail — whichever is active for the current stage.
   const rail =
     stage === "sd_write" ? { time: `${Math.floor(writeTimeLeft / 60).toString().padStart(2, "0")}:${(writeTimeLeft % 60).toString().padStart(2, "0")}`, urgent: writeTimeLeft < 120 } :
@@ -1360,6 +1414,28 @@ function SubmitPageInner() {
 
   return (
     <div className="min-h-screen bg-paper">
+
+      {/* Single-display guard — a second monitor makes the assessment unproctorable.
+          Blocks starting and continuing until the extra display is disconnected;
+          clears automatically once unplugged. Sits above the fullscreen guard. */}
+      {showScreenGuard && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center px-6 bg-[rgba(16,24,43,0.92)]">
+          <div className="max-w-md w-full rounded border border-amber bg-surface p-8 text-center">
+            <div className="text-3xl mb-3">🖥️</div>
+            <h2 className="font-display text-lg font-semibold mb-2 text-amber">
+              Please disconnect your second screen
+            </h2>
+            <p className="text-sm mb-5 text-muted leading-relaxed">
+              This assessment must run on a single display. Unplug or disconnect your external
+              monitor to continue — it&apos;ll resume automatically as soon as only one screen is
+              detected.
+            </p>
+            <Button variant="primary" size="lg" onClick={recheckScreens} className="w-full">
+              I&apos;ve disconnected it — re-check
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Stay-on-screen / fullscreen guard — blocks the timed steps unless focused.
           Calm, firm, neutral: amber for a warning, never a red flash. */}
