@@ -101,9 +101,35 @@ export async function sendEmail(opts: {
 }
 
 /**
+ * Where candidate questions about an invite are directed. Per-campaign
+ * eventually — env-level for now, because one contact address covers a single
+ * pilot client and a schema change here would need a hand-run migration.
+ */
+const ASSESSMENT_CONTACT_EMAIL =
+  process.env.ASSESSMENT_CONTACT_EMAIL ??
+  process.env.REVIEW_CONTACT_EMAIL ??
+  "ossama@devsimulate.com";
+
+/** "Wednesday, 5 August 2026" — pinned to UTC so the weekday can't drift with server TZ. */
+function longDate(d: Date): string {
+  const weekday = d.toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+  const rest = d.toLocaleDateString("en-GB", {
+    day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+  return `${weekday}, ${rest}`;
+}
+
+/**
  * Builds the ASSESSMENT invitation email — sent to a candidate list before
  * anyone has an account. Rendered in the hiring organisation's branding
  * (logo, brand name, colour), falling back to DevSimulate's if unset.
+ *
+ * The copy carries weight beyond politeness. It sets the one expectation the
+ * assessment depends on — AI is welcome while building, absent while
+ * explaining — and it front-loads every proctoring rule, because a candidate
+ * who first meets fullscreen and paste-blocking mid-assessment reads them as a
+ * trap. It also states plainly that no score is shown, so silence at the end
+ * isn't mistaken for rejection.
  */
 export function assessmentInviteEmail(opts: {
   candidateName: string | null;
@@ -114,6 +140,8 @@ export function assessmentInviteEmail(opts: {
   link: string;
   deadline: Date | null;
   expectedMinutes: number | null;
+  /** Reply target for candidate questions. Defaults to ASSESSMENT_CONTACT_EMAIL. */
+  contactEmail?: string | null;
 }): { subject: string; html: string } {
   const {
     candidateName, brandName, logoUrl, primaryColor,
@@ -122,41 +150,117 @@ export function assessmentInviteEmail(opts: {
 
   const accent = primaryColor || "#6366f1";
   const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
-  const subject = `Your technical assessment — ${roleName} at ${brandName}`;
+  const contact = opts.contactEmail?.trim() || ASSESSMENT_CONTACT_EMAIL;
+  const minutes = expectedMinutes ?? 60;
+  const subject = `Your next step for the ${roleName} role at ${brandName}`;
 
   const header = logoUrl
     ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;display:block;margin-bottom:24px;">`
     : `<div style="font-weight:800;font-size:18px;margin-bottom:24px;color:${accent};">${brandName}</div>`;
 
-  const deadlineLine = deadline
-    ? `<li style="margin-bottom:6px;">Complete it by <strong>${deadline.toDateString()}</strong></li>`
-    : "";
-  const timeLine = expectedMinutes
-    ? `<li style="margin-bottom:6px;">Takes about <strong>${expectedMinutes} minutes</strong></li>`
+  const p = "font-size:15px;line-height:1.6;color:#333;margin:0 0 14px;";
+  const h2 = "font-size:15px;font-weight:700;color:#1a1a1a;margin:26px 0 8px;";
+  const li = "margin-bottom:7px;";
+
+  const deadlineSentence = deadline
+    ? ` Please try to finish by <strong>${longDate(deadline)}</strong>, as the link stops working after that.`
     : "";
 
   const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1a1a1a;">
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Use AI to build the fix, then walk us through it in your own words.
+    </div>
     ${header}
-    <h1 style="font-size:22px;margin:0 0 16px;">You're invited to a technical assessment</h1>
-    <p style="font-size:15px;line-height:1.6;color:#333;">
-      Hi ${greeting},<br><br>
-      As the next step for the <strong>${roleName}</strong> role at <strong>${brandName}</strong>,
-      we'd like you to complete a short hands-on assessment. You'll diagnose and fix a real issue
-      in a working codebase — not a quiz.
+
+    <p style="${p}">Hi ${greeting},</p>
+
+    <p style="${p}">
+      Thank you for your interest in the <strong>${roleName}</strong> role at <strong>${brandName}</strong>.
+      For the next step, we'd love for you to work through a short, hands-on assessment. It's a real
+      task rather than a quiz: you'll fix an issue in a working codebase, then talk us through what you did.
     </p>
-    <ul style="font-size:14px;line-height:1.6;color:#333;padding-left:20px;margin:16px 0;">
-      ${timeLine}
-      ${deadlineLine}
-      <li style="margin-bottom:6px;">You may use AI tools — we care how you work in reality</li>
+
+    <div style="${h2}">Part 1: Fix the code</div>
+    <p style="${p}">
+      Work in your own editor, at your own pace. Feel free to use AI tools like Copilot, Claude, or
+      ChatGPT if that's part of your routine. We're not testing whether you can code without help,
+      just that you understand the change you're shipping. This part isn't timed or monitored.
+    </p>
+
+    <div style="${h2}">Part 2: Talk us through it</div>
+    <p style="${p}">
+      Once you open the assessment in your browser, you'll explain your own work. No AI this time,
+      and you won't be able to go back to your code. You'll write a short explanation covering four things:
+    </p>
+    <ul style="font-size:15px;line-height:1.6;color:#333;padding-left:20px;margin:0 0 14px;">
+      <li style="${li}"><strong>Root cause.</strong> What was actually broken, and why?</li>
+      <li style="${li}"><strong>How you found it.</strong> What you read, ran, or tested to confirm it.</li>
+      <li style="${li}"><strong>Why this fix.</strong> Why this approach, and any trade-off you accepted.</li>
+      <li style="${li}"><strong>How you verified it.</strong> What showed you that it works now.</li>
     </ul>
-    <div style="margin:24px 0;">
-      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:8px;font-size:14px;">
-        Start your assessment →
+    <p style="${p}">
+      After that, there are two quick follow-up questions and a brief spoken explanation with your
+      camera and mic on. It's all about the code you just wrote, so the best prep is simply being
+      able to explain your fix from memory.
+    </p>
+
+    <div style="${h2}">Before you start</div>
+    <p style="${p}">
+      Set aside about ${minutes} minutes somewhere quiet, use Chrome or Edge on a laptop or desktop,
+      and have a working mic and camera ready (there's a quick mic check first).
+    </p>
+    <p style="${p}">
+      A few things about Part 2, just so nothing catches you out: it runs in fullscreen, and switching
+      tabs or apps gets noted (you'll get two reminders before a third would end the session). Pasting
+      into the answer boxes is turned off, though trying it won't end anything. And if your mic acts up,
+      don't worry or close the tab, you'll be offered a retry or the option to type instead.
+    </p>
+
+    <div style="${h2}">Getting started</div>
+    <ol style="font-size:15px;line-height:1.6;color:#333;padding-left:20px;margin:0 0 14px;">
+      <li style="${li}">Install the DevSimulate extension for VS Code and sign in with GitHub.</li>
+      <li style="${li}">Open your assigned ticket in the DevSimulate sidebar.</li>
+      <li style="${li}">Click &ldquo;Fork &amp; Clone&rdquo; and work in that clone.</li>
+      <li style="${li}">Fix the issue, using AI freely.</li>
+      <li style="${li}">Click &ldquo;Push &amp; Create PR,&rdquo; then &ldquo;Submit PR for Review.&rdquo;</li>
+      <li style="${li}">Complete the write-up, follow-up questions, and spoken explanation in your browser.</li>
+    </ol>
+    <p style="${p}">
+      Worth flagging: &ldquo;Submit PR for Review&rdquo; is the point where Part 2 begins and you can't
+      return to your code, so click it once you're ready.
+    </p>
+
+    <div style="margin:28px 0;">
+      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:8px;font-size:15px;">
+        Start your assessment &rarr;
       </a>
     </div>
-    <p style="font-size:12px;color:#888;line-height:1.6;">
-      This link is personal to you — please don't share it.<br>
+
+    <div style="${h2}">A few notes</div>
+    <p style="${p}">
+      You won't see a score at the end, and no candidate does, so please don't read anything into it.
+      The ${brandName} hiring team will review your assessment alongside the rest of your application
+      and get back to you either way.${deadlineSentence}
+    </p>
+    <p style="${p}">
+      Your solution is submitted as a pull request on a public GitHub repository, so it may be visible to others.
+    </p>
+    <p style="${p}">
+      By starting, you agree that ${brandName} and DevSimulate may store your submission (your code,
+      written answers, and the recording and transcript of your spoken explanation) to evaluate you for
+      this and future roles. You can ask us to delete it anytime by writing to
+      <a href="mailto:${contact}" style="color:${accent};">${contact}</a>, and if you'd rather we didn't
+      keep it, just reply before you begin. Your link is personal to you, so please don't share it.
+    </p>
+    <p style="${p}">
+      If anything is unclear, just reply here or email
+      <a href="mailto:${contact}" style="color:${accent};">${contact}</a> and a real person will help.
+    </p>
+
+    <p style="${p}">Good luck. We're looking forward to seeing how you work.</p>
+
+    <p style="font-size:12px;color:#888;line-height:1.6;margin-top:22px;">
       If the button doesn't work, paste this into your browser:<br>
       <span style="color:#aaa;word-break:break-all;">${link}</span>
     </p>
