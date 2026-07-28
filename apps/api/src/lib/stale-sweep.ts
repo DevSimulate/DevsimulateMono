@@ -5,10 +5,12 @@
  */
 
 import { Queue, Worker, Job } from "bullmq";
+import { InviteStatus, CampaignType, CampaignStatus } from "@prisma/client";
 import { redisConnection } from "./queue";
 import prisma from "./prisma";
-import { sendEmail, stuckAssessmentEmail } from "./email";
+import { sendEmail, stuckAssessmentEmail, assessmentReminderEmail } from "./email";
 import { stuckSubmissionWhere, SWEEP_INTERVAL_MS, STALE_AFTER_HOURS } from "../services/stale-submissions";
+import { isReminderDue, daysRemaining } from "../services/invite-reminders";
 import { resumeUrl } from "./resume";
 
 const QUEUE_NAME = "stale-sweep";
@@ -116,6 +118,96 @@ export async function sweepUndeliveredGrants(): Promise<{ flagged: number }> {
 }
 
 /**
+ * Nudges invited candidates who never opened their assessment, every
+ * REMINDER_INTERVAL_DAYS until they start or the campaign deadline passes.
+ *
+ * Also retires invites whose deadline has gone by, so the recruiter's list stops
+ * showing "invited" for people who can no longer act — EXPIRED existed in the
+ * enum but nothing ever set it.
+ */
+export async function sweepInviteReminders(): Promise<{ due: number; emailed: number; expired: number }> {
+  const now = new Date();
+
+  const open = await prisma.campaignInvite.findMany({
+    where: {
+      status: InviteStatus.INVITED,
+      userId: null,
+      campaign: { type: CampaignType.HIRING, status: CampaignStatus.ACTIVE },
+    },
+    take: 500,
+    include: {
+      campaign: {
+        select: {
+          id: true, deadline: true, roleName: true, companyName: true,
+          shareableSlug: true, ticketIds: true, codebaseId: true, difficulty: true,
+          org: { select: { brandName: true, logoUrl: true, primaryColor: true } },
+        },
+      },
+    },
+  });
+
+  const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+  let emailed = 0;
+  let due = 0;
+  let expired = 0;
+
+  for (const invite of open) {
+    const deadline = invite.campaign.deadline;
+
+    if (deadline && deadline.getTime() <= now.getTime()) {
+      await prisma.campaignInvite.update({
+        where: { id: invite.id },
+        data: { status: InviteStatus.EXPIRED },
+      });
+      expired++;
+      continue;
+    }
+
+    // Reminder count comes from the delivery log rather than a schema column —
+    // every invite send already writes one, so the cap needs no migration.
+    const sends = await prisma.emailDelivery.count({
+      where: { type: "INVITE", campaignId: invite.campaign.id, toEmail: invite.email },
+    });
+
+    if (!isReminderDue(invite, deadline, Math.max(0, sends - 1), now)) continue;
+    due++;
+
+    const { subject, html } = assessmentReminderEmail({
+      candidateName: invite.name,
+      brandName: invite.campaign.org.brandName || invite.campaign.companyName,
+      logoUrl: invite.campaign.org.logoUrl,
+      primaryColor: invite.campaign.org.primaryColor,
+      roleName: invite.campaign.roleName,
+      link: `${appUrl}/apply/${invite.campaign.shareableSlug}?invite=${invite.token}`,
+      deadline,
+      daysLeft: daysRemaining(deadline, now),
+    });
+
+    const sent = await sendEmail({
+      to: invite.email,
+      subject,
+      html,
+      meta: { type: "INVITE", campaignId: invite.campaign.id },
+    });
+
+    // Only move the clock on a successful send. Stamping regardless would let a
+    // provider outage silently consume a candidate's entire reminder schedule.
+    if (sent) {
+      await prisma.campaignInvite.update({
+        where: { id: invite.id },
+        data: { remindedAt: now },
+      });
+      emailed++;
+    }
+  }
+
+  if (due || expired) {
+    console.log(`[invite-reminders] ${due} due, ${emailed} emailed, ${expired} expired`);
+  }
+  return { due, emailed, expired };
+}
+
+/**
  * Registers the repeatable job and starts its worker. The repeat entry is keyed
  * on the interval, so re-registering on every boot is safe — BullMQ dedupes it
  * rather than stacking a new schedule per deploy.
@@ -133,7 +225,11 @@ export function startStaleSweepWorker(): Worker {
 
   const worker = new Worker(
     QUEUE_NAME,
-    async (_job: Job) => { await sweepStuckSubmissions(); await sweepUndeliveredGrants(); },
+    async (_job: Job) => {
+      await sweepStuckSubmissions();
+      await sweepUndeliveredGrants();
+      await sweepInviteReminders();
+    },
     { connection: redisConnection, concurrency: 1 }
   );
 

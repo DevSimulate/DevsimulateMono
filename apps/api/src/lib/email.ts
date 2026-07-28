@@ -272,6 +272,92 @@ export function assessmentInviteEmail(opts: {
 }
 
 /**
+ * Nudge for an invited candidate who never opened their assessment.
+ *
+ * Deliberately SHORT, and deliberately not a re-send of the invite. This lands
+ * every couple of days, so repeating the full instructions each time reads as
+ * spam and trains people to ignore it. Everything they need to decide is here —
+ * the link and how long is left — and the detail is still in the first email.
+ *
+ * Tone matters as much as it does in the stuck-assessment nudge: someone who
+ * hasn't started is usually busy, not uninterested. No guilt, no "final notice".
+ */
+export function assessmentReminderEmail(opts: {
+  candidateName: string | null;
+  brandName: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  roleName: string;
+  link: string;
+  deadline: Date | null;
+  daysLeft: number | null;
+}): { subject: string; html: string } {
+  const { candidateName, brandName, logoUrl, primaryColor, roleName, link, deadline, daysLeft } = opts;
+
+  const accent = primaryColor || "#6366f1";
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const subject = `A reminder: your ${roleName} assessment at ${brandName}`;
+
+  const header = logoUrl
+    ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;display:block;margin-bottom:24px;">`
+    : `<div style="font-weight:800;font-size:18px;margin-bottom:24px;color:${accent};">${brandName}</div>`;
+
+  const p = "font-size:15px;line-height:1.6;color:#333;margin:0 0 14px;";
+
+  // "1 day left" reads as pressure; "today" reads as information.
+  const timeLine =
+    daysLeft === null || !deadline
+      ? ""
+      : daysLeft <= 0
+        ? `<p style="${p}">Your link closes <strong>today</strong>.</p>`
+        : daysLeft === 1
+          ? `<p style="${p}">Your link closes <strong>tomorrow</strong> (${longDate(deadline)}).</p>`
+          : `<p style="${p}">You have <strong>${daysLeft} days</strong> left — the link closes on ${longDate(deadline)}.</p>`;
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Your assessment link is still open.
+    </div>
+    ${header}
+
+    <p style="${p}">Hi ${greeting},</p>
+
+    <p style="${p}">
+      Just a quick nudge — we haven't seen you start the assessment for the
+      <strong>${roleName}</strong> role at <strong>${brandName}</strong> yet, and your link is still open.
+    </p>
+
+    ${timeLine}
+
+    <p style="${p}">
+      It takes about an hour, and you can use AI tools for the coding part. If now isn't a good time,
+      there's nothing to reply to — just come back when it suits.
+    </p>
+
+    <div style="margin:26px 0;">
+      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:8px;font-size:15px;">
+        Start your assessment &rarr;
+      </a>
+    </div>
+
+    <p style="${p}">
+      The full details are in our original email. If anything's in the way — a technical problem, or
+      the timing — just reply and a person will help.
+    </p>
+
+    <p style="font-size:12px;color:#888;line-height:1.6;margin-top:22px;">
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${link}</span>
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#aaa;">Sent via DevSimulate on behalf of ${brandName}.</p>
+  </div>`;
+
+  return { subject, html };
+}
+
+/**
  * Nudge for a candidate whose assessment was reviewed but never completed —
  * almost always a failed mic or a closed tab at the verbal step.
  *

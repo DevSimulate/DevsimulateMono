@@ -10,7 +10,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import prisma from "../lib/prisma";
 import { finalizeSubmission } from "../services/score.service";
-import { sweepStuckSubmissions } from "../lib/stale-sweep";
+import { sweepStuckSubmissions, sweepInviteReminders } from "../lib/stale-sweep";
 import { resumeUrl } from "../lib/resume";
 import { sendEmail, grantEmail, stuckAssessmentEmail } from "../lib/email";
 
@@ -324,6 +324,21 @@ router.post("/stale-sweep", async (_req: Request, res: Response): Promise<void> 
   } catch (err) {
     console.error("[admin] stale-sweep error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Sweep failed" });
+  }
+});
+
+/**
+ * POST /admin/invite-reminders
+ * Runs the invite-reminder sweep immediately instead of waiting for the timer.
+ * Respects the same cadence and cap as the scheduled run, so calling it twice
+ * in a row does not double-nudge anyone.
+ */
+router.post("/invite-reminders", async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ data: await sweepInviteReminders() });
+  } catch (err) {
+    console.error("[admin] invite-reminders error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Reminder sweep failed" });
   }
 });
 
