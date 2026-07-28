@@ -605,10 +605,12 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
  */
 router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
   const { userId } = (req as AuthenticatedRequest).user;
-  const { status, bookingLink, deadline } = req.body as {
+  const { status, bookingLink, deadline, blockPaste, requireFullscreen } = req.body as {
     status?: CampaignStatus;
     bookingLink?: string;
     deadline?: string;
+    blockPaste?: boolean;
+    requireFullscreen?: boolean;
   };
   try {
     const campaign = await prisma.campaign.findFirst({
@@ -622,6 +624,11 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
         ...(status ? { status } : {}),
         ...(bookingLink !== undefined ? { bookingLink } : {}),
         ...(deadline ? { deadline: new Date(deadline) } : {}),
+        // Proctoring policy. Typed-checked rather than truthy-checked so an
+        // explicit `false` turns a rule OFF instead of being read as "unset" —
+        // the whole point of the control is being able to switch it off.
+        ...(typeof blockPaste === "boolean" ? { blockPaste } : {}),
+        ...(typeof requireFullscreen === "boolean" ? { requireFullscreen } : {}),
       },
     });
     res.json({ data: updated });

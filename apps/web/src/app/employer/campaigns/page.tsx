@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getToken } from "@/lib/auth";
-import { Plus, Users, Calendar, ChevronRight, Copy, Trophy, Pause, Play, Tag, Trash2 } from "lucide-react";
+import { Plus, Users, Calendar, ChevronRight, Copy, Trophy, Pause, Play, Tag, Trash2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge, BadgeTone } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -36,12 +36,12 @@ const STATUS_TONE: Record<Campaign["status"], BadgeTone> = {
   CLOSED: "neutral",
   DRAFT: "warn",
 };
-// Lifecycle labels — CLOSED means "paused" in this UI (the toggle action
-// resumes it back to ACTIVE), so it reads that way rather than as a
-// permanent end state.
+// Lifecycle labels. CLOSED is reversible — reopening sets it back to ACTIVE —
+// but it reads as "Closed" because that is what it does to candidates: the
+// application link stops accepting them. Delete is the destructive one.
 const STATUS_LABEL: Record<Campaign["status"], string> = {
   ACTIVE: "Active",
-  CLOSED: "Paused",
+  CLOSED: "Closed",
   DRAFT: "Draft",
 };
 
@@ -51,6 +51,7 @@ export default function CampaignsListPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tagPanel, setTagPanel]   = useState<string | null>(null);
+  const [proctorPanel, setProctorPanel] = useState<string | null>(null);
   const [tagInput, setTagInput]   = useState("");
   const [certMsg, setCertMsg]     = useState<string | null>(null);
   const toast = useToast();
@@ -78,7 +79,8 @@ export default function CampaignsListPage() {
     });
   }
 
-  // Pause = set CLOSED · Resume = set ACTIVE
+  // Close = set CLOSED · Reopen = set ACTIVE. Reversible, and distinct from
+  // Delete — closing stops new candidates without touching anyone's results.
   async function toggleStatus(c: Campaign) {
     setBusyId(c.id);
     const token = getToken();
@@ -87,6 +89,21 @@ export default function CampaignsListPage() {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
+    });
+    setBusyId(null);
+    toast.show(next === "CLOSED" ? "Campaign closed" : "Campaign reopened", "good");
+    load();
+  }
+
+  // Proctoring rules take effect on the candidate's NEXT assessment load — they
+  // are read at runtime, so this never disturbs an assessment already in flight.
+  async function setProctoring(c: Campaign, patch: Partial<Pick<Campaign, "blockPaste" | "requireFullscreen">>) {
+    setBusyId(c.id);
+    const token = getToken();
+    await fetch(`${API}/employer/campaigns/${c.id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
     });
     setBusyId(null);
     load();
@@ -196,9 +213,16 @@ export default function CampaignsListPage() {
                       <span>{c.deadline ? new Date(c.deadline).toLocaleDateString() : "No deadline"}</span>
                     </div>
 
-                    {/* Proctoring state — one plain mono label, not glyphs */}
-                    <div className="w-24 shrink-0" title={proctoringDetail || undefined}>
-                      <span className="text-xs font-mono text-muted">{proctored ? "Proctored" : "Unproctored"}</span>
+                    {/* Proctoring state — now a control, not just a label */}
+                    <div className="w-24 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setProctorPanel(proctorPanel === c.id ? null : c.id)}
+                        title={proctoringDetail || "No proctoring rules — click to change"}
+                        className="text-xs font-mono text-muted underline decoration-dotted underline-offset-4 hover:text-ink transition-colors"
+                      >
+                        {proctored ? "Proctored" : "Unproctored"}
+                      </button>
                     </div>
 
                     {/* Actions — exactly two: primary + overflow menu */}
@@ -211,10 +235,15 @@ export default function CampaignsListPage() {
                           { label: "Copy application link", icon: <Copy size={14} />, onClick: () => copyLink(c.shareableSlug) },
                           { label: "Copy leaderboard link", icon: <Trophy size={14} />, onClick: () => copyBoardLink(c.shareableSlug) },
                           {
-                            label: c.status === "ACTIVE" ? "Pause campaign" : "Resume campaign",
+                            label: c.status === "ACTIVE" ? "Close campaign" : "Reopen campaign",
                             icon: c.status === "ACTIVE" ? <Pause size={14} /> : <Play size={14} />,
                             onClick: () => toggleStatus(c),
                             disabled: busyId === c.id,
+                          },
+                          {
+                            label: "Proctoring rules",
+                            icon: <ShieldCheck size={14} />,
+                            onClick: () => setProctorPanel(proctorPanel === c.id ? null : c.id),
                           },
                           // DevFest tagging (and the certificate issuance it unlocks) is a
                           // DevFest-only concept — a Hiring campaign has no leaderboard.
@@ -233,6 +262,59 @@ export default function CampaignsListPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Proctoring rules panel */}
+                  {proctorPanel === c.id && (
+                    <div className="mt-3 rounded border border-hairline bg-paper p-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest mb-2 text-muted">Proctoring rules</p>
+                      <p className="text-xs text-muted mb-3">
+                        Applied during the write-up, the follow-up questions and a typed defence —
+                        never while the candidate is coding. Takes effect on their next assessment
+                        load, so changing it now won&apos;t disturb anyone mid-assessment.
+                      </p>
+
+                      <label className="flex items-start gap-2.5 mb-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={c.requireFullscreen}
+                          disabled={busyId === c.id}
+                          onChange={(e) => setProctoring(c, { requireFullscreen: e.target.checked })}
+                          className="mt-0.5 accent-brand"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-semibold">Require fullscreen</span>
+                          <span className="block text-[11px] text-muted leading-snug">
+                            Leaving — switching tabs or apps, or exiting fullscreen — gives two warnings.
+                            The third ends the assessment and voids the submission.
+                          </span>
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-2.5 mb-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={c.blockPaste}
+                          disabled={busyId === c.id}
+                          onChange={(e) => setProctoring(c, { blockPaste: e.target.checked })}
+                          className="mt-0.5 accent-brand"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-semibold">Disable pasting in answers</span>
+                          <span className="block text-[11px] text-muted leading-snug">
+                            Paste is blocked and warned. A third attempt flags the submission for human
+                            review but never disqualifies — reflexive Ctrl+V isn&apos;t cheating.
+                          </span>
+                        </span>
+                      </label>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-muted font-mono">
+                          {busyId === c.id ? "Saving…" : "Saved automatically"}
+                        </span>
+                        <Button variant="secondary" size="sm" onClick={() => setProctorPanel(null)}>Done</Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* DevFest tag panel */}
                   {tagPanel === c.id && (
