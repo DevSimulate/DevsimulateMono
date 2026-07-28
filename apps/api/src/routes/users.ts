@@ -2,6 +2,11 @@ import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
+import {
+  allHiringTicketIds,
+  hiringPairKeys,
+  isHiringPair,
+} from "../lib/evaluation-visibility";
 
 const router = Router();
 
@@ -24,14 +29,22 @@ router.get("/leaderboard", async (req: Request, res: Response): Promise<void> =>
       },
       select: {
         scoreTotal: true,
+        userId: true,
+        ticketId: true,
         user: { select: { githubUsername: true } },
         ticket: { select: { stack: true } },
       },
     });
 
+    // Hiring assessments never rank. This board is public and unauthenticated,
+    // so an employer's private evaluation would otherwise be readable by anyone
+    // as averageScore/bestScore against a named GitHub account.
+    const hiringPairs = await hiringPairKeys();
+
     // Group by (githubUsername + stack)
     const groups = new Map<string, { username: string; stack: string; scores: number[] }>();
     for (const s of submissions) {
+      if (isHiringPair(hiringPairs, s)) continue;
       const username = s.user.githubUsername ?? "unknown";
       const stack = s.ticket.stack;
       const key = `${username}::${stack}`;
@@ -80,11 +93,19 @@ router.get(
         return;
       }
 
-      const reviewed = await prisma.submission.findMany({
-        where: { userId: user.id, status: "REVIEWED", finalized: true },
-        orderBy: { submittedAt: "desc" },
-        include: { ticket: true },
-      });
+      // This endpoint is PUBLIC — no auth, anyone can read it by username. So
+      // hiring work is excluded from every number below, not just the scores:
+      // even a bare participation count would tell a stranger (or a current
+      // employer) that this person is interviewing.
+      const hidden = new Set(await allHiringTicketIds(user.id));
+
+      const reviewed = (
+        await prisma.submission.findMany({
+          where: { userId: user.id, status: "REVIEWED", finalized: true },
+          orderBy: { submittedAt: "desc" },
+          include: { ticket: true },
+        })
+      ).filter((s) => !hidden.has(s.ticketId));
 
       const total = reviewed.length;
 
@@ -114,7 +135,10 @@ router.get(
           : 0;
 
       const totalSubmissions = await prisma.submission.count({
-        where: { userId: user.id },
+        where: {
+          userId: user.id,
+          ...(hidden.size ? { ticketId: { notIn: [...hidden] } } : {}),
+        },
       });
 
       const recentSubmissions = reviewed.slice(0, 3).map((s) => ({

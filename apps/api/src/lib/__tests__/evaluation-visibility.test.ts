@@ -4,6 +4,7 @@ import {
   serializeSubmissionForCandidate,
   redactSubmissionEvaluation,
   redactFollowUpEvaluation,
+  isHiringPair,
   HiringInfo,
 } from "../evaluation-visibility";
 
@@ -110,4 +111,24 @@ test("redactFollowUpEvaluation keeps answers, drops feedback/scores", () => {
   assert.equal(fu.claudeFeedback, null);
   assert.equal(fu.verbalNote, null);
   assert.equal(fu.scoreBonus, null);
+});
+
+// ── isHiringPair (public leaderboard filter) ─────────────────────────────────
+
+test("isHiringPair matches on the user+ticket pair, not the ticket alone", () => {
+  // The same ticket is public contest work for one person and a private
+  // employer assessment for another. A ticket-only filter would erase the
+  // contest entrant's rank and still be wrong about who to hide.
+  const keys = new Set(["u-candidate::t-shared"]);
+  assert.equal(isHiringPair(keys, { userId: "u-candidate", ticketId: "t-shared" }), true);
+  assert.equal(isHiringPair(keys, { userId: "u-contestant", ticketId: "t-shared" }), false);
+});
+
+test("isHiringPair does not match a hiring candidate's unrelated contest work", () => {
+  const keys = new Set(["u1::t-hiring"]);
+  assert.equal(isHiringPair(keys, { userId: "u1", ticketId: "t-contest" }), false);
+});
+
+test("isHiringPair on an empty set hides nothing", () => {
+  assert.equal(isHiringPair(new Set(), { userId: "u1", ticketId: "t1" }), false);
 });

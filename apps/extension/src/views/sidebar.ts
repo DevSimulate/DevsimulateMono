@@ -102,6 +102,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   private _buildHtml(_webview: vscode.Webview): string {
     const nonce = crypto.randomBytes(16).toString("base64");
 
+    // THE sidebar markup is media/sidebar.html — read from disk at runtime, and
+    // the only copy. esbuild bundles src/extension.ts alone, so a webview HTML
+    // file anywhere under src/ is never built, never packaged, and never loaded.
+    // Two fixes (hiring score privacy, the pending-action card) were once
+    // written into a src/views/sidebar.html that shipped nothing while looking
+    // committed. Edit this file, not a copy.
     const htmlPath = path.join(
       this._extensionUri.fsPath,
       "media",

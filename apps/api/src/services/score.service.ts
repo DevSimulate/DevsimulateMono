@@ -2,6 +2,7 @@ import prisma from "../lib/prisma";
 import { ClaudeReviewResult } from "../types/index";
 import { Submission } from "@prisma/client";
 import { SCORING_MODEL, RUBRIC_VERSION } from "../config/scoring";
+import { allHiringTicketIds } from "../lib/evaluation-visibility";
 
 /**
  * Persists the Claude review result to the Submission record and updates
@@ -98,46 +99,64 @@ export async function finalizeSubmission(
 }
 
 /**
- * Recalculates and persists the user's skill score using an exponential
- * moving average weighted toward recent performance.
+ * Recomputes the user's skill score from the FINAL scoreTotal of their reviewed
+ * submissions (newest-weighted EWMA). Idempotent — safe to call again after a
+ * deduction (verbal / hidden test) so the Skill Score reflects the adjusted score,
+ * not the pre-deduction one.
+ *
+ * HIRING WORK IS EXCLUDED. Skill score is a public reputation number: it is
+ * returned by /auth/me, rendered on the dashboard and the extension badge, and
+ * served by the UNAUTHENTICATED profile and leaderboard endpoints. An employer's
+ * private evaluation must never reach any of those, so it is kept out of the
+ * input rather than stripped from each output — stripping would mean every
+ * future endpoint returning a user is a fresh leak.
+ *
+ * The exposure this closes was not theoretical: with a single hiring submission
+ * the EWMA seeds directly from it, so skillScore equalled the assessment's exact
+ * scoreTotal and showed the candidate the score they were never meant to see.
  */
-export async function updateUserSkillScore(
-  userId: string,
-  latestScore: number
-): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return;
+export async function recomputeUserSkillScore(userId: string): Promise<void> {
+  const hidden = new Set(await allHiringTicketIds(userId));
 
-  const isFirstSubmission = user.skillScore === 0;
-  const newSkillScore = isFirstSubmission
-    ? latestScore
-    : Math.round(0.8 * user.skillScore + 0.2 * latestScore);
+  const subs = await prisma.submission.findMany({
+    where: { userId, status: "REVIEWED", finalized: true },
+    select: { scoreTotal: true, ticketId: true },
+    orderBy: { submittedAt: "asc" },
+  });
 
   await prisma.user.updateMany({
     where: { id: userId },
-    data: { skillScore: newSkillScore },
+    data: { skillScore: skillScoreFrom(subs, hidden) },
   });
 }
 
 /**
- * Recomputes the user's skill score from the FINAL scoreTotal of their reviewed
- * submissions (newest-weighted EWMA). Idempotent — safe to call again after a
- * deduction (verbal / hidden test) so the Skill Score reflects the adjusted score,
- * not the pre-deduction one. Replaces the running update for post-deduction refreshes.
+ * The skill-score decision, pure so it can be tested without a database — the
+ * privacy rule it encodes is worth a regression test, and the surrounding query
+ * isn't.
+ *
+ * Takes submissions oldest-first and returns the EWMA over the ones that count.
+ * Hiring submissions are dropped BEFORE the fold, not scored and hidden after:
+ * with a single hiring assessment the EWMA seeds directly from it, so the stored
+ * number would equal that assessment's exact scoreTotal.
+ *
+ * Returns 0 — never "leave it alone" — when nothing scoreable remains. A
+ * candidate whose only work is a hiring assessment has no public track record,
+ * and an early return here would strand a previously-leaked value on the row
+ * where every recompute would then decline to correct it.
  */
-export async function recomputeUserSkillScore(userId: string): Promise<void> {
-  const subs = await prisma.submission.findMany({
-    where: { userId, status: "REVIEWED", finalized: true },
-    select: { scoreTotal: true },
-    orderBy: { submittedAt: "asc" },
-  });
-  if (subs.length === 0) return;
+export function skillScoreFrom(
+  subs: { scoreTotal: number | null; ticketId: string }[],
+  hiddenTicketIds: Set<string>
+): number {
+  const scoreable = subs.filter((s) => !hiddenTicketIds.has(s.ticketId));
+  if (scoreable.length === 0) return 0;
 
-  let s = subs[0].scoreTotal ?? 0;
-  for (let i = 1; i < subs.length; i++) {
-    s = Math.round(0.8 * s + 0.2 * (subs[i].scoreTotal ?? 0));
+  let s = scoreable[0].scoreTotal ?? 0;
+  for (let i = 1; i < scoreable.length; i++) {
+    s = Math.round(0.8 * s + 0.2 * (scoreable[i].scoreTotal ?? 0));
   }
-  await prisma.user.updateMany({ where: { id: userId }, data: { skillScore: s } });
+  return s;
 }
 
 /**

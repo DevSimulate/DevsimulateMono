@@ -223,6 +223,21 @@
         </div>
       </div>
 
+      <!-- One step remaining — verbal pending or an admin-enabled recovery.
+           Never carries evaluation data; the endpoint behind it is eval-free. -->
+      <div class="section hidden" id="section-pending-action">
+        <div class="ticket-card">
+          <div class="ticket-title">One step remaining</div>
+          <div class="ticket-description" id="pending-action-msg"></div>
+          <div class="ticket-actions">
+            <a class="btn-primary" id="pending-action-link" href="#"
+               style="display:block;text-align:center;text-decoration:none;padding:7px 10px;border-radius:4px;font-size:11px;font-weight:600;">
+              Continue in browser →
+            </a>
+          </div>
+        </div>
+      </div>
+
       <!-- Active tickets -->
       <div class="section">
         <h2>Active Tickets <span id="ticket-count-badge" class="ticket-count hidden"></span></h2>
@@ -235,7 +250,7 @@
       <hr />
 
       <!-- Latest review scores -->
-      <div class="section" id="section-scores" class="hidden">
+      <div class="section hidden" id="section-scores">
         <h2>Latest Review</h2>
         <div class="score-section">
           <div class="score-total" id="score-total">—<span>/100</span></div>
@@ -264,6 +279,12 @@
 
       <div id="section-pending-review" class="hidden">
         <div class="status-msg">⏳ Review pending — Claude is scoring your PR...</div>
+      </div>
+
+      <!-- Hiring: confirmation only, never a score (see renderState). -->
+      <div class="section hidden" id="section-submitted">
+        <h2>Assessment submitted ✓</h2>
+        <div class="status-msg" id="submitted-msg">The hiring team will contact you by email.</div>
       </div>
 
     </div>
@@ -367,14 +388,39 @@
           applyBusy();
         }
 
-        // Scores
-        const hasReview = state.submission && state.submission.status === 'REVIEWED';
-        const isPending = state.submission && state.submission.status === 'PENDING';
-        document.getElementById('section-scores').classList.toggle('hidden', !hasReview);
-        document.getElementById('section-pending-review').classList.toggle('hidden', !isPending);
+        // One step remaining (verbal pending / admin-enabled recovery).
+        const pa = state.pendingAction;
+        const paEl = document.getElementById('section-pending-action');
+        paEl.classList.toggle('hidden', !pa);
+        if (pa) {
+          document.getElementById('pending-action-msg').textContent = pa.message;
+          // Only ever follow http(s) — this href comes off the wire and the
+          // webview would happily run a javascript: URL.
+          const link = document.getElementById('pending-action-link');
+          link.href = /^https?:\/\//i.test(pa.url || '') ? pa.url : '#';
+        }
 
-        if (hasReview) {
-          const s = state.submission;
+        // Scores. In a HIRING campaign the evaluation belongs to the employer —
+        // the candidate sees a confirmation and never a score panel. The API has
+        // already stripped the fields (hideResults is how it says so), so the
+        // panel would otherwise render "null/100" over empty bars.
+        const sub = state.submission;
+        const hiring = !!(sub && sub.hideResults);
+        const hasReview = !!(sub && sub.status === 'REVIEWED');
+        const isPending = !!(sub && sub.status === 'PENDING');
+
+        document.getElementById('section-scores').classList.toggle('hidden', hiring || !hasReview);
+        document.getElementById('section-pending-review').classList.toggle('hidden', hiring || !isPending);
+        document.getElementById('section-submitted').classList.toggle('hidden', !hiring);
+
+        if (hiring) {
+          const role = sub.campaignRole, company = sub.campaignCompany;
+          document.getElementById('submitted-msg').textContent =
+            (role && company)
+              ? 'Your ' + role + ' assessment for ' + company + ' has been submitted. The hiring team will contact you by email.'
+              : 'The hiring team will contact you by email.';
+        } else if (hasReview) {
+          const s = sub;
           document.getElementById('score-total').innerHTML = s.scoreTotal + '<span>/100</span>';
           setBar('diagnosis', s.scoreDiagnosis, 40);
           setBar('design', s.scoreDesign, 30);

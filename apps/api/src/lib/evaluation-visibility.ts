@@ -70,6 +70,56 @@ export async function hiringTicketIds(userId: string, ticketIds: string[]): Prom
   return [...(await hiringTicketMap(userId, ticketIds)).keys()];
 }
 
+/**
+ * EVERY hiring ticket for this user — unlike `hiringTicketMap` this takes no
+ * candidate list, because aggregate callers don't have one: they need to filter
+ * hiring work OUT of a computation before it happens, not strip fields from a
+ * response afterwards.
+ *
+ * That distinction is the whole reason this exists. Redacting a serialized
+ * submission stops one response leaking; it does nothing about a number DERIVED
+ * from hiring submissions (skill score, averages, leaderboard rank), which
+ * carries the evaluation just as plainly and reaches surfaces the serializer
+ * never sees — including unauthenticated ones.
+ */
+export async function allHiringTicketIds(userId: string): Promise<string[]> {
+  const candidacies = await prisma.campaignCandidate.findMany({
+    where: { userId, campaign: { type: CampaignType.HIRING } },
+    select: { campaign: { select: { ticketIds: true } } },
+  });
+  return [...new Set(candidacies.flatMap((c) => c.campaign.ticketIds))];
+}
+
+/**
+ * Cross-user variant for public aggregates (leaderboard) that rank many people
+ * at once: a set of `userId::ticketId` keys, one per hiring pairing. Use
+ * `isHiringPair` to test a submission against it.
+ *
+ * Hiring is a property of the (candidate, ticket) PAIR, never the ticket alone —
+ * the same ticket is legitimately public contest work for one person and a
+ * private employer assessment for another, so a ticket-only filter would both
+ * over-hide and under-hide.
+ */
+export async function hiringPairKeys(): Promise<Set<string>> {
+  const candidacies = await prisma.campaignCandidate.findMany({
+    where: { campaign: { type: CampaignType.HIRING } },
+    select: { userId: true, campaign: { select: { ticketIds: true } } },
+  });
+  const keys = new Set<string>();
+  for (const c of candidacies) {
+    for (const t of c.campaign.ticketIds) keys.add(`${c.userId}::${t}`);
+  }
+  return keys;
+}
+
+/** Tests one submission against the set from `hiringPairKeys`. */
+export function isHiringPair(
+  keys: Set<string>,
+  sub: { userId: string; ticketId: string }
+): boolean {
+  return keys.has(`${sub.userId}::${sub.ticketId}`);
+}
+
 /** Nulls every evaluation field on a FollowUpQuestion; keeps the candidate's own words. */
 export function redactFollowUpEvaluation<T extends Record<string, unknown>>(fu: T): T {
   return {
