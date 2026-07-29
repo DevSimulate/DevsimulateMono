@@ -178,6 +178,11 @@
 
       /* ── Misc ── */
       .status-msg { font-size: 11px; opacity: 0.6; text-align: center; padding: 20px 0; }
+      /* Hiring confirmation — left-aligned and readable, not a centred status
+         line. It is the only thing this candidate gets back, so it should read
+         like a message rather than a placeholder. */
+      .submitted-body { font-size: 11.5px; line-height: 1.55; opacity: 0.85; }
+      .submitted-note { font-size: 10.5px; line-height: 1.5; opacity: 0.5; margin-top: 9px; }
       .hidden { display: none !important; }
       hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 10px 0; }
       .ticket-count {
@@ -283,8 +288,9 @@
 
       <!-- Hiring: confirmation only, never a score (see renderState). -->
       <div class="section hidden" id="section-submitted">
-        <h2>Assessment submitted ✓</h2>
-        <div class="status-msg" id="submitted-msg">The hiring team will contact you by email.</div>
+        <h2>Thanks — your assessment is in</h2>
+        <div class="submitted-body" id="submitted-msg"></div>
+        <div class="submitted-note" id="submitted-note"></div>
       </div>
 
     </div>
@@ -347,9 +353,15 @@
         document.getElementById('view-main').classList.toggle('hidden', !isLoggedIn);
         if (!isLoggedIn) return;
 
-        // Profile
+        // Profile. The points badge is a PUBLIC reputation number, and hiring
+        // work is deliberately excluded from it — so a candidate whose only
+        // assessment is a hiring one would read a truthful "0 pts" as a score
+        // they'd been given. Hide it rather than explain it.
+        const hiringSub = !!(state.submission && state.submission.hideResults);
         document.getElementById('profile-username').textContent = '@' + state.user.githubUsername;
-        document.getElementById('profile-score').textContent = state.user.skillScore + ' pts';
+        const scoreBadge = document.getElementById('profile-score');
+        scoreBadge.classList.toggle('hidden', hiringSub);
+        scoreBadge.textContent = state.user.skillScore + ' pts';
 
         // Refresh spinner
         const refreshBtn = document.getElementById('btn-refresh');
@@ -417,8 +429,10 @@
           const role = sub.campaignRole, company = sub.campaignCompany;
           document.getElementById('submitted-msg').textContent =
             (role && company)
-              ? 'Your ' + role + ' assessment for ' + company + ' has been submitted. The hiring team will contact you by email.'
-              : 'The hiring team will contact you by email.';
+              ? 'Your ' + role + ' assessment for ' + company + ' is with the hiring team. They review it alongside the rest of your application and will be in touch by email either way.'
+              : 'Your assessment is with the hiring team. They review it alongside the rest of your application and will be in touch by email either way.';
+          document.getElementById('submitted-note').textContent =
+            'Scores aren’t shown for hiring assessments — no candidate sees one, so there’s nothing to read into here.';
         } else if (hasReview) {
           const s = sub;
           document.getElementById('score-total').innerHTML = s.scoreTotal + '<span>/100</span>';

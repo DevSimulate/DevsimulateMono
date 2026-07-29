@@ -312,6 +312,16 @@ export default function DashboardPage() {
     { label: "Avg score",      value: avgScore !== null ? avgScore : "—",            unit: avgScore !== null ? "/100" : "" },
   ];
 
+  // A candidate whose only work is a hiring assessment has no public score by
+  // design — so the tiles would read "0 pts" and "—", which looks like a bad
+  // result rather than a withheld one. Worse than showing nothing: it's the
+  // number they were never meant to infer, wearing the wrong meaning.
+  // Mixed contest+hiring users keep the tiles; their contest score is real.
+  const hiringOnly = reviewed.length > 0 && scoredForAvg.length === 0;
+  const latestHiring = reviewed.find(
+    (s) => (s as unknown as { hideResults?: boolean }).hideResults
+  ) as unknown as { campaignRole?: string; campaignCompany?: string } | undefined;
+
   return (
     <div className="min-h-screen bg-paper text-ink">
 
@@ -389,18 +399,37 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-          {stats.map(({ label, value, unit }) => (
-            <Card key={label} className="p-5">
-              <div className="font-display text-2xl font-bold">
-                {value}
-                {unit && <span className="text-sm font-normal text-muted"> {unit}</span>}
-              </div>
-              <div className="text-xs mt-1 text-muted">{label}</div>
-            </Card>
-          ))}
-        </div>
+        {/* Stats — replaced by a confirmation for hiring-only candidates, whose
+            score belongs to the employer and would otherwise render as zeros. */}
+        {hiringOnly ? (
+          <Card className="p-6 mb-10">
+            <p className="font-display text-lg font-bold">Thanks — your assessment is in.</p>
+            <p className="text-sm text-muted mt-2 max-w-xl leading-relaxed">
+              {latestHiring?.campaignRole && latestHiring?.campaignCompany
+                ? <>Your <span className="text-ink font-medium">{latestHiring.campaignRole}</span> assessment for{" "}
+                    <span className="text-ink font-medium">{latestHiring.campaignCompany}</span> has been submitted.{" "}</>
+                : <>Your assessment has been submitted. </>}
+              The hiring team is reviewing it alongside the rest of your application and will be
+              in touch by email either way.
+            </p>
+            <p className="text-xs text-muted mt-3">
+              Scores aren&apos;t shown for hiring assessments — no candidate sees one, so there&apos;s
+              nothing to read into here.
+            </p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+            {stats.map(({ label, value, unit }) => (
+              <Card key={label} className="p-5">
+                <div className="font-display text-2xl font-bold">
+                  {value}
+                  {unit && <span className="text-sm font-normal text-muted"> {unit}</span>}
+                </div>
+                <div className="text-xs mt-1 text-muted">{label}</div>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Active tickets */}
         <section className="mb-10">
