@@ -101,14 +101,22 @@ export async function sendEmail(opts: {
 }
 
 /**
- * Where candidate questions about an invite are directed. Per-campaign
- * eventually — env-level for now, because one contact address covers a single
- * pilot client and a schema change here would need a hand-run migration.
+ * Where candidate questions and data-deletion requests from an invite are
+ * directed. Must reach the company doing the HIRING — a candidate asking to
+ * have their interview recording deleted is exercising a right against the
+ * employer, and DevSimulate cannot action it on their behalf.
+ *
+ * The default is LMKR's because they are the only hiring client and this is
+ * their pilot. That is a stopgap, not a design: it is wrong the moment a second
+ * employer exists, and REVIEW_CONTACT_EMAIL is deliberately NOT in the chain —
+ * that one is the appeals address and points at DevSimulate, so falling through
+ * to it would quietly send data requests to the wrong company again.
+ *
+ * Proper fix when client #2 arrives: `contactEmail` on Organisation, resolved
+ * per campaign and editable from the dashboard.
  */
 const ASSESSMENT_CONTACT_EMAIL =
-  process.env.ASSESSMENT_CONTACT_EMAIL ??
-  process.env.REVIEW_CONTACT_EMAIL ??
-  "ossama@devsimulate.com";
+  process.env.ASSESSMENT_CONTACT_EMAIL ?? "OZulfiqar@lmkr.com";
 
 /** "Wednesday, 5 August 2026" — pinned to UTC so the weekday can't drift with server TZ. */
 function longDate(d: Date): string {
