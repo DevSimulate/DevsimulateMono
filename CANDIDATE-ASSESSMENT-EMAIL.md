@@ -19,7 +19,7 @@ those change, this copy changes with them.
 | `{{expectedMinutes}}` | 60 | `Ticket.expectedMinutes` (default 60) |
 | `{{candidateName}}` | Sahibzada Abdullah | `CampaignCandidate` → `User.fullName` |
 | `{{link}}` | sample below | generated per candidate, single-use |
-| `{{supportEmail}}` | ossama@devsimulate.com | `REVIEW_CONTACT_EMAIL` |
+| `{{supportEmail}}` | OZulfiqar@lmkr.com | `ASSESSMENT_CONTACT_EMAIL` |
 
 ---
 
@@ -151,7 +151,7 @@ spoken explanation — and use it to evaluate you for this role and for future r
 you may be a fit for.**
 
 You can ask us to delete it at any time by replying to this email or writing to
-ossama@devsimulate.com. Deleting it won't affect any application already in
+OZulfiqar@lmkr.com. Deleting it won't affect any application already in
 progress.
 
 If you'd prefer we didn't retain your assessment, reply before you begin and we'll
@@ -164,7 +164,7 @@ arrange an alternative.
 This link is personal to you — please don't share it.
 
 Questions, or something went wrong? Reply to this email or write to
-ossama@devsimulate.com and a person will get back to you.
+OZulfiqar@lmkr.com and a person will get back to you.
 
 Good luck — we're looking forward to reading your explanation.
 
