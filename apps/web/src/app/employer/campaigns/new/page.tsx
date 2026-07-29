@@ -26,6 +26,19 @@ function isValidType(v: string | null): v is "HIRING" | "CONTEST" {
   return v === "HIRING" || v === "CONTEST";
 }
 
+/**
+ * Turns a "YYYY-MM-DD" date input into the last instant of that day in the
+ * organiser's own timezone.
+ *
+ * Built from parts rather than `new Date(str)`, because that parses a bare date
+ * as UTC midnight — so "5 August" in Karachi would land at 05:00 on the 5th
+ * local, closing the campaign most of a day before the date everyone agreed on.
+ */
+function endOfLocalDay(yyyyMmDd: string): Date {
+  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  return new Date(y, m - 1, d, 23, 59, 59, 999);
+}
+
 function NewCampaignForm() {
   const searchParams = useSearchParams();
   // Arriving from the Hiring or DevFest section locks the type to that
@@ -75,10 +88,11 @@ function NewCampaignForm() {
       .catch(() => null);
   }, []);
 
-  // Minimum selectable deadline = now, in the local-time format datetime-local expects.
-  const minDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
+  // Minimum selectable deadline = today, local, as YYYY-MM-DD.
+  const minDate = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
 
   // Load the ticket library whenever codebase/difficulty changes
   useEffect(() => {
@@ -114,10 +128,10 @@ function NewCampaignForm() {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          // Convert the local datetime-local value to an unambiguous UTC ISO
-          // string so the stored deadline matches the wall-clock time picked,
-          // regardless of the server's timezone.
-          deadline: form.deadline ? new Date(form.deadline).toISOString() : "",
+          // A deadline is a DAY, so it closes at the END of that day, local time.
+          // Sending the bare date would parse as UTC midnight — the *start* of
+          // the day — cutting candidates off roughly 24 hours early.
+          deadline: form.deadline ? endOfLocalDay(form.deadline).toISOString() : "",
           ticketIds: pickMode ? [...selectedTickets] : [],
           devFestTag: isContest ? (form.devFestTag.trim() || undefined) : undefined,
         }),
@@ -292,13 +306,18 @@ function NewCampaignForm() {
 
               <Field label={isContest ? "Deadline (competition closes)" : "Deadline"}>
                 <input
-                  type="datetime-local"
+                  type="date"
                   value={form.deadline}
-                  min={minDateTime}
+                  min={minDate}
                   onChange={(e) => setForm({ ...form, deadline: e.target.value })}
                   onClick={(e) => (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.()}
                   className="w-full rounded border border-hairline bg-surface px-3 py-2.5 text-sm outline-none cursor-pointer text-ink focus:border-brand focus:ring-2 focus:ring-[rgba(79,70,229,0.25)]"
                 />
+                <p className="text-[11px] text-muted mt-1.5">
+                  {form.deadline
+                    ? `Closes end of ${endOfLocalDay(form.deadline).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}, your time.`
+                    : "Optional. The application link stops working at the end of this day."}
+                </p>
               </Field>
             </div>
           </Card>
