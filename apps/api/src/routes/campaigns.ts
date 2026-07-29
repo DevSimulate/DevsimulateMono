@@ -271,10 +271,16 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         type: type === "CONTEST" ? CampaignType.CONTEST : CampaignType.HIRING,
         devFestTag: type === "CONTEST" ? (devFestTag?.trim() || null) : null,
         status: CampaignStatus.ACTIVE,
-        // Proctoring defaults follow the flow: a live DevFest is invigilated,
-        // a remote hiring screen is not. Both remain admin-toggleable afterwards.
-        blockPaste: type === "CONTEST",
-        requireFullscreen: type === "CONTEST",
+        // Proctored by default, both types. This used to be CONTEST-only on the
+        // theory that a live DevFest is invigilated and a remote hiring screen
+        // isn't — but it had that backwards: an unsupervised hiring assessment
+        // is exactly the one with no invigilator in the room, and it is the one
+        // an employer makes a decision on. The invite email also tells every
+        // candidate that fullscreen is required and pasting is disabled, so
+        // creating a campaign without them makes that email untrue.
+        // Toggleable per campaign afterwards (Proctoring rules in the dashboard).
+        blockPaste: true,
+        requireFullscreen: true,
       },
       include: { codebase: true },
     });
