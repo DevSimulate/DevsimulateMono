@@ -27,6 +27,7 @@ const STATUS_TONE: Record<string, BadgeTone> = { ACTIVE: "neutral", CLOSED: "neu
 export default function HiringDashboard() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/employer/campaigns?type=HIRING`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -35,6 +36,13 @@ export default function HiringDashboard() {
       .catch(() => null)
       .finally(() => setLoading(false));
   }, []);
+
+  // Closed roles are finished work, not current work. They stay reachable —
+  // results and invite history still matter after a role is filled — but they
+  // don't belong in the list you scan to find the role you're running today.
+  const closed = campaigns.filter((c) => c.status === "CLOSED");
+  const open = campaigns.filter((c) => c.status !== "CLOSED");
+  const shown = showClosed ? campaigns : open;
 
   return (
     <div className="max-w-3xl mx-auto px-5 py-8 text-ink">
@@ -54,9 +62,16 @@ export default function HiringDashboard() {
         </div>
       ) : campaigns.length === 0 ? (
         <EmptyState title="No hiring roles yet" description="Create one to start inviting candidates." />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          title="No open roles"
+          description={`Every role is closed. ${closed.length} closed ${closed.length === 1 ? "role is" : "roles are"} hidden — show them to reach their results or invite history.`}
+          actionLabel={`Show ${closed.length} closed`}
+          onAction={() => setShowClosed(true)}
+        />
       ) : (
         <div className="rounded border border-hairline bg-surface divide-y divide-hairline">
-          {campaigns.map((c) => (
+          {shown.map((c) => (
             <div key={c.id} className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-[220px]">
                 <div className="text-sm font-semibold">{c.roleName}</div>
@@ -73,6 +88,18 @@ export default function HiringDashboard() {
             </div>
           ))}
         </div>
+      )}
+
+      {!loading && closed.length > 0 && shown.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowClosed((v) => !v)}
+          className="mt-3 text-xs text-muted hover:text-ink transition-colors"
+        >
+          {showClosed
+            ? `Hide ${closed.length} closed ${closed.length === 1 ? "role" : "roles"}`
+            : `Show ${closed.length} closed ${closed.length === 1 ? "role" : "roles"}`}
+        </button>
       )}
     </div>
   );
