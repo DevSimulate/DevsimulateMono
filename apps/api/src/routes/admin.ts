@@ -13,6 +13,8 @@ import { finalizeSubmission } from "../services/score.service";
 import { sweepStuckSubmissions, sweepInviteReminders } from "../lib/stale-sweep";
 import { resumeUrl } from "../lib/resume";
 import { sendEmail, grantEmail, stuckAssessmentEmail } from "../lib/email";
+import { reviewQueue } from "../lib/queue";
+import { ReviewJobData } from "../types/index";
 
 const router = Router();
 
@@ -30,6 +32,250 @@ function requireAdminKey(req: Request, res: Response, next: NextFunction): void 
 }
 
 router.use(requireAdminKey);
+
+/**
+ * Why this candidate is stuck, computed rather than left to be inferred from
+ * timestamps. The whole point of the console is that the answer to "what is
+ * wrong with this person's assessment" is on screen, not reconstructed.
+ *
+ * Order matters — the first matching rule wins, most actionable first.
+ */
+function deriveStatus(
+  subs: { status: string; finalized: boolean; reviewedAt: Date | null; submittedAt: Date; ticketId: string }[],
+  invite: { status: string; invitedAt: Date } | null,
+  deadline: Date | null
+): { state: string; detail: string; suggest: string | null } {
+  const now = Date.now();
+  const live = subs.filter((s) => s.status !== "VOID");
+  const past = deadline !== null && deadline.getTime() < now;
+
+  const dupes = new Map<string, number>();
+  for (const s of live) dupes.set(s.ticketId, (dupes.get(s.ticketId) ?? 0) + 1);
+  const duped = [...dupes.values()].some((n) => n > 1);
+
+  if (duped) {
+    return { state: "Duplicate submissions", detail: "More than one live submission on the same ticket.", suggest: "void" };
+  }
+
+  const pending = live.find((s) => s.status === "PENDING");
+  if (pending) {
+    const mins = Math.round((now - pending.submittedAt.getTime()) / 60000);
+    if (mins > 10) {
+      return {
+        state: "Review never ran",
+        detail: `Pending for ${mins} min — the queued job is missing or the worker was down.`,
+        suggest: "requeue",
+      };
+    }
+    return { state: "Review in progress", detail: `Submitted ${mins} min ago.`, suggest: null };
+  }
+
+  const reviewed = live.find((s) => s.status === "REVIEWED" && !s.finalized);
+  if (reviewed) {
+    const hrs = reviewed.reviewedAt ? Math.round((now - reviewed.reviewedAt.getTime()) / 3_600_000) : 0;
+    if (hrs >= 2) {
+      return {
+        state: "Stuck at the spoken defence",
+        detail: `Reviewed ${hrs}h ago and never completed — usually a failed mic or a closed tab.`,
+        suggest: "grant-typed",
+      };
+    }
+    return { state: "Mid-assessment", detail: "Reviewed, working through the questions.", suggest: null };
+  }
+
+  if (live.some((s) => s.finalized)) {
+    return { state: "Complete", detail: "Assessment finished and published to the employer.", suggest: null };
+  }
+
+  if (live.length === 0 && subs.length > 0) {
+    return { state: "No live submission", detail: "Every submission was voided — awaiting a resubmit.", suggest: null };
+  }
+
+  if (invite && invite.status === "INVITED") {
+    const days = Math.floor((now - invite.invitedAt.getTime()) / 86_400_000);
+    if (past) return { state: "Expired", detail: "Never started, and the deadline has passed.", suggest: null };
+    return { state: "Not started", detail: `Invited ${days} day(s) ago, hasn't opened the assessment.`, suggest: "resend" };
+  }
+
+  return { state: "No activity", detail: "Joined but nothing submitted yet.", suggest: null };
+}
+
+/**
+ * GET /admin/candidates?q=<email | github username | partial>
+ * Search. Returns enough to pick the right person, not their full record.
+ */
+router.get("/candidates", async (req: Request, res: Response): Promise<void> => {
+  const q = String(req.query.q ?? "").trim();
+  if (q.length < 2) { res.status(400).json({ error: "Query must be at least 2 characters" }); return; }
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { email: { contains: q, mode: "insensitive" } },
+          { githubUsername: { contains: q, mode: "insensitive" } },
+          { fullName: { contains: q, mode: "insensitive" } },
+        ],
+      },
+      take: 25,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, email: true, githubUsername: true, fullName: true,
+        subscriptionTier: true, skillScore: true,
+        _count: { select: { submissions: true } },
+      },
+    });
+    res.json({ data: users });
+  } catch (err) {
+    console.error("[admin] candidate search error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
+/**
+ * GET /admin/candidates/:userId
+ * Everything about one candidate on one screen: identity, campaign, invite,
+ * every submission, and the derived reason they're stuck.
+ */
+router.get("/candidates/:userId", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.userId },
+      select: {
+        id: true, email: true, githubUsername: true, fullName: true,
+        subscriptionTier: true, skillScore: true, createdAt: true,
+        disqualifiedAt: true, disqualifiedReason: true,
+      },
+    });
+    if (!user) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+    const candidacy = await prisma.campaignCandidate.findFirst({
+      where: { userId: user.id },
+      orderBy: { joinedAt: "desc" },
+      select: {
+        joinedAt: true,
+        campaign: {
+          select: {
+            id: true, roleName: true, companyName: true, type: true, status: true,
+            deadline: true, blockPaste: true, requireFullscreen: true, ticketIds: true,
+          },
+        },
+      },
+    });
+
+    const invite = user.email
+      ? await prisma.campaignInvite.findFirst({
+          where: { email: user.email },
+          orderBy: { invitedAt: "desc" },
+          select: { id: true, status: true, invitedAt: true, remindedAt: true, acceptedAt: true, campaignId: true },
+        })
+      : null;
+
+    const submissions = await prisma.submission.findMany({
+      where: { userId: user.id },
+      orderBy: { submittedAt: "desc" },
+      take: 50,
+      select: {
+        id: true, ticketId: true, status: true, finalized: true, scoreTotal: true,
+        submittedAt: true, reviewedAt: true, prUrl: true, branchName: true,
+        pasteAttempts: true, riskScore: true, defenceMode: true, defenceTrigger: true,
+        needsAttention: true, needsAttentionReason: true, pendingAction: true,
+        ticket: { select: { title: true } },
+        followUp: { select: { question1: true, answer1: true, answer2: true, verbalTranscript: true, verbalScore: true } },
+      },
+    });
+
+    const status = deriveStatus(
+      submissions.map((s) => ({
+        status: s.status, finalized: s.finalized, reviewedAt: s.reviewedAt,
+        submittedAt: s.submittedAt, ticketId: s.ticketId,
+      })),
+      invite ? { status: invite.status, invitedAt: invite.invitedAt } : null,
+      candidacy?.campaign.deadline ?? null
+    );
+
+    res.json({ data: { user, campaign: candidacy?.campaign ?? null, joinedAt: candidacy?.joinedAt ?? null, invite, submissions, status } });
+  } catch (err) {
+    console.error("[admin] candidate detail error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to load candidate" });
+  }
+});
+
+/**
+ * POST /admin/submissions/:id/void
+ * Body: { reason? }
+ *
+ * Takes a submission out of play without deleting it. VOID is excluded from the
+ * quota count and from every score aggregate, so this is the safe way to undo a
+ * duplicate or let someone restart — the record stays for audit.
+ */
+router.post("/submissions/:id/void", async (req: Request, res: Response): Promise<void> => {
+  const { reason } = req.body as { reason?: string };
+  try {
+    const sub = await prisma.submission.update({
+      where: { id: req.params.id },
+      data: {
+        status: "VOID",
+        needsAttention: false,
+        needsAttentionReason: reason?.trim() || "Voided by an administrator",
+        pendingAction: null,
+        pendingActionAt: null,
+      },
+      select: { id: true, userId: true, status: true },
+    });
+    res.json({ data: sub });
+  } catch (err) {
+    console.error("[admin] void error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to void submission" });
+  }
+});
+
+/**
+ * POST /admin/submissions/:id/requeue
+ *
+ * Re-enqueues the AI review. Needed whenever a job is lost rather than failed —
+ * a Redis outage, a swapped instance, a worker that died mid-job — where the
+ * submission sits PENDING forever with nothing left to process it.
+ *
+ * Rebuilds the job from the submission itself rather than trusting a stored
+ * payload, and reuses the same jobId so a stale copy can't stack up.
+ */
+router.post("/submissions/:id/requeue", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const sub = await prisma.submission.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, ticketId: true, prUrl: true, prDescription: true, branchName: true, designDoc: true },
+    });
+    if (!sub) { res.status(404).json({ error: "Submission not found" }); return; }
+
+    let jobData: ReviewJobData;
+    if (sub.designDoc) {
+      jobData = { submissionId: sub.id, submissionType: "SYSTEM_DESIGN", ticketId: sub.ticketId, designDoc: sub.designDoc };
+    } else {
+      const m = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/.exec(sub.prUrl ?? "");
+      if (!m) { res.status(400).json({ error: "Submission has no usable PR URL to review" }); return; }
+      const [, repoOwner, repoName, prNumber] = m;
+      jobData = {
+        submissionId: sub.id, submissionType: "CODE", ticketId: sub.ticketId,
+        prUrl: sub.prUrl!, prDescription: sub.prDescription ?? "", branchName: sub.branchName ?? "",
+        repoOwner, repoName, prNumber: parseInt(prNumber, 10),
+      };
+    }
+
+    // Clear a previous job under this id, or add() is a silent no-op.
+    await reviewQueue.remove(`review-${sub.id}`).catch(() => {});
+    await reviewQueue.add("review-pr", jobData, { jobId: `review-${sub.id}` });
+
+    await prisma.submission.update({
+      where: { id: sub.id },
+      data: { status: "PENDING", needsAttention: false, needsAttentionReason: null },
+    });
+
+    res.json({ data: { requeued: sub.id } });
+  } catch (err) {
+    console.error("[admin] requeue error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to requeue review" });
+  }
+});
 
 /**
  * GET /admin/submissions/needs-attention

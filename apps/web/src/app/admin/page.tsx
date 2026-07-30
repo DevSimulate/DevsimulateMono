@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/Button";
 import { Input, Field, Textarea } from "@/components/ui/Input";
@@ -229,9 +230,14 @@ export default function AdminReviewQueuePage() {
           <h1 className="font-display text-lg font-bold">Review queue</h1>
           <p className="text-xs text-muted">Submissions stalled before publication — each needs a human decision</p>
         </div>
-        <Button variant="secondary" onClick={runSweep} disabled={sweeping}>
-          {sweeping ? "Sweeping…" : "Run sweep now"}
-        </Button>
+        <div className="flex items-center gap-4">
+          <Link href="/admin/candidates" className="text-xs font-medium text-muted hover:text-ink transition-colors">
+            Candidates →
+          </Link>
+          <Button variant="secondary" onClick={runSweep} disabled={sweeping}>
+            {sweeping ? "Sweeping…" : "Run sweep now"}
+          </Button>
+        </div>
       </header>
 
       <main className="flex-1 px-8 py-6 max-w-4xl mx-auto">
