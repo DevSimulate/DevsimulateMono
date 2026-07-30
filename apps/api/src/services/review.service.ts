@@ -688,6 +688,11 @@ export interface VerbalScoreResult {
   score: number;       // 0-10 verbal understanding
   consistent: boolean; // does the spoken answer match the written answers + the code?
   note: string;        // 1-2 sentence employer-facing note
+  /**
+   * True when the judge did not return a usable verdict. The candidate must
+   * never be penalised for it — see the parse-failure branch below.
+   */
+  unscorable?: boolean;
 }
 
 /**
@@ -738,12 +743,18 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
   try {
     return JSON.parse(clean) as VerbalScoreResult;
   } catch {
-    // Claude returned prose instead of JSON — extract what we can or use safe defaults
-    const scoreMatch = /\b([0-9]|10)\b/.exec(clean);
+    // Claude returned prose instead of JSON. This used to scrape the first
+    // standalone digit out of that prose and use it AS THE SCORE — so a
+    // transcript mentioning coordinates ("longitude was 31", "changed from 0
+    // to 1") could hand back a 1, which trips the maximum 20-point penalty.
+    // A candidate lost 20 real points that way.
+    //
+    // There is no score here. Say so, and let the caller apply nothing.
     return {
-      score: scoreMatch ? parseInt(scoreMatch[1], 10) : 5,
-      consistent: true,
-      note: "Verbal explanation received but could not be automatically scored. Please review manually.",
+      score: 0,
+      consistent: true,           // never assert a contradiction we didn't detect
+      unscorable: true,
+      note: "The automatic judge did not return a usable verdict, so this defence was not scored. Transcript retained for manual review; no penalty applied.",
     };
   }
 }
@@ -814,7 +825,19 @@ Respond with ONLY valid JSON: { "score": <integer 0-10>, "consistent": <true|fal
   });
   const content = { text: textOf(response) };
   const clean = content.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  return JSON.parse(clean) as VerbalScoreResult;
+  try {
+    return JSON.parse(clean) as VerbalScoreResult;
+  } catch {
+    // Same contract as the code variant: no verdict means no score and no
+    // penalty, never a guess. Previously this threw, which cost the candidate
+    // their whole defence attempt with a 502 instead of a manual review.
+    return {
+      score: 0,
+      consistent: true,
+      unscorable: true,
+      note: "The automatic judge did not return a usable verdict, so this defence was not scored. Transcript retained for manual review; no penalty applied.",
+    };
+  }
 }
 
 /**

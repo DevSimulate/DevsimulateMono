@@ -124,6 +124,19 @@ export function consensusVerbal(
 ): { result: VerbalScoreResult; meta: ConsensusMeta } {
   if (runs.length === 0) throw new Error("consensusVerbal() requires at least one successful run");
 
+  // A run that produced no usable verdict has no score to contribute. Folding
+  // its placeholder 0 into the median would drag an honest defence down, so
+  // score only the runs that actually returned one. If none did, the whole
+  // result is unscorable and the caller applies no penalty.
+  const usable = runs.filter((r) => !r.unscorable);
+  if (usable.length === 0) {
+    return {
+      result: { ...runs[0], score: 0, consistent: true, unscorable: true },
+      meta: { runCount: runs.length, lowConfidenceScoring: runs.length === 1 },
+    };
+  }
+  runs = usable;
+
   const scores = runs.map((r) => r.score ?? 0);
   const score = scores.length === 2 ? Math.floor((scores[0] + scores[1]) / 2) : median(scores);
 

@@ -1150,7 +1150,7 @@ async function applyDefenceScore(
     scoreDesign: number | null;
     followUp: { id: string } | null;
   },
-  scored: { consistent: boolean; score: number; note: string },
+  scored: { consistent: boolean; score: number; note: string; unscorable?: boolean },
   transcript: string,
   opts: {
     hideEvaluation: boolean;
@@ -1159,8 +1159,13 @@ async function applyDefenceScore(
     extraSubmissionData?: Record<string, unknown>;
   }
 ): Promise<{ status: number; body: object }> {
+  // No usable verdict from the judge means no penalty — the same rule the
+  // low-confidence audio path applies. Charging a candidate 20 points because
+  // the grader replied in prose is a score we could not defend to them.
   let verbalPenalty = 0;
-  if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
+  if (scored.unscorable) {
+    verbalPenalty = 0;
+  } else if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
   else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
 
   const curDiag = sub.scoreDiagnosis ?? 0;
@@ -1187,8 +1192,20 @@ async function applyDefenceScore(
   if (sub.followUp) {
     await prisma.followUpQuestion.update({
       where: { id: sub.followUp.id },
-      data: { verbalTranscript: transcript, verbalScore: scored.score, verbalNote: scored.note },
+      data: {
+        verbalTranscript: transcript,
+        // NULL, not 0 — an unscored defence must not read as a scored zero to
+        // whoever reviews it, and null is what the low-confidence path stores.
+        verbalScore: scored.unscorable ? null : scored.score,
+        verbalNote: scored.note,
+      },
     });
+  }
+
+  // Nobody scored this defence, so a human has to. Without the flag it would
+  // publish silently as an unexplained full-marks-on-verbal.
+  if (scored.unscorable) {
+    await flagForHumanReview(sub.id, "verbal judge returned no usable verdict");
   }
 
   if (opts.hideEvaluation) return opts.completionBody;
