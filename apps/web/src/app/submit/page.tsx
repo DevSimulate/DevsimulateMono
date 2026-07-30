@@ -274,6 +274,7 @@ function SubmitPageInner() {
   const [leaveCount,   setLeaveCount]   = useState(0);   // times they left the assessment (2 warns → disqualify)
   const [isFs,         setIsFs]         = useState(false);
   const [away,         setAway]         = useState(false);
+  const submittingRef  = useRef(false);   // in-flight guard: one submit per attempt
   const isFsRef        = useRef(false);
   const enteredFsRef   = useRef(false);
   const lastLeaveRef   = useRef(0);
@@ -619,6 +620,10 @@ function SubmitPageInner() {
   async function handleDescriptionSubmit() {
     const token = getToken();
     if (!token) return;
+    // A ref, not state: two clicks in the same tick both read stale state and
+    // both fire. The server also de-dupes, but the request should never leave.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     setStage("analysing");
 
@@ -644,6 +649,7 @@ function SubmitPageInner() {
       setSubmissionId(sid);
       await pollForQ1(sid, token);
     } catch (err) {
+      submittingRef.current = false; // let them genuinely retry after a failure
       setError(err instanceof Error ? err.message : "Submission failed — please try again.");
       setStage("describe");
     }
@@ -652,6 +658,8 @@ function SubmitPageInner() {
   async function handleDesignSubmit() {
     const token = getToken();
     if (!token) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setError(null);
     setStage("analysing");
 

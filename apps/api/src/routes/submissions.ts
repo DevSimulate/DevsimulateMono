@@ -22,6 +22,14 @@ import { resolveResumeStage } from "../lib/resume";
 
 const router = Router();
 
+/**
+ * How long after a submission a second POST for the same ticket is treated as
+ * the same attempt rather than a new one. Covers the impatient double-click and
+ * a client retry on a slow connection — both of which used to create a second
+ * submission the candidate never intended.
+ */
+const DOUBLE_SUBMIT_WINDOW_MS = Number(process.env.DOUBLE_SUBMIT_WINDOW_MS ?? 120_000);
+
 router.use(requireAuth as (req: Request, res: Response, next: () => void) => void);
 
 /**
@@ -58,9 +66,36 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    // Free tier limit: 2 submissions per month
+    // Double-submit guard. A second click — or a retry on a slow network —
+    // used to create a SECOND submission, and for a FREE user two of those
+    // exhausted the monthly quota in one go and locked them out of the
+    // assessment they were mid-way through. Return the submission they already
+    // have instead of making another. Window is deliberately short: this is
+    // impatience or a retry, not a genuine re-attempt.
+    const recent = await prisma.submission.findFirst({
+      where: {
+        userId,
+        ticketId,
+        status: { not: "VOID" },
+        submittedAt: { gte: new Date(Date.now() - DOUBLE_SUBMIT_WINDOW_MS) },
+      },
+      orderBy: { submittedAt: "desc" },
+      include: { ticket: true },
+    });
+    if (recent) {
+      console.log(`[submissions] Duplicate submit for ticket ${ticketId} — returning ${recent.id}`);
+      res.status(201).json({ data: recent });
+      return;
+    }
+
+    // Free-tier limit: 2 submissions per month. Does NOT apply to a hiring
+    // assessment — that candidate was invited by an employer who is the
+    // customer here, and they are not spending personal practice quota on an
+    // interview. Metering them meant a candidate could be locked out of a real
+    // hiring process, mid-assessment, by a UI accident.
+    const hiring = await hiringInfoForTicket(userId, ticketId);
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (user?.subscriptionTier === "FREE") {
+    if (!hiring && user?.subscriptionTier === "FREE") {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
