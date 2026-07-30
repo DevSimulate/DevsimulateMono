@@ -102,13 +102,24 @@ router.post(
         .filter((c) => c.scoreTotal != null && (c.scoreTotal ?? 0) >= minScore)
         .sort((a, b) => (b.scoreTotal ?? 0) - (a.scoreTotal ?? 0));
 
+      // Derive the category from the campaign's own codebase, exactly as the
+      // DevFest path does. This used to be omitted here, so certificates issued
+      // through THIS route carried category: null — and category is what both
+      // the leaderboard and the certificate ranking group by, so a null one
+      // ranks against nothing.
+      const stackTicket = await prisma.ticket.findFirst({
+        where: { codebaseId: campaign.codebaseId },
+        select: { stack: true },
+      });
+      const category = categoryForStack(stackTicket?.stack?.toString()).name;
+
       let issued = 0;
       for (let i = 0; i < eligible.length; i++) {
         const c = eligible[i];
         await prisma.certificate.upsert({
           where: { userId_campaignId: { userId: c.userId, campaignId } },
-          create: { userId: c.userId, campaignId, score: c.scoreTotal ?? 0, rank: i + 1 },
-          update: { score: c.scoreTotal ?? 0, rank: i + 1 },
+          create: { userId: c.userId, campaignId, score: c.scoreTotal ?? 0, rank: i + 1, category },
+          update: { score: c.scoreTotal ?? 0, rank: i + 1, category },
         });
         issued++;
       }
