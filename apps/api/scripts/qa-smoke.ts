@@ -19,6 +19,8 @@
  *   npm run qa:smoke                      # local API, no Claude (fast, free)
  *   npm run qa:smoke -- --api=https://... # against a deployed API
  *   npm run qa:smoke -- --review          # also wait for a real AI review ($)
+ *   npm run qa:smoke -- --full            # the whole assessment: Q1, Q2,
+ *                                         # defence, scoring, publication ($$)
  *
  * Exit code is non-zero if any check fails, so CI can gate a deploy on it.
  */
@@ -33,7 +35,9 @@ const arg = (name: string, fallback?: string) =>
 const has = (name: string) => process.argv.includes(`--${name}`);
 
 const API = arg("api", process.env.QA_API_URL ?? "http://localhost:8080")!;
-const WITH_REVIEW = has("review");
+/** --full runs the whole assessment, which requires a real review first. */
+const FULL = has("full");
+const WITH_REVIEW = has("review") || FULL;
 const STAMP = Date.now().toString(36);
 
 let passed = 0;
@@ -256,6 +260,90 @@ async function main() {
     } else {
       check("resume returns analysing while the review is pending", rData?.stage === "analysing",
         `stage=${rData?.stage} resumable=${rData?.resumable}`);
+    }
+
+    // ── 8b. The whole assessment, end to end ────────────────────────────────
+    // Written answers, the defence, scoring and publication — the half of the
+    // journey the API-only checks above never reach. Real Claude calls, so it
+    // costs money and takes a minute; opt in with --full.
+    //
+    // The spoken defence is taken through the TYPED channel, unlocked by the
+    // admin grant. That is a genuine production path (it exists for candidates
+    // whose mic fails) and it is scored by the same code as the spoken one, so
+    // exercising it tests the real scoring pipeline without synthesising audio.
+    if (FULL && subId) {
+      console.log("\nFull assessment flow");
+
+      // Q1
+      let fu = (await api(`/submissions/${subId}/followup`, { token })).body?.data as Record<string, unknown> | undefined;
+      check("Q1 was generated", !!fu?.question1, `got ${JSON.stringify(fu?.question1)}`);
+
+      const a1 = "The coordinates were stored in GeoJSON order, longitude first, but read as latitude first. I confirmed it by logging the parsed pair against a known station and seeing the axes swapped.";
+      const q2res = await api(`/submissions/${subId}/followup/answer1`, {
+        method: "POST", token, body: JSON.stringify({ answer1: a1 }),
+      });
+      const q2 = (q2res.body?.data as Record<string, unknown> | undefined)?.question2 as string | undefined;
+      check("answering Q1 returns Q2", q2res.status === 200 && !!q2,
+        `status ${q2res.status}: ${JSON.stringify(q2res.body?.error ?? "")}`);
+
+      // Q2 + declaration completes the written half
+      const a2 = "I fixed it at the parse boundary rather than at each call site, so every consumer gets the corrected order and no caller has to remember the convention.";
+      const written = await api(`/submissions/${subId}/followup`, {
+        method: "POST", token,
+        body: JSON.stringify({ answer1: a1, answer2: a2, aiDeclaration: "NO_AI_USED", pasteAttempts: 0, tabSwitches: 0 }),
+      });
+      check("written follow-ups accepted", written.status === 200,
+        `status ${written.status}: ${JSON.stringify(written.body?.error ?? "")}`);
+      checkNoLeak("follow-up response hides the evaluation", written.status, written.body?.data);
+
+      // Unlock the typed defence the same way a real mic failure would.
+      const adminKey = process.env.ADMIN_API_KEY;
+      if (!adminKey) {
+        check("ADMIN_API_KEY available for the defence step", false, "set ADMIN_API_KEY to run the full flow");
+      } else {
+        const grant = await fetch(`${API}/admin/submissions/${subId}/grant-typed`, {
+          method: "POST", headers: { "x-admin-key": adminKey, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        check("typed defence granted", grant.ok, `status ${grant.status}`);
+
+        const vq = await api(`/submissions/${subId}/verbal-question`, { method: "POST", token });
+        const question = (vq.body?.data as Record<string, unknown> | undefined)?.question as string | undefined;
+        check("defence question generated", vq.status === 200 && !!question, `status ${vq.status}`);
+
+        const defence = await api(`/submissions/${subId}/typed-answer`, {
+          method: "POST", token,
+          body: JSON.stringify({
+            question: question ?? "",
+            answer: "The bug was axis order. GeoJSON is longitude-latitude and the map component expected latitude-longitude, so every station rendered mirrored across the diagonal. Fixing it once at the parse step means no caller has to remember which convention applies.",
+          }),
+        });
+        check("defence accepted and scored", defence.status === 200,
+          `status ${defence.status}: ${JSON.stringify(defence.body?.error ?? "")}`);
+        checkNoLeak("defence response hides the evaluation", defence.status, defence.body?.data);
+
+        // The employer's side: a real, finalized, scored result exists.
+        const finalRow = await prisma.submission.findUnique({
+          where: { id: subId },
+          select: { finalized: true, scoreTotal: true },
+        });
+        check("submission is finalized", finalRow?.finalized === true);
+        check("a score exists for the employer", typeof finalRow?.scoreTotal === "number",
+          `scoreTotal=${finalRow?.scoreTotal}`);
+
+        // The candidate's side: still nothing.
+        const after = await api(`/submissions/${subId}`, { token });
+        checkNoLeak("candidate still cannot see the score after finalizing", after.status, after.body?.data);
+
+        const meAfter = await api("/auth/me", { token });
+        const skill = (meAfter.body?.data as Record<string, unknown> | undefined)?.skillScore;
+        check("finalizing hiring work leaves skillScore at 0", skill === 0, `skillScore=${skill}`);
+
+        const boardAfter = await api("/users/leaderboard");
+        const rowsAfter = (boardAfter.body?.data as Record<string, unknown>[]) ?? [];
+        check("finalized hiring work stays off the leaderboard",
+          !rowsAfter.some((r) => r.githubUsername === user.githubUsername));
+      }
     }
 
     // ── 9. Void makes it non-resumable, with useful wording ─────────────────
