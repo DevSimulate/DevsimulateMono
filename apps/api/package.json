@@ -12,7 +12,8 @@
     "db:seed": "ts-node prisma/seed.ts",
     "db:seed-demo": "ts-node prisma/seed-demo.ts",
     "db:generate": "prisma generate",
-    "backfill:skill-scores": "ts-node --transpile-only scripts/backfill-skill-scores.ts"
+    "backfill:skill-scores": "ts-node --transpile-only scripts/backfill-skill-scores.ts",
+    "qa:smoke": "ts-node --transpile-only scripts/qa-smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
