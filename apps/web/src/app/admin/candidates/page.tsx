@@ -179,8 +179,11 @@ export default function AdminCandidatesPage() {
     );
   }
 
+  // Prefer a live submission; fall back to the newest voided one so the actions
+  // panel still has a subject. `voided` keeps the label honest about which.
   const live = detail?.submissions.filter((s) => s.status !== "VOID") ?? [];
   const target = live[0] ?? detail?.submissions[0] ?? null;
+  const voided = !!target && target.status === "VOID";
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -342,45 +345,56 @@ export default function AdminCandidatesPage() {
             <Card className="p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-3">Actions</p>
               {target ? (
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    variant={detail.status.suggest === "requeue" ? "primary" : "secondary"}
-                    size="sm"
-                    disabled={!!busy}
-                    onClick={() => act(`submissions/${target.id}/requeue`, "Requeue review")}
-                  >
-                    {busy === "Requeue review" ? "Working…" : "Requeue review"}
-                  </Button>
-                  <Button
-                    variant={detail.status.suggest === "void" ? "primary" : "secondary"}
-                    size="sm"
-                    disabled={!!busy || target.status === "VOID"}
-                    onClick={() => act(`submissions/${target.id}/void`, "Void", { reason: "Voided from the admin console" })}
-                  >
-                    {busy === "Void" ? "Working…" : "Void"}
-                  </Button>
-                  <Button
-                    variant="secondary" size="sm" disabled={!!busy || target.finalized}
-                    onClick={() => act(`submissions/${target.id}/finalize`, "Finalize", { reason: "Finalized from the admin console" })}
-                  >
-                    {busy === "Finalize" ? "Working…" : "Finalize"}
-                  </Button>
-                  <Button
-                    variant={detail.status.suggest === "grant-typed" ? "primary" : "secondary"}
-                    size="sm"
-                    disabled={!!busy}
-                    onClick={() => act(`submissions/${target.id}/grant-typed`, "Grant typed")}
-                  >
-                    {busy === "Grant typed" ? "Working…" : "Grant typed defence"}
-                  </Button>
-                </div>
+                <>
+                  {/* A voided submission is out of play. Finalize would publish a
+                      withdrawn result and Grant-typed would unlock a defence for
+                      an assessment nobody is taking — so only the action that
+                      deliberately brings it back stays available. */}
+                  {voided && (
+                    <p className="text-xs text-amber mb-3">
+                      This submission is voided. The candidate resubmits from VS Code —
+                      or use Requeue to bring this one back and re-review it.
+                    </p>
+                  )}
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant={detail.status.suggest === "requeue" ? "primary" : "secondary"}
+                      size="sm"
+                      disabled={!!busy}
+                      onClick={() => act(`submissions/${target.id}/requeue`, "Requeue review")}
+                    >
+                      {busy === "Requeue review" ? "Working…" : voided ? "Restore & re-review" : "Requeue review"}
+                    </Button>
+                    <Button
+                      variant={detail.status.suggest === "void" ? "primary" : "secondary"}
+                      size="sm"
+                      disabled={!!busy || voided}
+                      onClick={() => act(`submissions/${target.id}/void`, "Void", { reason: "Voided from the admin console" })}
+                    >
+                      {busy === "Void" ? "Working…" : "Void"}
+                    </Button>
+                    <Button
+                      variant="secondary" size="sm" disabled={!!busy || voided || target.finalized}
+                      onClick={() => act(`submissions/${target.id}/finalize`, "Finalize", { reason: "Finalized from the admin console" })}
+                    >
+                      {busy === "Finalize" ? "Working…" : "Finalize"}
+                    </Button>
+                    <Button
+                      variant={detail.status.suggest === "grant-typed" ? "primary" : "secondary"}
+                      size="sm"
+                      disabled={!!busy || voided}
+                      onClick={() => act(`submissions/${target.id}/grant-typed`, "Grant typed")}
+                    >
+                      {busy === "Grant typed" ? "Working…" : "Grant typed defence"}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted mt-3">
+                    Acting on <span className="font-mono">{target.id.slice(0, 8)}</span> —{" "}
+                    {voided ? "the most recent submission (voided; nothing is live)." : "the most recent live submission."}
+                  </p>
+                </>
               ) : (
                 <p className="text-xs text-muted">No submission to act on.</p>
-              )}
-              {target && (
-                <p className="text-[11px] text-muted mt-3">
-                  Acting on <span className="font-mono">{target.id.slice(0, 8)}</span> — the most recent live submission.
-                </p>
               )}
             </Card>
           </div>
