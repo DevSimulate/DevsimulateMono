@@ -446,11 +446,18 @@ router.get("/pending-action", async (req: Request, res: Response): Promise<void>
     const subs = await prisma.submission.findMany({
       where: { userId, finalized: false, status: "REVIEWED" },
       orderBy: { submittedAt: "desc" },
-      include: { ticket: { select: { id: true } }, followUp: { select: { answeredAt: true } } },
+      include: {
+        ticket: { select: { id: true } },
+        followUp: {
+          select: { question1: true, question2: true, answer1: true, answer2: true, answeredAt: true },
+        },
+      },
     });
-    // Actionable = admin unlocked recovery, or the verbal step is still pending
-    // (written follow-up done but the defence isn't).
-    const sub = subs.find((s) => s.pendingAction || s.followUp?.answeredAt);
+    // Anything reviewed but unfinished is actionable. This used to require the
+    // written follow-ups to be done, so a candidate who dropped out at Q1 saw
+    // no card telling them they could return — the same gap that made /resume
+    // refuse them.
+    const sub = subs[0];
     if (!sub) { res.json({ data: null }); return; }
 
     const candidacy = await prisma.campaignCandidate.findFirst({
@@ -461,7 +468,10 @@ router.get("/pending-action", async (req: Request, res: Response): Promise<void>
     const deadline = candidacy?.campaign.deadline ?? null;
     if (deadline && deadline < new Date()) { res.json({ data: null }); return; } // closed — don't nudge
 
-    const resume = resolveResumeStage({ id: sub.id, ticketId: sub.ticketId, defenceMode: sub.defenceMode });
+    const resume = resolveResumeStage({
+      id: sub.id, ticketId: sub.ticketId, defenceMode: sub.defenceMode,
+      status: sub.status, finalized: sub.finalized, followUp: sub.followUp,
+    });
     const role = candidacy?.campaign.roleName ?? null;
     const message =
       sub.pendingAction === "recovery_enabled"
@@ -553,7 +563,9 @@ router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => 
     const submission = await prisma.submission.findFirst({
       where: { id: req.params.id, userId },
       include: {
-        followUp: { select: { answeredAt: true } },
+        followUp: {
+          select: { question1: true, question2: true, answer1: true, answer2: true, answeredAt: true },
+        },
         ticket: { select: { id: true, title: true, stack: true } },
       },
     });
@@ -565,10 +577,13 @@ router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => 
     const deny = (reason: string) => res.json({ data: { resumable: false, reason } });
 
     if (submission.finalized) return void deny("This assessment is already complete.");
-    if (submission.status !== "REVIEWED") return void deny("This assessment is still being reviewed.");
-    if (!submission.followUp?.answeredAt) {
-      return void deny("The written follow-up questions were never completed, so there is nothing to resume.");
-    }
+    if (submission.status === "VOID") return void deny("This submission was voided. Submit again from VS Code to start over.");
+
+    // Deliberately NO gate on followUp.answeredAt. Requiring the written
+    // follow-ups to be finished meant a candidate whose tab died at Q1 was told
+    // there was "nothing to resume" and had to redo the entire assessment —
+    // which is exactly what happened during the pilot. resolveResumeStage
+    // places them wherever they actually stopped instead.
 
     // Resumption stops at the campaign deadline — reopening a closed assessment
     // would let a late finisher onto a board that has already been published.
@@ -589,6 +604,9 @@ router.get("/:id/resume", async (req: Request, res: Response): Promise<void> => 
       id: submission.id,
       ticketId: submission.ticket.id,
       defenceMode: submission.defenceMode,
+      status: submission.status,
+      finalized: submission.finalized,
+      followUp: submission.followUp,
     });
     res.json({
       data: {

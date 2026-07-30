@@ -446,6 +446,64 @@ function SubmitPageInner() {
 
         setSubmissionId(resumeId);
 
+        // Return them to the step they actually stopped on. Previously this
+        // always jumped to the verbal defence, which silently skipped any
+        // unanswered written questions.
+        const resumeStage: string = j.data.stage ?? "verbal";
+
+        if (resumeStage === "analysing") {
+          // Review still running (or Q1 not generated yet) — poll, exactly as
+          // the normal path does after submitting.
+          setStage("analysing");
+          await pollForQ1(resumeId, token);
+          return;
+        }
+
+        if (resumeStage === "q1" || resumeStage === "q2") {
+          const qr = await fetch(`${API_URL}/submissions/${resumeId}/followup`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const qd = await qr.json();
+          const fu = qd.data;
+          if (!qr.ok || !fu?.question1) {
+            setError("Couldn't load your questions. Please refresh, or contact the administrator.");
+            setStage("describe");
+            return;
+          }
+          setQuestion1(fu.question1);
+
+          if (resumeStage === "q1") {
+            setStage("q1");
+            return;
+          }
+
+          setAnswer1(fu.answer1 ?? "");
+          if (fu.question2) {
+            setQuestion2(fu.question2);
+            setStage("q2");
+            return;
+          }
+
+          // Q1 was answered but Q2 never generated (the tab died in between).
+          // Generate it here rather than sending them back to a question they
+          // have already completed.
+          setStage("loading_q2");
+          const g = await fetch(`${API_URL}/submissions/${resumeId}/followup/answer1`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ answer1: fu.answer1 ?? "" }),
+          });
+          const gd = await g.json();
+          if (g.ok && gd.data?.question2) {
+            setQuestion2(gd.data.question2);
+            setStage("q2");
+          } else {
+            setError("Couldn't load your second question. Please refresh, or contact the administrator.");
+            setStage("q1");
+          }
+          return;
+        }
+
         const vq = await fetch(`${API_URL}/submissions/${resumeId}/verbal-question`, {
           method: "POST", headers: { Authorization: `Bearer ${token}` },
         });
