@@ -230,7 +230,16 @@ export function startStaleSweepWorker(): Worker {
       await sweepUndeliveredGrants();
       await sweepInviteReminders();
     },
-    { connection: redisConnection, concurrency: 1 }
+    {
+      connection: redisConnection,
+      concurrency: 1,
+      // This queue is idle almost always — it wakes once every 30 minutes. At
+      // BullMQ's 5s default it polls ~518k times a month, which on its own
+      // exhausts Upstash's 500k free-tier request limit and takes the REVIEW
+      // queue down with it, since both share one connection.
+      drainDelay: 60_000,
+      stalledInterval: 300_000,
+    }
   );
 
   worker.on("failed", (_job, err) => console.error("[stale-sweep] sweep failed:", err.message));
