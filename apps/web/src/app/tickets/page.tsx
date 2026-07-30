@@ -5,6 +5,7 @@ import Link from "next/link";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getToken } from "@/lib/auth";
+import { QUOTA_REACHED_MESSAGE } from "@/lib/limits";
 import { Button } from "@/components/ui/Button";
 import { Badge, BadgeTone } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -112,7 +113,7 @@ function TicketsList(): React.ReactElement {
       const error = err as { response?: { data?: { error?: string } } };
       const code = error.response?.data?.error;
       if (code === "FREE_TIER_LIMIT") {
-        setMsg({ id: ticketId, text: "You've used your 2 assessments this month — resets on the 1st.", ok: false });
+        setMsg({ id: ticketId, text: QUOTA_REACHED_MESSAGE, ok: false });
       } else {
         setMsg({ id: ticketId, text: "Failed to assign ticket.", ok: false });
       }

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import { getToken } from "@/lib/auth";
+import { FREE_MONTHLY_ASSESSMENTS } from "@/lib/limits";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -208,7 +209,7 @@ function GuideContent() {
           </Button>
           {authed === false && <p className="text-xs mt-3 text-muted">We only request read access to your public GitHub profile.</p>}
           {authed === true && <p className="text-xs mt-3 text-muted">You&apos;re already signed in — jump straight to tickets.</p>}
-          <p className="text-xs mt-3 text-muted">2 assessments/month · No credit card</p>
+          <p className="text-xs mt-3 text-muted">{FREE_MONTHLY_ASSESSMENTS} assessments/month · No credit card</p>
         </div>
       </div>
     </main>

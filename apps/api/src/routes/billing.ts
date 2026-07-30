@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { requireAuth } from "../middleware/auth.middleware";
 import { AuthenticatedRequest } from "../types/index";
 import prisma from "../lib/prisma";
+import { FREE_MONTHLY_SUBMISSIONS } from "../config/limits";
 
 const router = Router();
 
@@ -301,7 +302,10 @@ router.get(
       res.json({
         data: {
           used,
-          limit: user?.subscriptionTier === "FREE" ? 2 : null,
+          // Same constant the POST /submissions gate enforces — a usage card
+          // that quotes a different ceiling than the one applied is worse than
+          // no card at all.
+          limit: user?.subscriptionTier === "FREE" ? FREE_MONTHLY_SUBMISSIONS : null,
           tier: user?.subscriptionTier ?? "FREE",
         },
       });

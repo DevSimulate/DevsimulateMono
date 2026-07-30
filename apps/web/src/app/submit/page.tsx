@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getToken, storeToken, clearToken } from "@/lib/auth";
+import { QUOTA_REACHED_MESSAGE } from "@/lib/limits";
 import Logo from "@/components/Logo";
 import { EdgeBanner } from "@/components/EdgeBanner";
 import { cn } from "@/lib/cn";
@@ -1889,7 +1890,7 @@ function SubmitPageInner() {
               Monthly limit reached
             </h2>
             <p className="text-sm mb-6 leading-relaxed text-muted">
-              You&apos;ve used your 2 assessments this month — resets on the 1st.
+              {QUOTA_REACHED_MESSAGE}
             </p>
             <Link href="/dashboard">
               <Button variant="secondary" size="lg" className="w-full max-w-xs mx-auto">

@@ -18,6 +18,7 @@ import {
   hiringTicketIds,
 } from "../lib/evaluation-visibility";
 import { summarizeCadence } from "../services/cadence";
+import { FREE_MONTHLY_SUBMISSIONS } from "../config/limits";
 import { resolveResumeStage } from "../lib/resume";
 
 const router = Router();
@@ -88,8 +89,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Free-tier limit: 2 submissions per month. Does NOT apply to a hiring
-    // assessment — that candidate was invited by an employer who is the
+    // Free-tier monthly limit on SELF-SERVE practice. Does NOT apply to a
+    // hiring assessment — that candidate was invited by an employer who is the
     // customer here, and they are not spending personal practice quota on an
     // interview. Metering them meant a candidate could be locked out of a real
     // hiring process, mid-assessment, by a UI accident.
@@ -102,9 +103,9 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       const count = await prisma.submission.count({
         where: { userId, submittedAt: { gte: startOfMonth }, status: { not: "VOID" } },
       });
-      if (count >= 2) {
+      if (count >= FREE_MONTHLY_SUBMISSIONS) {
         res.status(402).json({
-          error: "You have used your 2 free submissions this month. Upgrade to Pro for unlimited tickets.",
+          error: `You have used your ${FREE_MONTHLY_SUBMISSIONS} free submissions this month. Upgrade to Pro for unlimited tickets.`,
           upgradeRequired: true,
         });
         return;
