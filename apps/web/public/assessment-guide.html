@@ -174,6 +174,24 @@
     font-size: 12.5px; color: var(--muted);
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ── Screenshots ────────────────────────────────────── */
+  .shot { margin: 14px 0 4px; }
+  .shot img {
+    display: block; width: 100%; height: auto; border-radius: 9px;
+    border: 1px solid var(--rule); box-shadow: var(--shadow); background: var(--soft);
+  }
+  /* Shown only when the image is missing, so a half-finished shot list still
+     renders a sensible page instead of a broken-image icon. */
+  .shot .missing {
+    display: none; border: 1.5px dashed var(--rule); border-radius: 9px;
+    padding: 26px 18px; text-align: center; background: var(--soft);
+  }
+  .shot.empty img { display: none; }
+  .shot.empty .missing { display: block; }
+  .shot .missing b { display: block; color: var(--ink); font-size: 13.5px; margin-bottom: 4px; }
+  .shot .missing span { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .shot figcaption { font-size: 12.5px; color: var(--muted); margin-top: 7px; }
 </style>
 </head>
 <body>
@@ -219,6 +237,11 @@
       <div class="rail"><div class="dot">1</div><div class="line"></div></div>
       <div class="step">
         <h4>Install the DevSimulate extension</h4>
+        <figure class="shot" data-src="/guide/01-install.png">
+          <img src="/guide/01-install.png" alt="Search DevSimulate in the Extensions panel" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/01-install.png</span></div>
+          <figcaption>Search DevSimulate in the Extensions panel</figcaption>
+        </figure>
         <p>Open VS Code, search <span class="btn">DevSimulate</span> in Extensions, install it, then sign in with GitHub.</p>
       </div>
     </li>
@@ -227,6 +250,11 @@
       <div class="rail"><div class="dot">2</div><div class="line"></div></div>
       <div class="step">
         <h4>Open your ticket</h4>
+        <figure class="shot" data-src="/guide/02-ticket.png">
+          <img src="/guide/02-ticket.png" alt="Your ticket, with the files worth investigating" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/02-ticket.png</span></div>
+          <figcaption>Your ticket, with the files worth investigating</figcaption>
+        </figure>
         <p>Your assigned ticket appears in the DevSimulate sidebar with the problem description and the files worth investigating.</p>
         <div class="tip"><b>Read it twice.</b> The ticket describes a <i>symptom</i>. Your job is to find the cause behind it — that's the largest part of your score.</div>
       </div>
@@ -236,6 +264,11 @@
       <div class="rail"><div class="dot">3</div><div class="line"></div></div>
       <div class="step">
         <h4>Click "Fork &amp; Clone"</h4>
+        <figure class="shot" data-src="/guide/03-fork-clone.png">
+          <img src="/guide/03-fork-clone.png" alt="One click sets up the repository for you" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/03-fork-clone.png</span></div>
+          <figcaption>One click sets up the repository for you</figcaption>
+        </figure>
         <p>This copies the repository to your GitHub account and downloads it. No git commands needed — work only in that copy.</p>
       </div>
     </li>
@@ -244,6 +277,11 @@
       <div class="rail"><div class="dot">4</div><div class="line"></div></div>
       <div class="step">
         <h4>Fix the issue</h4>
+        <figure class="shot" data-src="/guide/04-editing.png">
+          <img src="/guide/04-editing.png" alt="Work exactly as you normally would" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/04-editing.png</span></div>
+          <figcaption>Work exactly as you normally would</figcaption>
+        </figure>
         <p>Take the time you need. Use Copilot, Claude, ChatGPT — whatever you'd normally reach for. Nothing here is monitored.</p>
         <div class="tip"><b>Make it a minimal fix.</b> A small change you can explain beats a large one you can't.</div>
       </div>
@@ -253,6 +291,11 @@
       <div class="rail"><div class="dot">5</div><div class="line"></div></div>
       <div class="step">
         <h4>Click "Push &amp; Create PR"</h4>
+        <figure class="shot" data-src="/guide/05-push-pr.png">
+          <img src="/guide/05-push-pr.png" alt="Pushes your branch and opens the pull request" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/05-push-pr.png</span></div>
+          <figcaption>Pushes your branch and opens the pull request</figcaption>
+        </figure>
         <p>Pushes your branch and opens the pull request for you.</p>
       </div>
     </li>
@@ -261,6 +304,11 @@
       <div class="rail"><div class="dot">6</div><div class="line"></div></div>
       <div class="step">
         <h4>Click "Submit PR for Review"</h4>
+        <figure class="shot" data-src="/guide/06-submit.png">
+          <img src="/guide/06-submit.png" alt="The last moment you can return to your code" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/06-submit.png</span></div>
+          <figcaption>The last moment you can return to your code</figcaption>
+        </figure>
         <p>This is the doorway into Part&nbsp;2. Your browser opens and the monitored portion begins.</p>
         <div class="tip warn"><b>Pause here.</b> Once you continue, you cannot go back to your code, your notes, or any AI tool. Don't click until you can explain your fix from memory.</div>
       </div>
@@ -270,6 +318,11 @@
       <div class="rail"><div class="dot">7</div><div class="line"></div></div>
       <div class="step">
         <h4>Write it up — four questions</h4>
+        <figure class="shot" data-src="/guide/07-writeup.png">
+          <img src="/guide/07-writeup.png" alt="Four labelled sections, in your own words" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/07-writeup.png</span></div>
+          <figcaption>Four labelled sections, in your own words</figcaption>
+        </figure>
         <p>In your own words:</p>
         <p style="margin-left:2px">
           <b style="color:var(--ink)">1. Root cause</b> — what was actually broken, and why?<br>
@@ -284,6 +337,11 @@
       <div class="rail"><div class="dot">8</div><div class="line"></div></div>
       <div class="step">
         <h4>Two follow-up questions</h4>
+        <figure class="shot" data-src="/guide/08-question.png">
+          <img src="/guide/08-question.png" alt="Generated from your actual change" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/08-question.png</span></div>
+          <figcaption>Generated from your actual change</figcaption>
+        </figure>
         <p>Generated from your actual change, so they're specific to what you did. Short answers are fine.</p>
       </div>
     </li>
@@ -292,6 +350,11 @@
       <div class="rail"><div class="dot">9</div><div class="line"></div></div>
       <div class="step">
         <h4>Explain it out loud</h4>
+        <figure class="shot" data-src="/guide/09-verbal.png">
+          <img src="/guide/09-verbal.png" alt="Camera and mic on, one short question" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/09-verbal.png</span></div>
+          <figcaption>Camera and mic on, one short question</figcaption>
+        </figure>
         <p>A short spoken explanation with your camera and mic on. There's a microphone check first — please run it.</p>
         <div class="tip"><b>Speak naturally and take your time.</b> We're listening for whether you understand your change. Accent and grammar are never marked — a right explanation in imperfect English beats a fluent wrong one.</div>
       </div>
@@ -301,6 +364,11 @@
       <div class="rail"><div class="dot">&#10003;</div><div class="line"></div></div>
       <div class="step">
         <h4>Done</h4>
+        <figure class="shot" data-src="/guide/10-done.png">
+          <img src="/guide/10-done.png" alt="Confirmation — no score is shown" loading="lazy">
+          <div class="missing"><b>Screenshot pending</b><span>/guide/10-done.png</span></div>
+          <figcaption>Confirmation — no score is shown</figcaption>
+        </figure>
         <p>You'll see a confirmation. The hiring team reviews everything and comes back to you by email either way.</p>
         <div class="tip"><b>You won't see a score — nobody does.</b> That's deliberate for hiring assessments, so please don't read anything into it.</div>
       </div>
@@ -364,5 +432,11 @@
 
   <footer>Assessment delivered by DevSimulate. Questions? Reply to your invitation email.</footer>
 </div>
+<script>
+  document.querySelectorAll(".shot img").forEach(function (img) {
+    if (img.complete && img.naturalWidth === 0) img.closest(".shot").classList.add("empty");
+    img.addEventListener("error", function () { img.closest(".shot").classList.add("empty"); });
+  });
+</script>
 </body>
 </html>
