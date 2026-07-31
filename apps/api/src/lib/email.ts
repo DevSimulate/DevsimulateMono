@@ -160,6 +160,9 @@ export function assessmentInviteEmail(opts: {
   const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
   const contact = opts.contactEmail?.trim() || ASSESSMENT_CONTACT_EMAIL;
   const minutes = expectedMinutes ?? 60;
+  // Static page in the web app's public/ — a candidate who reads this before
+  // starting is one who doesn't meet fullscreen or the paste block by surprise.
+  const guideUrl = `${process.env.FRONTEND_URL ?? "https://www.devsimulate.com"}/assessment-guide.html`;
   const subject = `Your next step for the ${roleName} role at ${brandName}`;
 
   const header = logoUrl
@@ -244,6 +247,12 @@ export function assessmentInviteEmail(opts: {
         Start your assessment &rarr;
       </a>
     </div>
+
+    <p style="${p}">
+      Want to see the whole thing laid out first?
+      <a href="${guideUrl}" style="color:${accent};">Read the step-by-step guide</a> —
+      it walks through every stage, what's monitored, and what to do if something goes wrong.
+    </p>
 
     <div style="${h2}">A few notes</div>
     <p style="${p}">

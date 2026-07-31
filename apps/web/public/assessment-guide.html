@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="How your DevSimulate technical assessment works, step by step.">
+<title>Your assessment — how it works</title>
+<style>
+  :root {
+    --paper:   #F3F5F6;
+    --surface: #FFFFFF;
+    --ink:     #12191D;
+    --body:    #3B4A52;
+    --muted:   #6E8189;
+    --rule:    #DCE4E7;
+    --soft:    #EBF0F2;
+
+    /* The two phases are colour-coded because the difference between them is
+       the single most important thing on this page. */
+    --open:      #0C7A6B;   /* phase 1 — relaxed, AI welcome */
+    --open-bg:   #E4F2EF;
+    --focus:     #A2610A;   /* phase 2 — monitored */
+    --focus-bg:  #FAF0E0;
+    --alert:     #A32F2F;
+    --alert-bg:  #FAEAEA;
+
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --shadow: 0 1px 2px rgba(18,25,29,.04), 0 10px 26px -14px rgba(18,25,29,.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0D1316; --surface:#151D21; --ink:#E8F0F2; --body:#B3C3C9;
+      --muted:#7C9099; --rule:#243036; --soft:#1A242A;
+      --open:#5CBFAE; --open-bg:#123029; --focus:#DDA654; --focus-bg:#2E2413;
+      --alert:#E38585; --alert-bg:#2E1919;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -16px rgba(0,0,0,.65);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#F3F5F6; --surface:#FFFFFF; --ink:#12191D; --body:#3B4A52; --muted:#6E8189;
+    --rule:#DCE4E7; --soft:#EBF0F2; --open:#0C7A6B; --open-bg:#E4F2EF;
+    --focus:#A2610A; --focus-bg:#FAF0E0; --alert:#A32F2F; --alert-bg:#FAEAEA;
+    --shadow:0 1px 2px rgba(18,25,29,.04), 0 10px 26px -14px rgba(18,25,29,.18);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0D1316; --surface:#151D21; --ink:#E8F0F2; --body:#B3C3C9; --muted:#7C9099;
+    --rule:#243036; --soft:#1A242A; --open:#5CBFAE; --open-bg:#123029;
+    --focus:#DDA654; --focus-bg:#2E2413; --alert:#E38585; --alert-bg:#2E1919;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -16px rgba(0,0,0,.65);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--body);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 22px 90px; }
+
+  /* ── Header ─────────────────────────────────────────── */
+  header { padding: 54px 0 30px; }
+  h1 {
+    font-size: clamp(28px, 5vw, 40px); line-height: 1.1; letter-spacing: -.02em;
+    color: var(--ink); margin: 0 0 14px; font-weight: 700; text-wrap: balance;
+  }
+  .lede { font-size: 17px; max-width: 56ch; margin: 0; }
+  .time {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 20px;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    border: 1px solid var(--rule); border-radius: 999px; padding: 6px 14px;
+  }
+
+  /* ── The two-phase split ────────────────────────────── */
+  .phases { display: grid; gap: 14px; margin: 34px 0 46px; }
+  @media (min-width: 620px) { .phases { grid-template-columns: 1fr 1fr; } }
+  .phase {
+    border-radius: 12px; padding: 20px 22px; border: 1px solid var(--rule);
+    background: var(--surface); box-shadow: var(--shadow);
+  }
+  .phase.one { border-top: 3px solid var(--open); }
+  .phase.two { border-top: 3px solid var(--focus); }
+  .phase h2 { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 8px; }
+  .phase.one h2 { color: var(--open); }
+  .phase.two h2 { color: var(--focus); }
+  .phase .big { font-size: 19px; font-weight: 650; color: var(--ink); margin: 0 0 8px; line-height: 1.3; }
+  .phase p { margin: 0; font-size: 14.5px; }
+  .ai { display: inline-block; margin-top: 12px; font-size: 12.5px; font-weight: 650;
+        padding: 5px 11px; border-radius: 6px; }
+  .phase.one .ai { background: var(--open-bg); color: var(--open); }
+  .phase.two .ai { background: var(--focus-bg); color: var(--focus); }
+
+  /* ── Stepper ────────────────────────────────────────── */
+  h3.section {
+    font-size: 12px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 18px; font-weight: 700;
+  }
+  ol.steps { list-style: none; margin: 0 0 46px; padding: 0; }
+  ol.steps > li { display: grid; grid-template-columns: 40px 1fr; gap: 16px; }
+  .rail { position: relative; display: flex; flex-direction: column; align-items: center; }
+  .dot {
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    background: var(--surface); border: 2px solid var(--rule); color: var(--muted);
+  }
+  li.open .dot  { border-color: var(--open);  color: var(--open); }
+  li.focus .dot { border-color: var(--focus); color: var(--focus); }
+  .line { flex: 1; width: 2px; background: var(--rule); margin: 6px 0; min-height: 18px; }
+  li:last-child .line { display: none; }
+  .step { padding-bottom: 26px; min-width: 0; }
+  .step h4 { margin: 5px 0 6px; font-size: 17px; color: var(--ink); font-weight: 650; line-height: 1.3; }
+  .step p { margin: 0 0 8px; font-size: 15px; }
+  .btn {
+    display: inline-block; font-family: var(--mono); font-size: 12.5px;
+    background: var(--soft); border: 1px solid var(--rule); border-radius: 5px;
+    padding: 2px 8px; color: var(--ink); white-space: nowrap;
+  }
+  .tip {
+    margin-top: 10px; font-size: 13.5px; padding: 10px 14px; border-radius: 8px;
+    background: var(--soft); border-left: 3px solid var(--muted);
+  }
+  .tip.warn { background: var(--focus-bg); border-left-color: var(--focus); }
+  .tip b { color: var(--ink); }
+
+  .divider {
+    display: flex; align-items: center; gap: 14px; margin: 6px 0 26px 56px;
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--focus); font-weight: 700;
+  }
+  .divider::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+
+  /* ── Rules ──────────────────────────────────────────── */
+  .rules { display: grid; gap: 12px; margin-bottom: 46px; }
+  .rule {
+    display: grid; grid-template-columns: 1fr; gap: 4px;
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .rule .name { font-weight: 650; color: var(--ink); font-size: 15px; }
+  .rule .what { font-size: 14px; }
+  .rule .cost { font-size: 13px; font-family: var(--mono); margin-top: 4px; }
+  .rule.hard .cost { color: var(--alert); }
+  .rule.soft .cost { color: var(--open); }
+
+  /* ── Trouble ────────────────────────────────────────── */
+  details {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 10px; padding: 14px 18px; margin-bottom: 10px;
+  }
+  details[open] { box-shadow: var(--shadow); }
+  summary {
+    cursor: pointer; font-weight: 650; color: var(--ink); font-size: 15px;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before {
+    content: "+"; font-family: var(--mono); color: var(--muted);
+    font-weight: 400; font-size: 16px; flex: none;
+  }
+  details[open] summary::before { content: "\2212"; }
+  summary:focus-visible { outline: 2px solid var(--open); outline-offset: 3px; border-radius: 4px; }
+  details p { margin: 10px 0 2px 26px; font-size: 14.5px; }
+
+  .closing {
+    margin-top: 44px; padding: 22px 24px; border-radius: 12px;
+    background: var(--open-bg); border: 1px solid var(--rule);
+  }
+  .closing p { margin: 0; color: var(--ink); font-size: 15.5px; }
+  footer {
+    margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--rule);
+    font-size: 12.5px; color: var(--muted);
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Your technical assessment, start to finish</h1>
+    <p class="lede">
+      A real bug in a real codebase — not a quiz. You'll fix it however you normally work,
+      then explain what you did. This page shows exactly what happens at each step, so
+      nothing catches you out.
+    </p>
+    <div class="time">About 60 minutes · Chrome or Edge · mic + camera</div>
+  </header>
+
+  <!-- ── The core idea ─────────────────────────────── -->
+  <div class="phases">
+    <div class="phase one">
+      <h2>Part 1 — Build</h2>
+      <p class="big">Fix the code, your way</p>
+      <p>Your editor, your pace. Nothing is timed and nothing is watched.</p>
+      <span class="ai">AI tools welcome</span>
+    </div>
+    <div class="phase two">
+      <h2>Part 2 — Explain</h2>
+      <p class="big">Talk us through it</p>
+      <p>Fullscreen, on the clock, and you can't return to your code.</p>
+      <span class="ai">No AI, no going back</span>
+    </div>
+  </div>
+
+  <p style="margin:-24px 0 44px; font-size:15px;">
+    That split is the whole point. We let you use AI to write the fix because that's how the
+    job actually works — so what we measure is whether you <b style="color:var(--ink)">understand
+    what you shipped</b>. If you do, Part&nbsp;2 is easy.
+  </p>
+
+  <!-- ── Steps ─────────────────────────────────────── -->
+  <h3 class="section">Step by step</h3>
+  <ol class="steps">
+
+    <li class="open">
+      <div class="rail"><div class="dot">1</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Install the DevSimulate extension</h4>
+        <p>Open VS Code, search <span class="btn">DevSimulate</span> in Extensions, install it, then sign in with GitHub.</p>
+      </div>
+    </li>
+
+    <li class="open">
+      <div class="rail"><div class="dot">2</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Open your ticket</h4>
+        <p>Your assigned ticket appears in the DevSimulate sidebar with the problem description and the files worth investigating.</p>
+        <div class="tip"><b>Read it twice.</b> The ticket describes a <i>symptom</i>. Your job is to find the cause behind it — that's the largest part of your score.</div>
+      </div>
+    </li>
+
+    <li class="open">
+      <div class="rail"><div class="dot">3</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Click "Fork &amp; Clone"</h4>
+        <p>This copies the repository to your GitHub account and downloads it. No git commands needed — work only in that copy.</p>
+      </div>
+    </li>
+
+    <li class="open">
+      <div class="rail"><div class="dot">4</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Fix the issue</h4>
+        <p>Take the time you need. Use Copilot, Claude, ChatGPT — whatever you'd normally reach for. Nothing here is monitored.</p>
+        <div class="tip"><b>Make it a minimal fix.</b> A small change you can explain beats a large one you can't.</div>
+      </div>
+    </li>
+
+    <li class="open">
+      <div class="rail"><div class="dot">5</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Click "Push &amp; Create PR"</h4>
+        <p>Pushes your branch and opens the pull request for you.</p>
+      </div>
+    </li>
+
+    <li class="focus">
+      <div class="rail"><div class="dot">6</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Click "Submit PR for Review"</h4>
+        <p>This is the doorway into Part&nbsp;2. Your browser opens and the monitored portion begins.</p>
+        <div class="tip warn"><b>Pause here.</b> Once you continue, you cannot go back to your code, your notes, or any AI tool. Don't click until you can explain your fix from memory.</div>
+      </div>
+    </li>
+
+    <li class="focus">
+      <div class="rail"><div class="dot">7</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Write it up — four questions</h4>
+        <p>In your own words:</p>
+        <p style="margin-left:2px">
+          <b style="color:var(--ink)">1. Root cause</b> — what was actually broken, and why?<br>
+          <b style="color:var(--ink)">2. How you found it</b> — what you read, ran or tested.<br>
+          <b style="color:var(--ink)">3. Why this fix</b> — why this approach, what trade-off you accepted.<br>
+          <b style="color:var(--ink)">4. How you verified it</b> — what proved it works.
+        </p>
+      </div>
+    </li>
+
+    <li class="focus">
+      <div class="rail"><div class="dot">8</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Two follow-up questions</h4>
+        <p>Generated from your actual change, so they're specific to what you did. Short answers are fine.</p>
+      </div>
+    </li>
+
+    <li class="focus">
+      <div class="rail"><div class="dot">9</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Explain it out loud</h4>
+        <p>A short spoken explanation with your camera and mic on. There's a microphone check first — please run it.</p>
+        <div class="tip"><b>Speak naturally and take your time.</b> We're listening for whether you understand your change. Accent and grammar are never marked — a right explanation in imperfect English beats a fluent wrong one.</div>
+      </div>
+    </li>
+
+    <li>
+      <div class="rail"><div class="dot">&#10003;</div><div class="line"></div></div>
+      <div class="step">
+        <h4>Done</h4>
+        <p>You'll see a confirmation. The hiring team reviews everything and comes back to you by email either way.</p>
+        <div class="tip"><b>You won't see a score — nobody does.</b> That's deliberate for hiring assessments, so please don't read anything into it.</div>
+      </div>
+    </li>
+  </ol>
+
+  <!-- ── Rules ─────────────────────────────────────── -->
+  <h3 class="section">What's monitored in Part 2 — and what it costs</h3>
+  <div class="rules">
+    <div class="rule hard">
+      <span class="name">Fullscreen stays on</span>
+      <span class="what">Switching tabs or apps, or leaving fullscreen, is recorded.</span>
+      <span class="cost">2 warnings → a 3rd ends the assessment</span>
+    </div>
+    <div class="rule soft">
+      <span class="name">Pasting is disabled in the answer boxes</span>
+      <span class="what">You'll get a warning if you try. Repeated attempts get looked at by a person.</span>
+      <span class="cost">never ends your assessment — Ctrl+V is muscle memory</span>
+    </div>
+    <div class="rule soft">
+      <span class="name">Camera on during the spoken part</span>
+      <span class="what">For presence only. Nothing else is inspected.</span>
+      <span class="cost">no effect on your score</span>
+    </div>
+  </div>
+
+  <!-- ── Trouble ───────────────────────────────────── -->
+  <h3 class="section">If something goes wrong</h3>
+
+  <details>
+    <summary>I clicked submit and nothing seems to be happening</summary>
+    <p>Wait — reviewing your code takes up to a minute. <b>Don't click submit again.</b> If the page does come back to you, it's safe to retry; we won't double-count it.</p>
+  </details>
+
+  <details>
+    <summary>My microphone isn't working</summary>
+    <p>Don't close the tab. You'll be offered a retry, or the option to type your explanation instead. A broken mic never counts against you.</p>
+  </details>
+
+  <details>
+    <summary>My tab closed / my laptop died mid-assessment</summary>
+    <p>Sign back in and open your dashboard. You'll see a card returning you to exactly the step you left off on. Your written work is saved.</p>
+  </details>
+
+  <details>
+    <summary>I got a warning by accident</summary>
+    <p>One or two warnings are nothing to panic about. They exist so nobody is disqualified without knowing. Return to fullscreen and carry on.</p>
+  </details>
+
+  <details>
+    <summary>My link has expired</summary>
+    <p>Reply to your invitation email and someone will sort it out.</p>
+  </details>
+
+  <div class="closing">
+    <p>
+      Nothing here is designed to catch you out. The rules exist so that every candidate's
+      explanation is genuinely their own — including yours. Good luck.
+    </p>
+  </div>
+
+  <footer>Assessment delivered by DevSimulate. Questions? Reply to your invitation email.</footer>
+</div>
+</body>
+</html>
