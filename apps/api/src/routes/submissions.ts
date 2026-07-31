@@ -1000,12 +1000,14 @@ router.post("/:id/verbal-question", async (req: Request, res: Response): Promise
       usedFallbackModel = result.usedFallbackModel;
     }
 
-    if (usedFallbackModel) {
-      await prisma.followUpQuestion.updateMany({
-        where: { submissionId: sub.id },
-        data: { usedFallbackModel: true },
-      });
-    }
+    // Record what was asked as soon as it is asked, so an abandoned attempt
+    // still leaves evidence. Scoring overwrites this with the question the
+    // verdict was actually formed against — questions are regenerated on
+    // resume, so the two can legitimately differ.
+    await prisma.followUpQuestion.updateMany({
+      where: { submissionId: sub.id },
+      data: { verbalQuestion: question, ...(usedFallbackModel ? { usedFallbackModel: true } : {}) },
+    });
 
     res.json({ data: { question } });
   } catch (err) {
@@ -1075,6 +1077,7 @@ async function processVerbal(
     await prisma.followUpQuestion.update({
       where: { id: sub.followUp.id },
       data: {
+        verbalQuestion: question,
         verbalTranscript: transcript,
         verbalScore: null,
         verbalNote:
@@ -1128,7 +1131,7 @@ async function processVerbal(
     scored = consensusVerbal(runs).result;
   }
 
-  return applyDefenceScore(sub, scored, transcript, { hideEvaluation, completionBody });
+  return applyDefenceScore(sub, scored, transcript, question, { hideEvaluation, completionBody });
 }
 
 /**
@@ -1152,6 +1155,8 @@ async function applyDefenceScore(
   },
   scored: { consistent: boolean; score: number; note: string; unscorable?: boolean },
   transcript: string,
+  /** The question this verdict was formed against — stored for audit. */
+  question: string,
   opts: {
     hideEvaluation: boolean;
     completionBody: { status: number; body: object };
@@ -1335,7 +1340,7 @@ router.post("/:id/typed-answer", async (req: Request, res: Response): Promise<vo
     }
 
     const cadence = summarizeCadence(Array.isArray(keyTimestamps) ? keyTimestamps : [], text.length);
-    const r = await applyDefenceScore(sub, scored, text, {
+    const r = await applyDefenceScore(sub, scored, text, question ?? "", {
       hideEvaluation,
       completionBody,
       extraSubmissionData: { typedCadence: cadence as object },

@@ -231,6 +231,13 @@ model FollowUpQuestion {
   aiDeclaration       AIUsageDeclaration?
   declarationMismatch Boolean               @default(false)
   employerSummary     String?               @db.Text
+  // The defence question the candidate was actually asked. Written when the
+  // question is generated and again when the answer is scored, so the stored
+  // text is the one the verdict was formed against. Without it a -20 verbal
+  // deduction cannot be audited: you can read the answer and the grader's
+  // complaint, but not what was asked, so you cannot tell whether the candidate
+  // dodged the question or the grader judged them against a different one.
+  verbalQuestion      String?               @db.Text
   verbalTranscript    String?               @db.Text  // spoken explanation, transcribed (audio not stored)
   verbalScore         Int?                            // 0-10 verbal understanding
   verbalNote          String?               @db.Text  // employer-facing note on spoken vs written

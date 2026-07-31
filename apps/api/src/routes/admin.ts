@@ -180,7 +180,7 @@ router.get("/candidates/:userId", async (req: Request, res: Response): Promise<v
         pasteAttempts: true, riskScore: true, defenceMode: true, defenceTrigger: true,
         needsAttention: true, needsAttentionReason: true, pendingAction: true,
         ticket: { select: { title: true } },
-        followUp: { select: { question1: true, answer1: true, answer2: true, verbalTranscript: true, verbalScore: true } },
+        followUp: { select: { question1: true, answer1: true, answer2: true, verbalQuestion: true, verbalTranscript: true, verbalScore: true, verbalNote: true } },
       },
     });
 

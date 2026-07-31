@@ -44,7 +44,8 @@ interface Submission {
   ticket: { title: string } | null;
   followUp: {
     question1: string | null; answer1: string | null; answer2: string | null;
-    verbalTranscript: string | null; verbalScore: number | null;
+    verbalQuestion: string | null; verbalTranscript: string | null;
+    verbalScore: number | null; verbalNote: string | null;
   } | null;
 }
 
@@ -319,6 +320,18 @@ export default function AdminCandidatesPage() {
                           <span>verbal {s.followUp.verbalScore}/10</span>
                         )}
                       </div>
+                      {s.followUp?.verbalQuestion && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-muted cursor-pointer">Defence question &amp; answer</summary>
+                          <p className="text-xs mt-1.5 text-ink"><span className="text-muted">Asked:</span> {s.followUp.verbalQuestion}</p>
+                          {s.followUp.verbalTranscript && (
+                            <p className="text-xs mt-1.5 text-ink"><span className="text-muted">Said:</span> {s.followUp.verbalTranscript}</p>
+                          )}
+                          {s.followUp.verbalNote && (
+                            <p className="text-xs mt-1.5 text-muted">{s.followUp.verbalNote}</p>
+                          )}
+                        </details>
+                      )}
                       {s.needsAttentionReason && (
                         <p className="text-xs text-amber mt-1">{s.needsAttentionReason}</p>
                       )}
