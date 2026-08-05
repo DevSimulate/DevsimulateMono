@@ -289,6 +289,116 @@ export function assessmentInviteEmail(opts: {
 }
 
 /**
+ * The last-call email, written to serve BOTH states in one message: invited and
+ * never started, and started but not finished.
+ *
+ * One email rather than two because the split is not knowable from the outside
+ * in the way that matters — someone who "started" may have opened the link and
+ * hit a setup error, which is closer to never-started than to half-done. Two
+ * emails would also mean two chances to send the wrong one to the wrong person
+ * on the last day.
+ *
+ * It carries the common setup failures inline. Several candidates in the pilot
+ * were blocked by "not a git repository", a missing Git install, or VS Code
+ * having the wrong folder open — none of which they could have diagnosed alone.
+ * A deadline reminder that doesn't acknowledge that reads as pressure to
+ * someone who has been stuck for two days.
+ */
+export function closingSoonEmail(opts: {
+  candidateName: string | null;
+  brandName: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  roleName: string;
+  link: string;
+  deadline: Date | null;
+  /** True when they have a submission in flight — changes the framing only. */
+  started: boolean;
+  contactEmail?: string | null;
+}): { subject: string; html: string } {
+  const { candidateName, brandName, logoUrl, primaryColor, roleName, link, deadline, started } = opts;
+
+  const accent = primaryColor || "#6366f1";
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const contact = opts.contactEmail?.trim() || ASSESSMENT_CONTACT_EMAIL;
+  const guideUrl = `${process.env.FRONTEND_URL ?? "https://www.devsimulate.com"}/assessment-guide.html`;
+  const subject = `Your ${brandName} assessment closes ${deadline ? "soon" : "shortly"}`;
+
+  const header = logoUrl
+    ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;display:block;margin-bottom:24px;">`
+    : `<div style="font-weight:800;font-size:18px;margin-bottom:24px;color:${accent};">${brandName}</div>`;
+
+  const p = "font-size:15px;line-height:1.6;color:#333;margin:0 0 14px;";
+  const when = deadline ? `on <strong>${longDate(deadline)}</strong>` : "shortly";
+
+  return {
+    subject,
+    html: `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      Your assessment link closes soon — your progress is saved.
+    </div>
+    ${header}
+
+    <p style="${p}">Hi ${greeting},</p>
+
+    <p style="${p}">
+      A quick reminder that your technical assessment for the <strong>${roleName}</strong> role at
+      <strong>${brandName}</strong> closes ${when}.
+    </p>
+
+    ${started
+      ? `<p style="${p}">
+           <strong>You've already made a start — your work is saved.</strong> Open your link again and
+           you'll be returned to the exact step you stopped on. Nothing you've completed needs redoing.
+         </p>`
+      : `<p style="${p}">
+           <strong>There's still time.</strong> It takes about an hour: you fix a real bug in a working
+           codebase, then explain your reasoning. You're welcome to use AI tools for the coding —
+           we're interested in whether you understand the change, not whether you typed it unaided.
+         </p>`}
+
+    <div style="margin:26px 0;">
+      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:8px;font-size:15px;">
+        ${started ? "Continue your assessment" : "Start your assessment"} &rarr;
+      </a>
+    </div>
+
+    <p style="${p}">
+      <strong>If something went wrong technically, please tell us rather than giving up.</strong>
+      A few candidates hit setup problems this week and every one turned out to be a quick fix:
+    </p>
+    <ul style="font-size:14.5px;line-height:1.6;color:#333;padding-left:20px;margin:0 0 14px;">
+      <li style="margin-bottom:6px;"><em>"not a git repository"</em> — VS Code has the wrong folder open, or an interrupted download left an empty folder behind</li>
+      <li style="margin-bottom:6px;"><em>"spawn git ENOENT"</em> — Git isn't installed yet. Install it from git-scm.com, then restart VS Code</li>
+      <li style="margin-bottom:6px;">Sidebar looks empty — open the folder you cloned into, then click the refresh icon</li>
+    </ul>
+
+    <p style="${p}">
+      Stuck on any of these, or on anything else? Email
+      <a href="mailto:${contact}" style="color:${accent};">${contact}</a> and we'll help.
+      If a technical problem is what stopped you, say so — we'd much rather sort it out than lose
+      your application to a setup error.
+    </p>
+
+    <p style="${p}">
+      There's a step-by-step walkthrough here:
+      <a href="${guideUrl}" style="color:${accent};">${guideUrl.replace(/^https?:\/\//, "")}</a>
+    </p>
+
+    <p style="${p}">Thanks for the time you've put in so far.</p>
+
+    <p style="font-size:12px;color:#888;line-height:1.6;margin-top:22px;">
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${link}</span>
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#aaa;">Sent via DevSimulate on behalf of ${brandName}.</p>
+  </div>`,
+  };
+}
+
+/**
  * Nudge for an invited candidate who never opened their assessment.
  *
  * Deliberately SHORT, and deliberately not a re-send of the invite. This lands

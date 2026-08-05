@@ -102,6 +102,49 @@ function makeGit(baseDir?: string): SimpleGit {
 // A user-facing error whose message is safe to show directly in a prompt.
 export class FriendlyError extends Error {}
 
+/**
+ * Git isn't installed, and no amount of retrying will change that.
+ *
+ * `spawn git ENOENT` is what Node reports when the binary doesn't exist, and it
+ * surfaced to a candidate as a raw stack trace mentioning child_process — which
+ * tells someone setting up for a job interview nothing they can act on. Worse,
+ * the clone retried four times with 3s pauses first, so they waited twelve
+ * seconds to be told nothing.
+ */
+const GIT_MISSING_MESSAGE =
+  "Git isn't installed on this computer, so the code can't be downloaded.\n\n" +
+  (process.platform === "win32"
+    ? "Install Git for Windows from https://git-scm.com/download/win, accept the default options, then restart VS Code and click Fork & Clone again."
+    : process.platform === "darwin"
+      ? "Install it by running  xcode-select --install  in Terminal, or from https://git-scm.com/download/mac, then restart VS Code and click Fork & Clone again."
+      : "Install it with your package manager (e.g.  sudo apt install git ), then restart VS Code and click Fork & Clone again.");
+
+/** True when an error is Node's "the executable does not exist" signal. */
+export function isGitMissingError(err: unknown): boolean {
+  const s = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return s.includes("enoent") && s.includes("git");
+}
+
+/**
+ * Whether a usable git binary exists. Checked BEFORE any long-running flow so
+ * the candidate is told immediately, rather than after a fork has been created
+ * on their GitHub account for a clone that was never going to work.
+ */
+export function isGitAvailable(): boolean {
+  try {
+    const { execFileSync } = require("child_process") as typeof import("child_process");
+    execFileSync(resolveGitBinary(), ["--version"], { timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Throws the actionable message when git is missing. */
+export function assertGitAvailable(): void {
+  if (!isGitAvailable()) throw new FriendlyError(GIT_MISSING_MESSAGE);
+}
+
 // ── Created-PR cache ──────────────────────────────────────────────────────────
 // When "Push & Create PR" (or the auto-PR watcher) opens a pull request, we
 // already hold the exact PR URL for THIS ticket's branch. Remember it keyed by
@@ -233,6 +276,7 @@ export async function createPullRequest(
   originalRepoUrl: string,
   creds: GitHubCreds | null
 ): Promise<string> {
+  assertGitAvailable();
   if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
   const token = creds.token;
   const headers = { Authorization: `token ${token}`, Accept: "application/vnd.github+json" };
@@ -320,6 +364,9 @@ export async function cloneAndOpenCodebase(
   creds: GitHubCreds | null
 ): Promise<void> {
   if (!creds) throw new FriendlyError(NO_TOKEN_MESSAGE);
+  // Check before anything else: forking first would leave a repository on the
+  // candidate's GitHub account for a clone that could never have run.
+  assertGitAvailable();
   const { owner: srcOwner, repo: repoName } = parseOwnerRepo(ticket.codebase.repoUrl);
 
   const token = creds.token;
@@ -337,7 +384,17 @@ export async function cloneAndOpenCodebase(
       cancellable: false,
     },
     async (progress) => {
-      if (fs.existsSync(targetDir)) {
+      // "Already set up" must mean a WORKING clone, not merely a folder with
+      // the right name. A directory left behind by an interrupted clone has no
+      // .git, so every git command inside it fails with "fatal: not a git
+      // repository" — and the candidate is stuck there permanently, because the
+      // same broken folder is found again on every retry.
+      const isRepo = fs.existsSync(path.join(targetDir, ".git"));
+      if (fs.existsSync(targetDir) && !isRepo) {
+        progress.report({ message: "Clearing an unfinished download…" });
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      }
+      if (isRepo) {
         progress.report({ message: "Already set up — switching to your branch…" });
         await ensureBranch(makeGit(targetDir), branchName, ticket.codebase.repoUrl);
         return;
@@ -364,6 +421,9 @@ export async function cloneAndOpenCodebase(
         } catch (e) {
           lastErr = e instanceof Error ? e.message : String(e);
           if (fs.existsSync(targetDir)) fs.rmSync(targetDir, { recursive: true, force: true });
+          // A missing binary is not a transient failure — retrying just makes
+          // the candidate wait longer for the same outcome.
+          if (isGitMissingError(e)) throw new FriendlyError(GIT_MISSING_MESSAGE);
           await new Promise((r) => setTimeout(r, 3000));
         }
       }

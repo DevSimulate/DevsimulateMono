@@ -49,6 +49,11 @@ export default function CampaignInvitesPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [raw, setRaw] = useState("");
   const [busy, setBusy] = useState(false);
+  const [closingPreview, setClosingPreview] = useState<{
+    total: number; finished: number; wouldEmail: number;
+    notStarted: number; startedUnfinished: number;
+    recipients: { email: string; name: string | null; started: boolean }[];
+  } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -125,6 +130,47 @@ export default function CampaignInvitesPage() {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to send reminders");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Two steps on purpose. This reaches everyone who hasn't finished — often the
+  // whole list — so the preview names the audience before anything is sent,
+  // rather than after.
+  async function previewClosing() {
+    setBusy(true); setMsg(null); setError(null);
+    try {
+      const r = await fetch(`${API}/employer/campaigns/${campaignId}/invites/closing-soon`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Preview failed");
+      setClosingPreview(j.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendClosing() {
+    setBusy(true); setMsg(null); setError(null);
+    try {
+      const r = await fetch(`${API}/employer/campaigns/${campaignId}/invites/closing-soon`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Failed to send");
+      setMsg(`Sent to ${j.data.sent} of ${j.data.targeted} — ${j.data.notStarted} never started, ${j.data.startedUnfinished} started but unfinished. ${j.data.finished} who finished were skipped.`);
+      setClosingPreview(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send");
     } finally {
       setBusy(false);
     }
@@ -213,10 +259,45 @@ export default function CampaignInvitesPage() {
             {s[0] + s.slice(1).toLowerCase()} · <span className="font-mono">{counts[s] ?? 0}</span>
           </Badge>
         ))}
-        <Button variant="secondary" onClick={remind} disabled={busy} className="ml-auto">
-          Remind non-starters
-        </Button>
+        <div className="ml-auto flex gap-2">
+          <Button variant="secondary" onClick={remind} disabled={busy}>
+            Remind non-starters
+          </Button>
+          <Button variant="primary" onClick={previewClosing} disabled={busy}>
+            Closing-soon email…
+          </Button>
+        </div>
       </div>
+
+      {/* Preview before sending — this reaches everyone who hasn't finished,
+          which is usually most of the list. */}
+      {closingPreview && (
+        <div className="mb-5 rounded border border-hairline bg-surface p-4">
+          <p className="text-sm font-semibold mb-1">Send the closing-soon email?</p>
+          <p className="text-xs text-muted mb-3">
+            Goes to <span className="font-semibold text-ink">{closingPreview.wouldEmail}</span> of{" "}
+            {closingPreview.total} invited —{" "}
+            <span className="font-mono">{closingPreview.notStarted}</span> never started,{" "}
+            <span className="font-mono">{closingPreview.startedUnfinished}</span> started but unfinished.{" "}
+            The <span className="font-mono">{closingPreview.finished}</span> who already finished are excluded.
+          </p>
+          <div className="max-h-40 overflow-y-auto rounded border border-hairline bg-paper px-3 py-2 mb-3">
+            {closingPreview.recipients.map((r) => (
+              <div key={r.email} className="text-xs font-mono text-muted">
+                {r.started ? "· started " : "· not started "} {r.name ? `${r.name} — ` : ""}{r.email}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={sendClosing} disabled={busy}>
+              {busy ? "Sending…" : `Send to ${closingPreview.wouldEmail}`}
+            </Button>
+            <Button variant="secondary" onClick={() => setClosingPreview(null)} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {invites.length === 0 ? (
         <EmptyState title="No invitations sent yet" description="Upload a candidate file above to send tracked invitation links." />
