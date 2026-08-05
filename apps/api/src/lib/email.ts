@@ -289,6 +289,86 @@ export function assessmentInviteEmail(opts: {
 }
 
 /**
+ * "We've moved the deadline" — for candidates who are mid-assessment when a
+ * round is extended.
+ *
+ * Sent only to people who have actually started. Someone who never opened the
+ * link has no deadline pressure to relieve, and telling them the date moved is
+ * just a second nudge dressed as news; they get the final call instead.
+ *
+ * Leads with the new date and the fact that their work is saved, because those
+ * are the two things a half-finished candidate is anxious about. No apology for
+ * the change and no explanation of why — an extension is good news for the
+ * recipient, and justifying it invites them to wonder whether it will move
+ * again.
+ */
+export function deadlineExtendedEmail(opts: {
+  candidateName: string | null;
+  brandName: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  roleName: string;
+  link: string;
+  deadline: Date;
+  contactEmail?: string | null;
+}): { subject: string; html: string } {
+  const { candidateName, brandName, logoUrl, primaryColor, roleName, link, deadline } = opts;
+
+  const accent = primaryColor || "#6366f1";
+  const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
+  const contact = opts.contactEmail?.trim() || ASSESSMENT_CONTACT_EMAIL;
+  const subject = `More time: your ${brandName} assessment now closes ${longDate(deadline)}`;
+
+  const header = logoUrl
+    ? `<img src="${logoUrl}" alt="${brandName}" style="max-height:40px;max-width:180px;display:block;margin-bottom:24px;">`
+    : `<div style="font-weight:800;font-size:18px;margin-bottom:24px;color:${accent};">${brandName}</div>`;
+
+  const p = "font-size:15px;line-height:1.6;color:#333;margin:0 0 14px;";
+
+  return {
+    subject,
+    html: `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1a1a1a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      You have extra time to finish — your progress is saved.
+    </div>
+    ${header}
+
+    <p style="${p}">Hi ${greeting},</p>
+
+    <p style="${p}">
+      Good news — we've extended the deadline for the <strong>${roleName}</strong> assessment at
+      <strong>${brandName}</strong>. You now have until <strong>${longDate(deadline)}</strong> to finish.
+    </p>
+
+    <p style="${p}">
+      <strong>Your progress is saved.</strong> Open your link again and you'll be returned to the exact
+      step you stopped on — nothing you've already done needs redoing.
+    </p>
+
+    <div style="margin:26px 0;">
+      <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:8px;font-size:15px;">
+        Continue your assessment &rarr;
+      </a>
+    </div>
+
+    <p style="${p}">
+      If a technical problem is what stopped you, please tell us rather than giving up — email
+      <a href="mailto:${contact}" style="color:${accent};">${contact}</a> and we'll help you get going.
+      We'd much rather sort it out than lose your application to a setup error.
+    </p>
+
+    <p style="font-size:12px;color:#888;line-height:1.6;margin-top:22px;">
+      If the button doesn't work, paste this into your browser:<br>
+      <span style="color:#aaa;word-break:break-all;">${link}</span>
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;">
+    <p style="font-size:12px;color:#aaa;">Sent via DevSimulate on behalf of ${brandName}.</p>
+  </div>`,
+  };
+}
+
+/**
  * The last-call email, written to serve BOTH states in one message: invited and
  * never started, and started but not finished.
  *

@@ -5,7 +5,7 @@ import prisma from "../lib/prisma";
 import { Difficulty, CampaignStatus, CandidateStatus, CampaignType, InviteStatus } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
-import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail, closingSoonEmail } from "../lib/email";
+import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail, closingSoonEmail, deadlineExtendedEmail } from "../lib/email";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 import { HIRING_CERTIFICATE_MIN_SCORE } from "../config/certificates";
@@ -1182,6 +1182,90 @@ router.get("/:id/invites", async (req: Request, res: Response): Promise<void> =>
  * POST /campaigns/:id/invites/remind
  * Re-sends the invitation to everyone who hasn't started yet.
  */
+/**
+ * POST /campaigns/:id/invites/deadline-extended
+ * Body: { dryRun?: boolean }
+ *
+ * Tells candidates who are MID-ASSESSMENT that the round has been extended.
+ *
+ * Narrower than closing-soon by design: only people who have actually started
+ * and not finished. Someone who never opened the link has no deadline pressure
+ * to relieve, so for them this would just be an extra nudge — they get the
+ * final call on the deadline morning instead, and the quota is spent once
+ * rather than twice.
+ *
+ * Requires a deadline to be set; "we've extended it to nothing in particular"
+ * is not a message worth sending.
+ */
+router.post("/:id/invites/deadline-extended", async (req: Request, res: Response): Promise<void> => {
+  const { userId } = (req as AuthenticatedRequest).user;
+  const { dryRun } = req.body as { dryRun?: boolean };
+  try {
+    const campaign = await ownedCampaign(req.params.id, userId);
+    if (!campaign) { res.status(404).json({ error: "Campaign not found" }); return; }
+    if (rejectIfNotHiring(campaign, res)) return;
+    if (!campaign.deadline) { res.status(400).json({ error: "This campaign has no deadline to extend." }); return; }
+
+    const invites = await prisma.campaignInvite.findMany({
+      where: { campaignId: campaign.id, userId: { not: null } },
+      select: { id: true, email: true, name: true, token: true, userId: true },
+    });
+
+    const candidateIds = invites.map((i) => i.userId).filter((v): v is string => !!v);
+    const finalized = candidateIds.length
+      ? await prisma.submission.findMany({
+          where: {
+            userId: { in: candidateIds },
+            finalized: true,
+            ...(campaign.ticketIds.length ? { ticketId: { in: campaign.ticketIds } } : {}),
+          },
+          select: { userId: true },
+        })
+      : [];
+    const done = new Set(finalized.map((s) => s.userId));
+
+    const targets = invites.filter((i) => i.userId && !done.has(i.userId));
+    const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+    const brandName = campaign.org.brandName || campaign.companyName;
+
+    if (dryRun) {
+      res.json({
+        data: {
+          dryRun: true,
+          started: invites.length,
+          finished: done.size,
+          wouldEmail: targets.length,
+          deadline: campaign.deadline,
+          recipients: targets.map((t) => ({ email: t.email, name: t.name })),
+        },
+      });
+      return;
+    }
+
+    let sent = 0;
+    for (const t of targets) {
+      const { subject, html } = deadlineExtendedEmail({
+        candidateName: t.name,
+        brandName,
+        logoUrl: campaign.org.logoUrl,
+        primaryColor: campaign.org.primaryColor,
+        roleName: campaign.roleName,
+        link: `${appUrl}/apply/${campaign.shareableSlug}?invite=${t.token}`,
+        deadline: campaign.deadline,
+      });
+      if (await sendEmail({ to: t.email, subject, html, meta: { type: "INVITE", campaignId: campaign.id } })) {
+        await prisma.campaignInvite.update({ where: { id: t.id }, data: { remindedAt: new Date() } });
+        sent++;
+      }
+    }
+
+    res.json({ data: { started: invites.length, finished: done.size, targeted: targets.length, sent } });
+  } catch (err) {
+    console.error("[campaigns] deadline-extended error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to send the extension notice" });
+  }
+});
+
 /**
  * POST /campaigns/:id/invites/closing-soon
  * Body: { dryRun?: boolean }
