@@ -14,7 +14,8 @@
     "db:generate": "prisma generate",
     "backfill:skill-scores": "ts-node --transpile-only scripts/backfill-skill-scores.ts",
     "backfill:cert-categories": "ts-node --transpile-only scripts/backfill-certificate-categories.ts",
-    "qa:smoke": "ts-node --transpile-only scripts/qa-smoke.ts"
+    "qa:smoke": "ts-node --transpile-only scripts/qa-smoke.ts",
+    "rescore:verbal": "ts-node --transpile-only scripts/rescore-verbal-bands.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
