@@ -79,8 +79,8 @@ app.use(cookieParser());
  * Without it there is no way to tell whether a push has actually reached
  * production: every route sits behind auth, so an unknown path and a
  * not-yet-deployed one both answer 401, and "the deploy looks fine" is a guess.
- * That guess is expensive for scheduled work like the final-call email, which
- * fires once, unattended, and cannot be re-run if the code wasn't there.
+ * That guess is expensive during a live hiring round, where the gap between
+ * pushing a fix and it actually running is measured in candidates.
  *
  * RAILWAY_GIT_COMMIT_SHA is injected by Railway; "dev" locally.
  */

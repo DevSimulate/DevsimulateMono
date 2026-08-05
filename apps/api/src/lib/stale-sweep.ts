@@ -8,10 +8,9 @@ import { Queue, Worker, Job } from "bullmq";
 import { InviteStatus, CampaignType, CampaignStatus } from "@prisma/client";
 import { redisConnection } from "./queue";
 import prisma from "./prisma";
-import { sendEmail, stuckAssessmentEmail, assessmentReminderEmail, closingSoonEmail } from "./email";
+import { sendEmail, stuckAssessmentEmail, assessmentReminderEmail } from "./email";
 import { stuckSubmissionWhere, SWEEP_INTERVAL_MS, STALE_AFTER_HOURS } from "../services/stale-submissions";
 import { isReminderDue, daysRemaining } from "../services/invite-reminders";
-import { isFinalCallDue, finalCallAt, FINAL_CALL_ENABLED } from "../services/final-call";
 import { resumeUrl } from "./resume";
 
 const QUEUE_NAME = "stale-sweep";
@@ -209,113 +208,6 @@ export async function sweepInviteReminders(): Promise<{ due: number; emailed: nu
 }
 
 /**
- * Sends the final call on the morning of each open round's deadline day.
- *
- * Idempotency comes from the delivery log rather than a schema column, so this
- * needs no migration and survives restarts, redeploys and overlapping sweeps:
- * a candidate who already has a row for this subject on this campaign since the
- * firing time is skipped. Scoping the check to `>= fireAt` rather than "ever"
- * is what lets a manual closing-soon send earlier in the round coexist with the
- * automatic one — otherwise one click days ago would silently cancel it.
- */
-export async function sweepFinalCall(): Promise<{ campaigns: number; emailed: number }> {
-  if (!FINAL_CALL_ENABLED) return { campaigns: 0, emailed: 0 };
-
-  const now = new Date();
-  const campaigns = await prisma.campaign.findMany({
-    where: {
-      type: CampaignType.HIRING,
-      status: CampaignStatus.ACTIVE,
-      deadline: { gt: now },
-    },
-    select: {
-      id: true, deadline: true, roleName: true, companyName: true,
-      shareableSlug: true, ticketIds: true,
-      org: { select: { brandName: true, logoUrl: true, primaryColor: true } },
-    },
-  });
-
-  const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
-  let emailed = 0;
-  let fired = 0;
-
-  for (const campaign of campaigns) {
-    if (!isFinalCallDue(campaign.deadline, now)) continue;
-    const fireAt = finalCallAt(campaign.deadline!);
-    fired++;
-
-    const invites = await prisma.campaignInvite.findMany({
-      where: { campaignId: campaign.id },
-      select: { id: true, email: true, name: true, token: true, userId: true },
-      take: 500,
-    });
-
-    // Anyone who finished is excluded. Telling someone who has already submitted
-    // that their assessment is about to close is the one mistake that makes a
-    // hiring process look careless.
-    const candidateIds = invites.map((i) => i.userId).filter((v): v is string => !!v);
-    const finalized = candidateIds.length
-      ? await prisma.submission.findMany({
-          where: {
-            userId: { in: candidateIds },
-            finalized: true,
-            ...(campaign.ticketIds.length ? { ticketId: { in: campaign.ticketIds } } : {}),
-          },
-          select: { userId: true },
-        })
-      : [];
-    const done = new Set(finalized.map((s) => s.userId));
-
-    const brandName = campaign.org.brandName || campaign.companyName;
-    // The subject is identical for every recipient, so one query establishes who
-    // has already had it instead of a count per candidate.
-    const { subject } = closingSoonEmail({
-      candidateName: null, brandName, logoUrl: campaign.org.logoUrl,
-      primaryColor: campaign.org.primaryColor, roleName: campaign.roleName,
-      link: appUrl, deadline: campaign.deadline,
-    });
-    const already = await prisma.emailDelivery.findMany({
-      where: { campaignId: campaign.id, subject, createdAt: { gte: fireAt } },
-      select: { toEmail: true },
-    });
-    const sentTo = new Set(already.map((r) => r.toEmail.toLowerCase()));
-
-    const targets = invites.filter(
-      (i) => (!i.userId || !done.has(i.userId)) && !sentTo.has(i.email.toLowerCase())
-    );
-
-    console.log(
-      `[final-call] ${campaign.companyName}/${campaign.roleName}: ` +
-      `${invites.length} invited, ${done.size} finished, ${sentTo.size} already sent, ${targets.length} to email`
-    );
-
-    for (const t of targets) {
-      const mail = closingSoonEmail({
-        candidateName: t.name,
-        brandName,
-        logoUrl: campaign.org.logoUrl,
-        primaryColor: campaign.org.primaryColor,
-        roleName: campaign.roleName,
-        link: `${appUrl}/apply/${campaign.shareableSlug}?invite=${t.token}`,
-        deadline: campaign.deadline,
-        started: !!t.userId,
-      });
-      const ok = await sendEmail({
-        to: t.email, subject: mail.subject, html: mail.html,
-        meta: { type: "INVITE", campaignId: campaign.id },
-      });
-      if (ok) {
-        await prisma.campaignInvite.update({ where: { id: t.id }, data: { remindedAt: now } });
-        emailed++;
-      }
-    }
-  }
-
-  if (fired) console.log(`[final-call] ${fired} campaign(s) due, ${emailed} emailed`);
-  return { campaigns: fired, emailed };
-}
-
-/**
  * Registers the repeatable job and starts its worker. The repeat entry is keyed
  * on the interval, so re-registering on every boot is safe — BullMQ dedupes it
  * rather than stacking a new schedule per deploy.
@@ -337,7 +229,6 @@ export function startStaleSweepWorker(): Worker {
       await sweepStuckSubmissions();
       await sweepUndeliveredGrants();
       await sweepInviteReminders();
-      await sweepFinalCall();
     },
     {
       connection: redisConnection,
