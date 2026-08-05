@@ -5,7 +5,8 @@ import prisma from "../lib/prisma";
 import { Difficulty, CampaignStatus, CandidateStatus, CampaignType, InviteStatus } from "@prisma/client";
 import crypto from "crypto";
 import { preForkForUser } from "../lib/github-fork";
-import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail, closingSoonEmail, deadlineExtendedEmail } from "../lib/email";
+import { sendEmail, interviewInviteEmail, assessmentInviteEmail, rejectionEmail, closingSoonEmail } from "../lib/email";
+import { startedUnfinished, sendDeadlineExtended } from "../services/campaign-notices";
 import { campaignSubmissionScope } from "../lib/campaign-scope";
 import { parseCampaignType, campaignTypeWhere } from "../lib/campaign-type-scope";
 import { HIRING_CERTIFICATE_MIN_SCORE } from "../config/certificates";
@@ -1206,34 +1207,13 @@ router.post("/:id/invites/deadline-extended", async (req: Request, res: Response
     if (rejectIfNotHiring(campaign, res)) return;
     if (!campaign.deadline) { res.status(400).json({ error: "This campaign has no deadline to extend." }); return; }
 
-    const invites = await prisma.campaignInvite.findMany({
-      where: { campaignId: campaign.id, userId: { not: null } },
-      select: { id: true, email: true, name: true, token: true, userId: true },
-    });
-
-    const candidateIds = invites.map((i) => i.userId).filter((v): v is string => !!v);
-    const finalized = candidateIds.length
-      ? await prisma.submission.findMany({
-          where: {
-            userId: { in: candidateIds },
-            finalized: true,
-            ...(campaign.ticketIds.length ? { ticketId: { in: campaign.ticketIds } } : {}),
-          },
-          select: { userId: true },
-        })
-      : [];
-    const done = new Set(finalized.map((s) => s.userId));
-
-    const targets = invites.filter((i) => i.userId && !done.has(i.userId));
+    const targets = await startedUnfinished(campaign);
     const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
-    const brandName = campaign.org.brandName || campaign.companyName;
 
     if (dryRun) {
       res.json({
         data: {
           dryRun: true,
-          started: invites.length,
-          finished: done.size,
           wouldEmail: targets.length,
           deadline: campaign.deadline,
           recipients: targets.map((t) => ({ email: t.email, name: t.name })),
@@ -1242,24 +1222,8 @@ router.post("/:id/invites/deadline-extended", async (req: Request, res: Response
       return;
     }
 
-    let sent = 0;
-    for (const t of targets) {
-      const { subject, html } = deadlineExtendedEmail({
-        candidateName: t.name,
-        brandName,
-        logoUrl: campaign.org.logoUrl,
-        primaryColor: campaign.org.primaryColor,
-        roleName: campaign.roleName,
-        link: `${appUrl}/apply/${campaign.shareableSlug}?invite=${t.token}`,
-        deadline: campaign.deadline,
-      });
-      if (await sendEmail({ to: t.email, subject, html, meta: { type: "INVITE", campaignId: campaign.id } })) {
-        await prisma.campaignInvite.update({ where: { id: t.id }, data: { remindedAt: new Date() } });
-        sent++;
-      }
-    }
-
-    res.json({ data: { started: invites.length, finished: done.size, targeted: targets.length, sent } });
+    const sent = await sendDeadlineExtended(campaign, targets, appUrl);
+    res.json({ data: { targeted: targets.length, sent } });
   } catch (err) {
     console.error("[campaigns] deadline-extended error:", err instanceof Error ? err.message : err);
     res.status(500).json({ error: "Failed to send the extension notice" });

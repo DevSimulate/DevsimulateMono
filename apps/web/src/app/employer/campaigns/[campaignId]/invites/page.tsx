@@ -54,6 +54,10 @@ export default function CampaignInvitesPage() {
     notStarted: number; startedUnfinished: number;
     recipients: { email: string; name: string | null; started: boolean }[];
   } | null>(null);
+  const [extendedPreview, setExtendedPreview] = useState<{
+    wouldEmail: number; deadline: string | null;
+    recipients: { email: string; name: string | null }[];
+  } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -176,6 +180,47 @@ export default function CampaignInvitesPage() {
     }
   }
 
+  // Same two-step as the closing-soon email. Narrower audience — only people
+  // mid-assessment — but still a real send to real candidates, so the list is
+  // named before anything leaves.
+  async function previewExtended() {
+    setBusy(true); setMsg(null); setError(null);
+    try {
+      const r = await fetch(`${API}/employer/campaigns/${campaignId}/invites/deadline-extended`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Preview failed");
+      setExtendedPreview(j.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendExtended() {
+    setBusy(true); setMsg(null); setError(null);
+    try {
+      const r = await fetch(`${API}/employer/campaigns/${campaignId}/invites/deadline-extended`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Failed to send");
+      setMsg(`Told ${j.data.sent} of ${j.data.targeted} mid-assessment candidates about the new deadline.`);
+      setExtendedPreview(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const counts = invites.reduce<Record<string, number>>((acc, i) => {
     acc[i.status] = (acc[i.status] ?? 0) + 1;
     return acc;
@@ -263,11 +308,45 @@ export default function CampaignInvitesPage() {
           <Button variant="secondary" onClick={remind} disabled={busy}>
             Remind non-starters
           </Button>
+          <Button variant="secondary" onClick={previewExtended} disabled={busy}>
+            Deadline extended…
+          </Button>
           <Button variant="primary" onClick={previewClosing} disabled={busy}>
             Closing-soon email…
           </Button>
         </div>
       </div>
+
+      {/* Only reaches people mid-assessment: someone who never opened the link
+          has no deadline pressure to relieve. */}
+      {extendedPreview && (
+        <div className="mb-5 rounded border border-hairline bg-surface p-4">
+          <p className="text-sm font-semibold mb-1">Tell candidates the deadline moved?</p>
+          <p className="text-xs text-muted mb-3">
+            Goes to the <span className="font-semibold text-ink">{extendedPreview.wouldEmail}</span> who
+            started but haven&apos;t finished
+            {extendedPreview.deadline
+              ? <> — the new date is <span className="font-semibold text-ink">{new Date(extendedPreview.deadline).toLocaleString()}</span></>
+              : null}.
+            Anyone who finished, or who never started, is excluded.
+          </p>
+          <div className="max-h-40 overflow-y-auto rounded border border-hairline bg-paper px-3 py-2 mb-3">
+            {extendedPreview.recipients.map((r) => (
+              <div key={r.email} className="text-xs font-mono text-muted">
+                · {r.name ? `${r.name} — ` : ""}{r.email}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={sendExtended} disabled={busy}>
+              {busy ? "Sending…" : `Send to ${extendedPreview.wouldEmail}`}
+            </Button>
+            <Button variant="secondary" onClick={() => setExtendedPreview(null)} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Preview before sending — this reaches everyone who hasn't finished,
           which is usually most of the list. */}
