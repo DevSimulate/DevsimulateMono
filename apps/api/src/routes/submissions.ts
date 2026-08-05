@@ -7,7 +7,7 @@ import { reviewQueue } from "../lib/queue";
 import { scoreFollowUpAnswers, generateQ2FromA1, generateQ2FromA1ForDesign, fetchPrDiff, generateVerbalQuestion, scoreVerbalAnswer, generateVerbalQuestionForDesign, scoreVerbalAnswerForDesign } from "../services/review.service";
 import { recomputeUserSkillScore, finalizeSubmission } from "../services/score.service";
 import { consensusVerbal, gatherRuns, SCORING_RUNS } from "../services/consensus";
-import { isLowConfidence, MIN_CONFIDENCE } from "../services/transcript-confidence";
+import { isLowConfidence, isUnusableTranscript, MIN_CONFIDENCE } from "../services/transcript-confidence";
 import { reviewEvents } from "../lib/review-events";
 import { triggerHiddenTest } from "../lib/grader";
 import {
@@ -1072,6 +1072,31 @@ async function processVerbal(
   // problem to the candidate at up to -20, so route it to a human instead and
   // apply nothing. This is explicitly NOT about the answer being short: a clear
   // "I don't know" has high confidence and is still scored as failing below.
+  // A transcript can be unusable regardless of its confidence number — a
+  // hallucinated caption phrase, a couple of words after a minute of speaking,
+  // or output in the wrong script. Checked FIRST because confidence is
+  // sometimes absent entirely, which left this class of failure unguarded.
+  const usability = isUnusableTranscript(transcript);
+  if (usability.unusable) {
+    await prisma.followUpQuestion.update({
+      where: { id: sub.followUp.id },
+      data: {
+        verbalTranscript: transcript,
+        verbalScore: null,
+        verbalNote:
+          `Not scored — ${usability.reason}. This is a recording problem, not an answer: ` +
+          `no penalty has been applied and the candidate can retry or type instead.`,
+      },
+    });
+    await flagForHumanReview(sub.id, `unusable transcript — ${usability.reason}`);
+    await prisma.submission.update({
+      where: { id: sub.id },
+      data: { verbalLowConfHits: { increment: 1 } },
+    });
+    console.log(`[verbal] ${sub.id} unusable transcript (${usability.reason}) — recovery chooser opened`);
+    return { status: 200, body: { data: { lowConfidence: true, recovery: true, trigger: "unusable_transcript" } } };
+  }
+
   const confidence = sub.followUp.verbalConfidence;
   if (isLowConfidence(confidence)) {
     await prisma.followUpQuestion.update({
@@ -1131,7 +1156,7 @@ async function processVerbal(
     scored = consensusVerbal(runs).result;
   }
 
-  return applyDefenceScore(sub, scored, transcript, question, { hideEvaluation, completionBody });
+  return applyDefenceScore(sub, scored, transcript, question, "VOICE", { hideEvaluation, completionBody });
 }
 
 /**
@@ -1157,6 +1182,8 @@ async function applyDefenceScore(
   transcript: string,
   /** The question this verdict was formed against — stored for audit. */
   question: string,
+  /** Channel the answer arrived through — decides whether audio confidence applies. */
+  mode: "VOICE" | "TYPED",
   opts: {
     hideEvaluation: boolean;
     completionBody: { status: number; body: object };
@@ -1198,7 +1225,14 @@ async function applyDefenceScore(
     await prisma.followUpQuestion.update({
       where: { id: sub.followUp.id },
       data: {
+        verbalQuestion: question,
         verbalTranscript: transcript,
+        // A typed defence has no audio, so an audio-confidence number stored
+        // against it is worse than useless — it is misleading. Three candidates
+        // showed a confidence BELOW the scoring threshold next to a penalty,
+        // which reads as "scored despite bad audio" when the value was actually
+        // left over from a voice attempt they abandoned before typing.
+        ...(mode === "TYPED" ? { verbalConfidence: null } : {}),
         // NULL, not 0 — an unscored defence must not read as a scored zero to
         // whoever reviews it, and null is what the low-confidence path stores.
         verbalScore: scored.unscorable ? null : scored.score,
@@ -1340,7 +1374,7 @@ router.post("/:id/typed-answer", async (req: Request, res: Response): Promise<vo
     }
 
     const cadence = summarizeCadence(Array.isArray(keyTimestamps) ? keyTimestamps : [], text.length);
-    const r = await applyDefenceScore(sub, scored, text, question ?? "", {
+    const r = await applyDefenceScore(sub, scored, text, question ?? "", "TYPED", {
       hideEvaluation,
       completionBody,
       extraSubmissionData: { typedCadence: cadence as object },

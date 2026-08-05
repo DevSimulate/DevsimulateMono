@@ -91,6 +91,58 @@ export function proxyConfidence(transcript: string, durationSeconds?: number): n
 }
 
 /**
+ * Phrases Whisper emits when it is handed silence or near-silence. They are
+ * artifacts of the model's training data (YouTube captions), not speech — a
+ * candidate whose microphone captured nothing gets "Thank you for watching!"
+ * back and, before this guard, was scored 0/10 and docked 20 points for it.
+ */
+const HALLUCINATIONS = [
+  "thank you for watching", "thanks for watching", "please subscribe",
+  "like and subscribe", "subscribe to my channel", "see you next time",
+  "see you in the next video", "[music]", "[applause]", "[silence]",
+];
+
+/** Below this, there is no answer to judge — only a failed recording. */
+const MIN_ANSWER_WORDS = 8;
+
+/**
+ * A transcript that cannot represent a real spoken answer, whatever its
+ * confidence number says. Separate from confidence because these fail for
+ * reasons the arithmetic doesn't capture:
+ *
+ *  - a hallucinated caption phrase means the audio was effectively empty
+ *  - a handful of words after a minute of speaking means the mic dropped out
+ *  - a transcript in a different script means the recogniser gave up on the
+ *    language rather than on the speaker
+ *
+ * All three are equipment failures. Scoring them charges the candidate for
+ * hardware, which is the one thing the defence step must never do.
+ */
+export function isUnusableTranscript(transcript: string): { unusable: boolean; reason?: string } {
+  const t = transcript.trim();
+  if (!t) return { unusable: true, reason: "no speech was captured" };
+
+  const lower = t.toLowerCase();
+  const hit = HALLUCINATIONS.find((h) => lower.includes(h));
+  if (hit) return { unusable: true, reason: `the recording was silent (transcriber returned "${hit}")` };
+
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < MIN_ANSWER_WORDS) {
+    return { unusable: true, reason: `only ${words.length} word(s) were captured` };
+  }
+
+  const letters = [...t].filter((c) => /\p{L}/u.test(c));
+  if (letters.length) {
+    const nonLatin = letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length;
+    if (nonLatin > 0.3) {
+      return { unusable: true, reason: "the transcript came back in the wrong script — the recogniser could not follow the audio" };
+    }
+  }
+
+  return { unusable: false };
+}
+
+/**
  * Should this transcript be scored?
  *
  * A null confidence means we have no signal (browser speech recognition, or a

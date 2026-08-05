@@ -78,9 +78,14 @@ const DEFENSE_META: Record<DefenseLevel, { label: string; color: string; bg: str
 
 type Confidence = "HIGH" | "MEDIUM" | "LOW";
 const CONF_META: Record<Confidence, { label: string; color: string }> = {
-  HIGH:   { label: "High confidence", color: EMERALD },
-  MEDIUM: { label: "Some variance",   color: AMBER },
-  LOW:    { label: "High variance",   color: RED },
+  // These describe how much to TRUST the score, which is not the same as how
+  // much the scoring runs disagreed. "High variance" implied the latter and was
+  // wrong: a candidate with three identical runs (76/76/76) still showed it,
+  // because the flag actually fires when the defence contradicts the written
+  // work or the AI declaration. Labelled for what it means.
+  HIGH:   { label: "Defended · consistent", color: EMERALD },
+  MEDIUM: { label: "Partly corroborated",   color: AMBER },
+  LOW:    { label: "Contradicts written work", color: RED },
 };
 
 interface Signals {
