@@ -8,6 +8,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from "express";
+import { CampaignType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { finalizeSubmission } from "../services/score.service";
 import { sweepStuckSubmissions, sweepInviteReminders } from "../lib/stale-sweep";
@@ -101,33 +102,160 @@ function deriveStatus(
 }
 
 /**
- * GET /admin/candidates?q=<email | github username | partial>
- * Search. Returns enough to pick the right person, not their full record.
+ * GET /admin/candidates?q=<optional>&campaignId=<optional>
+ *
+ * With no query this returns the whole hiring roster WITH each person's derived
+ * status, so the common question — "who is stuck right now" — is answered by
+ * looking, not by already knowing a name to search for.
  */
 router.get("/candidates", async (req: Request, res: Response): Promise<void> => {
   const q = String(req.query.q ?? "").trim();
-  if (q.length < 2) { res.status(400).json({ error: "Query must be at least 2 characters" }); return; }
+  const campaignId = String(req.query.campaignId ?? "").trim();
   try {
-    const users = await prisma.user.findMany({
+    // Roster = everyone in a hiring campaign. A free-text query filters within
+    // it rather than searching the entire user table, which would surface
+    // practice users nobody is looking for.
+    const candidacies = await prisma.campaignCandidate.findMany({
       where: {
-        OR: [
-          { email: { contains: q, mode: "insensitive" } },
-          { githubUsername: { contains: q, mode: "insensitive" } },
-          { fullName: { contains: q, mode: "insensitive" } },
-        ],
+        campaign: { type: CampaignType.HIRING, ...(campaignId ? { id: campaignId } : {}) },
       },
-      take: 25,
-      orderBy: { createdAt: "desc" },
+      orderBy: { joinedAt: "desc" },
       select: {
-        id: true, email: true, githubUsername: true, fullName: true,
-        subscriptionTier: true, skillScore: true,
-        _count: { select: { submissions: true } },
+        joinedAt: true,
+        campaign: { select: { id: true, roleName: true, companyName: true, deadline: true, ticketIds: true } },
+        user: {
+          select: {
+            id: true, email: true, githubUsername: true, fullName: true,
+            disqualifiedAt: true, disqualifiedReason: true,
+          },
+        },
       },
     });
-    res.json({ data: users });
+
+    // Newest candidacy per user.
+    const byUser = new Map<string, (typeof candidacies)[number]>();
+    for (const c of candidacies) if (!byUser.has(c.user.id)) byUser.set(c.user.id, c);
+    let rows = [...byUser.values()];
+
+    if (q) {
+      const needle = q.toLowerCase();
+      rows = rows.filter((r) =>
+        (r.user.email ?? "").toLowerCase().includes(needle) ||
+        (r.user.githubUsername ?? "").toLowerCase().includes(needle) ||
+        (r.user.fullName ?? "").toLowerCase().includes(needle)
+      );
+    }
+
+    const userIds = rows.map((r) => r.user.id);
+    const subs = userIds.length
+      ? await prisma.submission.findMany({
+          where: { userId: { in: userIds } },
+          orderBy: { submittedAt: "desc" },
+          select: { userId: true, ticketId: true, status: true, finalized: true, scoreTotal: true, submittedAt: true, reviewedAt: true },
+        })
+      : [];
+    const byUserSubs = new Map<string, typeof subs>();
+    for (const s of subs) {
+      const list = byUserSubs.get(s.userId) ?? [];
+      list.push(s);
+      byUserSubs.set(s.userId, list);
+    }
+
+    const data = rows.map((r) => {
+      const mine = byUserSubs.get(r.user.id) ?? [];
+      const live = mine.filter((s) => s.status !== "VOID");
+      const status = deriveStatus(mine, null, r.campaign.deadline);
+      return {
+        userId: r.user.id,
+        email: r.user.email,
+        githubUsername: r.user.githubUsername,
+        fullName: r.user.fullName,
+        disqualified: !!r.user.disqualifiedAt,
+        disqualifiedReason: r.user.disqualifiedReason,
+        campaign: { id: r.campaign.id, roleName: r.campaign.roleName, companyName: r.campaign.companyName },
+        joinedAt: r.joinedAt,
+        submissions: mine.length,
+        score: live.find((s) => s.finalized)?.scoreTotal ?? live[0]?.scoreTotal ?? null,
+        finalized: live.some((s) => s.finalized),
+        status,
+      };
+    });
+
+    // Anything needing a human first, then by recency.
+    const weight = (d: (typeof data)[number]) => (d.disqualified ? 0 : d.status.suggest ? 1 : d.finalized ? 3 : 2);
+    data.sort((a, b) => weight(a) - weight(b) || +new Date(b.joinedAt) - +new Date(a.joinedAt));
+
+    res.json({ data });
   } catch (err) {
-    console.error("[admin] candidate search error:", err instanceof Error ? err.message : err);
-    res.status(500).json({ error: "Search failed" });
+    console.error("[admin] candidate list error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to load candidates" });
+  }
+});
+
+/**
+ * POST /admin/candidates/:userId/reinstate
+ * Body: { reason?, restoreSubmission? }
+ *
+ * Undoes a disqualification and, by default, restores the submission that was
+ * voided with it — the candidate keeps their code, write-up and AI review and
+ * resumes at the step they were on, rather than starting over.
+ *
+ * Every disqualification in the pilot so far has been reversed, and each one
+ * needed a hand-written script. This is that, as a button.
+ */
+router.post("/candidates/:userId/reinstate", async (req: Request, res: Response): Promise<void> => {
+  const { reason, restoreSubmission = true } = req.body as { reason?: string; restoreSubmission?: boolean };
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.userId },
+      select: { id: true, githubUsername: true, disqualifiedAt: true },
+    });
+    if (!user) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { disqualifiedAt: null, disqualifiedReason: null },
+    });
+
+    let restored: { id: string; ticketId: string; scoreTotal: number | null } | null = null;
+    if (restoreSubmission) {
+      // The submission voided by the disqualification is the most recent VOID
+      // one. Reviewed work is restored as REVIEWED so the AI review is not
+      // re-run and the candidate resumes mid-assessment.
+      const voided = await prisma.submission.findFirst({
+        where: { userId: user.id, status: "VOID" },
+        orderBy: { submittedAt: "desc" },
+        select: { id: true, ticketId: true, scoreTotal: true, reviewedAt: true },
+      });
+      if (voided) {
+        restored = await prisma.submission.update({
+          where: { id: voided.id },
+          data: {
+            status: voided.reviewedAt ? "REVIEWED" : "PENDING",
+            needsAttention: true,
+            needsAttentionReason:
+              reason?.trim() ||
+              "Disqualification reversed by an administrator; second attempt granted.",
+          },
+          select: { id: true, ticketId: true, scoreTotal: true },
+        });
+      }
+    }
+
+    const appUrl = process.env.FRONTEND_URL ?? "https://www.devsimulate.com";
+    res.json({
+      data: {
+        reinstated: user.githubUsername,
+        wasDisqualified: !!user.disqualifiedAt,
+        restored,
+        // The link to send them — resolveResumeStage puts them back on the
+        // step they actually stopped at.
+        resumeUrl: restored ? `${appUrl}/submit?resume=${restored.id}&ticketId=${restored.ticketId}` : null,
+      },
+    });
+  } catch (err) {
+    console.error("[admin] reinstate error:", err instanceof Error ? err.message : err);
+    res.status(500).json({ error: "Failed to reinstate candidate" });
   }
 });
 

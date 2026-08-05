@@ -14,14 +14,19 @@ import { useToast } from "@/components/ui/Toast";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const KEY_STORAGE = "ds_admin_key";
 
-interface SearchRow {
-  id: string;
+interface RosterRow {
+  userId: string;
   email: string | null;
   githubUsername: string | null;
   fullName: string | null;
-  subscriptionTier: string;
-  skillScore: number;
-  _count: { submissions: number };
+  disqualified: boolean;
+  disqualifiedReason: string | null;
+  campaign: { id: string; roleName: string; companyName: string };
+  joinedAt: string;
+  submissions: number;
+  score: number | null;
+  finalized: boolean;
+  status: { state: string; detail: string; suggest: string | null };
 }
 
 interface Submission {
@@ -83,7 +88,7 @@ export default function AdminCandidatesPage() {
   const [key, setKey] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<SearchRow[]>([]);
+  const [roster, setRoster] = useState<RosterRow[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [searching, setSearching] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -102,25 +107,27 @@ export default function AdminCandidatesPage() {
     setKey(k);
   }
 
-  const search = useCallback(async () => {
-    if (!key || q.trim().length < 2) return;
+  const loadRoster = useCallback(async (query = "") => {
+    if (!key) return;
     setSearching(true);
-    setDetail(null);
     try {
-      const r = await fetch(`${API}/admin/candidates?q=${encodeURIComponent(q.trim())}`, {
+      const r = await fetch(`${API}/admin/candidates${query ? `?q=${encodeURIComponent(query)}` : ""}`, {
         headers: { "x-admin-key": key },
       });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "Search failed");
-      setResults(j.data ?? []);
-      if ((j.data ?? []).length === 1) void open(j.data[0].id);
+      if (!r.ok) throw new Error(j.error ?? "Failed to load candidates");
+      setRoster(j.data ?? []);
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : "Search failed", "bad");
+      toast.show(e instanceof Error ? e.message : "Failed to load candidates", "bad");
     } finally {
       setSearching(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, q]);
+  }, [key]);
+
+  // Everyone is listed by default — the point is to see who needs attention
+  // without already knowing whose name to type.
+  useEffect(() => { if (key) void loadRoster(); }, [key, loadRoster]);
 
   const open = useCallback(async (userId: string) => {
     if (!key) return;
@@ -137,6 +144,33 @@ export default function AdminCandidatesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+
+  async function reinstate(userId: string) {
+    if (!key) return;
+    setBusy("Reinstate");
+    try {
+      const r = await fetch(`${API}/admin/candidates/${userId}/reinstate`, {
+        method: "POST",
+        headers: { "x-admin-key": key, "Content-Type": "application/json" },
+        body: JSON.stringify({ restoreSubmission: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "Reinstate failed");
+      const url = j.data?.resumeUrl as string | undefined;
+      if (url) {
+        await navigator.clipboard.writeText(url).catch(() => {});
+        toast.show("Reinstated — resume link copied to clipboard", "good");
+      } else {
+        toast.show("Reinstated (no voided submission to restore)", "good");
+      }
+      await loadRoster(q.trim());
+      if (detail) await open(detail.user.id);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "Reinstate failed", "bad");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(path: string, label: string, body?: Record<string, unknown>) {
     if (!key || !detail) return;
@@ -202,35 +236,56 @@ export default function AdminCandidatesPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && search()}
-            placeholder="Email, GitHub username, or name"
+            onKeyDown={(e) => e.key === "Enter" && loadRoster(q.trim())}
+            placeholder="Filter by email, GitHub username, or name"
             className="flex-1"
           />
-          <Button variant="primary" onClick={search} disabled={searching || q.trim().length < 2}>
-            {searching ? "Searching…" : "Search"}
+          <Button variant="secondary" onClick={() => loadRoster(q.trim())} disabled={searching}>
+            {searching ? "Loading…" : "Filter"}
           </Button>
+          {q && (
+            <Button variant="quiet" onClick={() => { setQ(""); void loadRoster(); }} disabled={searching}>
+              Clear
+            </Button>
+          )}
         </div>
 
         {/* Result picker — only when ambiguous */}
-        {results.length > 1 && !detail && (
-          <div className="rounded border border-hairline bg-surface divide-y divide-hairline mb-6">
-            {results.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => open(r.id)}
-                className="w-full text-left px-4 py-3 hover:bg-paper transition-colors"
-              >
-                <div className="text-sm font-semibold">{r.fullName ?? r.githubUsername ?? "—"}</div>
-                <div className="text-xs text-muted font-mono">
-                  {r.email} · @{r.githubUsername} · {r._count.submissions} submission(s)
+        {/* Roster — everyone in a hiring campaign, worst-first. Click to open. */}
+        {!detail && (
+          roster.length === 0 && !searching ? (
+            <EmptyState title="No candidates" description={q ? "Nothing matches that filter." : "Nobody has joined a hiring campaign yet."} />
+          ) : (
+            <div className="rounded border border-hairline bg-surface divide-y divide-hairline mb-6">
+              {roster.map((r) => (
+                <div key={r.userId} className="px-4 py-3 hover:bg-paper transition-colors flex items-center gap-4">
+                  <button onClick={() => open(r.userId)} className="min-w-0 flex-1 text-left">
+                    <div className="text-sm font-semibold flex items-center gap-2 flex-wrap">
+                      {r.fullName ?? r.githubUsername ?? "—"}
+                      {r.disqualified && <Badge tone="bad">Disqualified</Badge>}
+                      {r.finalized && <Badge tone="good">Complete</Badge>}
+                    </div>
+                    <div className="text-xs text-muted font-mono truncate">
+                      {r.email} · @{r.githubUsername}
+                    </div>
+                    <div className="text-xs text-muted mt-0.5">
+                      {r.status.state}{r.status.detail ? " — " + r.status.detail : ""}
+                    </div>
+                  </button>
+                  <div className="shrink-0 text-right">
+                    <div className="text-sm font-semibold tabular-nums">{r.score ?? "—"}</div>
+                    <div className="text-[11px] text-muted">{r.submissions} sub{r.submissions === 1 ? "" : "s"}</div>
+                  </div>
+                  {/* The fix, without having to open the record first. */}
+                  {r.disqualified && (
+                    <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => reinstate(r.userId)}>
+                      {busy === "Reinstate" ? "…" : "Reinstate"}
+                    </Button>
+                  )}
                 </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {results.length === 0 && !detail && !searching && (
-          <EmptyState title="Search for a candidate" description="By email, GitHub username, or full name." />
+              ))}
+            </div>
+          )
         )}
 
         {loading && <Skeleton className="h-64 w-full" />}
