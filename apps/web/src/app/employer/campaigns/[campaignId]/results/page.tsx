@@ -462,7 +462,7 @@ export default function ResultsPage() {
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
                         onChange={toggleAll} style={{ accentColor: EMERALD }} />
                     </th>
-                    {["#", "Candidate", "PR score", "Final", "Gap", "Level fit", "Defence", "Authenticity", "Verdict", "Status", ""].map((h) => (
+                    {["#", "Candidate", "PR score", "Final", "Gap", "Level fit", "Defence", "Verdict", "Status", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-3 font-sans text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>{h}</th>
                     ))}
                   </tr>
@@ -561,13 +561,28 @@ export default function ResultsPage() {
                               {sig?.defense.score != null && <span className="text-[10px] opacity-80 tabular-nums">{sig.defense.score}/10</span>}
                             </span>
                           </td>
-                          {/* Authenticity */}
+                          {/* Authenticity — HIDDEN.
+                              authenticity = 100 - riskScore, and riskScore is
+                              currently unusable: calculateRiskScore measures
+                              "elapsed" as Date.now() - submittedAt, but it runs
+                              inside the review worker ~30s after submission. So
+                              the "submitted suspiciously fast" branch fires for
+                              EVERY candidate and adds a flat +40, putting a
+                              permanent ceiling on the score. Nobody can reach
+                              High; almost everyone reads Medium regardless of
+                              what they did.
+
+                              Restore this column once the elapsed calculation
+                              measures assignment -> submission instead, and
+                              existing rows are recomputed.
+
                           <td className="px-3 py-3 font-sans">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full" style={{ background: AUTH_META[c.authBand].color }} />
                               <span style={{ color: AUTH_META[c.authBand].color }}>{AUTH_META[c.authBand].label}</span>
                             </span>
                           </td>
+                          */}
                           {/* Verdict */}
                           <td className="px-3 py-3 font-sans">
                             <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: VERDICT_META[c.verdict].bg, color: VERDICT_META[c.verdict].color }}>
