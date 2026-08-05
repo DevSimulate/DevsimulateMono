@@ -312,11 +312,15 @@ export function closingSoonEmail(opts: {
   roleName: string;
   link: string;
   deadline: Date | null;
-  /** True when they have a submission in flight — changes the framing only. */
-  started: boolean;
+  /**
+   * Accepted but unused. ONE message covers both states by addressing each in a
+   * sentence, rather than two templates that double the send count against an
+   * email quota and double the chance of the wrong variant reaching someone.
+   */
+  started?: boolean;
   contactEmail?: string | null;
 }): { subject: string; html: string } {
-  const { candidateName, brandName, logoUrl, primaryColor, roleName, link, deadline, started } = opts;
+  const { candidateName, brandName, logoUrl, primaryColor, roleName, link, deadline } = opts;
 
   const accent = primaryColor || "#6366f1";
   const greeting = candidateName?.trim() ? candidateName.trim().split(" ")[0] : "there";
@@ -347,20 +351,20 @@ export function closingSoonEmail(opts: {
       <strong>${brandName}</strong> closes ${when}.
     </p>
 
-    ${started
-      ? `<p style="${p}">
-           <strong>You've already made a start — your work is saved.</strong> Open your link again and
-           you'll be returned to the exact step you stopped on. Nothing you've completed needs redoing.
-         </p>`
-      : `<p style="${p}">
-           <strong>There's still time.</strong> It takes about an hour: you fix a real bug in a working
-           codebase, then explain your reasoning. You're welcome to use AI tools for the coding —
-           we're interested in whether you understand the change, not whether you typed it unaided.
-         </p>`}
+    <p style="${p}">
+      <strong>If you haven't started yet</strong> — there's still time. It takes about an hour: you fix
+      a real bug in a working codebase, then explain your reasoning. You're welcome to use AI tools for
+      the coding; we're interested in whether you understand the change, not whether you typed it unaided.
+    </p>
+
+    <p style="${p}">
+      <strong>If you started but didn't finish</strong> — your work is saved. Open your link again and
+      you'll be returned to the exact step you stopped on. Nothing you've already completed needs redoing.
+    </p>
 
     <div style="margin:26px 0;">
       <a href="${link}" style="display:inline-block;background:${accent};color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:8px;font-size:15px;">
-        ${started ? "Continue your assessment" : "Start your assessment"} &rarr;
+        Open your assessment &rarr;
       </a>
     </div>
 
