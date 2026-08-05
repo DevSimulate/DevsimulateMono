@@ -73,8 +73,23 @@ app.use(cookieParser());
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
+/**
+ * Reports the deployed commit, not just liveness.
+ *
+ * Without it there is no way to tell whether a push has actually reached
+ * production: every route sits behind auth, so an unknown path and a
+ * not-yet-deployed one both answer 401, and "the deploy looks fine" is a guess.
+ * That guess is expensive for scheduled work like the final-call email, which
+ * fires once, unattended, and cannot be re-run if the code wasn't there.
+ *
+ * RAILWAY_GIT_COMMIT_SHA is injected by Railway; "dev" locally.
+ */
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    commit: (process.env.RAILWAY_GIT_COMMIT_SHA ?? "dev").slice(0, 7),
+  });
 });
 
 // ---------------------------------------------------------------------------
