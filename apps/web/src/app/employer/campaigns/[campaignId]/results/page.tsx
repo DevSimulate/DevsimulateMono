@@ -474,7 +474,14 @@ export default function ResultsPage() {
                     const stMeta = STATUS_BADGE[c.status] ?? STATUS_BADGE.NEW;
                     const isOpen = expanded.has(c.id);
                     const conf = sig?.confidence ?? "MEDIUM";
-                    const borderline = ws != null && (conf === "LOW" || Math.abs(ws - SENIOR_BAR) <= 4);
+                    // Only the decision bar. This used to also fire on conf ===
+                    // "LOW", which was largely the AI-declaration mismatch — a
+                    // flag that hit 65% of candidates and is no longer shown
+                    // anywhere, so it must not drive a visible badge either.
+                    // What remains is the honest case: the score is close
+                    // enough to the cut-off that a point either way changes the
+                    // answer, so look before deciding.
+                    const borderline = ws != null && Math.abs(ws - SENIOR_BAR) <= 4;
                     const fit = ws != null ? levelFit(ws) : null;
                     const def = sig ? DEFENSE_META[sig.defense.level] : DEFENSE_META.NONE;
                     const gap = c.scoreGap;
@@ -519,7 +526,7 @@ export default function ResultsPage() {
                             </div>
                             <div className="flex items-center gap-1 mt-0.5">
                               {borderline && (
-                                <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded" title="Score near the decision bar or contradicted — re-review before deciding"
+                                <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded" title={`Role-weighted score is within 4 points of the ${SENIOR_BAR} decision bar — worth a second look before deciding`}
                                   style={{ background: AMBER_WEAK, color: AMBER }}>RE-REVIEW</span>
                               )}
                             </div>

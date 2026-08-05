@@ -6,7 +6,9 @@ export default function EmployerLayout({ children }: { children: React.ReactNode
     <EmployerAuthGuard>
       <div className="portal" style={{ minHeight: "100vh", display: "flex" }}>
         <Sidebar />
-        <div style={{ marginLeft: "240px", flex: 1, minHeight: "100vh" }}>
+        {/* Width comes from the sidebar via --emp-sidebar-w so the two can never
+            disagree; 240px is the pre-hydration default. */}
+        <div style={{ marginLeft: "var(--emp-sidebar-w, 240px)", flex: 1, minHeight: "100vh", transition: "margin-left .18s ease" }}>
           {children}
         </div>
       </div>
