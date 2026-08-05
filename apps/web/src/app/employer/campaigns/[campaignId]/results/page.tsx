@@ -438,19 +438,6 @@ export default function ResultsPage() {
               onChange={(e) => setMinScore(parseInt(e.target.value))}
               className="w-full mt-3" style={{ accentColor: EMERALD }} />
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-wide block mb-3" style={{ color: MUTED }}>
-              AI declaration
-            </label>
-            <div className="space-y-2">
-              {(Object.keys(AI_BADGE) as AIDeclaration[]).map((d) => (
-                <label key={d} className="flex items-center gap-2.5 cursor-pointer text-sm">
-                  <input type="checkbox" checked={aiFilters.has(d)} onChange={() => toggleAi(d)} style={{ accentColor: AI_BADGE[d].color }} />
-                  <span style={{ color: AI_BADGE[d].color }}>{AI_BADGE[d].label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
           <div className="text-xs leading-relaxed" style={{ color: MUTED }}>
             <div className="font-semibold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Reading the signals</div>
             Score is <b style={{ color: INK }}>re-weighted</b> for the role above. <b style={{ color: INK }}>Gap</b> is
@@ -475,7 +462,7 @@ export default function ResultsPage() {
                       <input type="checkbox" checked={selected.size === candidates.length && candidates.length > 0}
                         onChange={toggleAll} style={{ accentColor: EMERALD }} />
                     </th>
-                    {["#", "Candidate", "PR score", "Final", "Gap", "Level fit", "Defence", "Consistency", "Authenticity", "Verdict", "Status", ""].map((h) => (
+                    {["#", "Candidate", "PR score", "Final", "Gap", "Level fit", "Defence", "Authenticity", "Verdict", "Status", ""].map((h) => (
                       <th key={h} className="text-left px-3 py-3 font-sans text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>{h}</th>
                     ))}
                   </tr>
@@ -484,11 +471,9 @@ export default function ResultsPage() {
                   {ranked.map(({ c, ws }, i) => {
                     const sig = c.signals;
                     const ai = c.submission?.followUp?.aiDeclaration;
-                    const aiMeta = ai ? AI_BADGE[ai] : null;
                     const stMeta = STATUS_BADGE[c.status] ?? STATUS_BADGE.NEW;
                     const isOpen = expanded.has(c.id);
                     const conf = sig?.confidence ?? "MEDIUM";
-                    const confMeta = CONF_META[conf];
                     const borderline = ws != null && (conf === "LOW" || Math.abs(ws - SENIOR_BAR) <= 4);
                     const fit = ws != null ? levelFit(ws) : null;
                     const def = sig ? DEFENSE_META[sig.defense.level] : DEFENSE_META.NONE;
@@ -517,7 +502,7 @@ export default function ResultsPage() {
                             </div>
                             {c.effort?.minutes != null && c.effort.expected != null && (
                               <div className="font-mono text-[10px] mt-0.5" style={{ color: MUTED }}>
-                                {c.effort.minutes}m / {c.effort.expected}m {ai ? `· ${aiMeta?.label}` : ""}
+                                {c.effort.minutes}m / {c.effort.expected}m
                               </div>
                             )}
                           </td>
@@ -533,8 +518,6 @@ export default function ResultsPage() {
                               </span>
                             </div>
                             <div className="flex items-center gap-1 mt-0.5">
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: confMeta.color }} />
-                              <span className="text-[10px]" style={{ color: MUTED }}>{confMeta.label}</span>
                               {borderline && (
                                 <span className="ml-1 text-[9px] font-bold px-1 py-0.5 rounded" title="Score near the decision bar or contradicted — re-review before deciding"
                                   style={{ background: AMBER_WEAK, color: AMBER }}>RE-REVIEW</span>
@@ -571,21 +554,11 @@ export default function ResultsPage() {
                               {sig?.defense.score != null && <span className="text-[10px] opacity-80 tabular-nums">{sig.defense.score}/10</span>}
                             </span>
                           </td>
-                          {/* Consistency triangle */}
-                          <td className="px-3 py-3">
-                            {sig && <Triangle t={sig.consistency} size={34} />}
-                          </td>
                           {/* Authenticity */}
                           <td className="px-3 py-3 font-sans">
                             <span className="inline-flex items-center gap-1 text-xs font-semibold">
                               <span className="w-1.5 h-1.5 rounded-full" style={{ background: AUTH_META[c.authBand].color }} />
                               <span style={{ color: AUTH_META[c.authBand].color }}>{AUTH_META[c.authBand].label}</span>
-                              {c.flagged && (
-                                <span className="ml-1 text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: AMBER_WEAK, color: AMBER }}
-                                  title="Advisory — answers show signs contradicting the candidate's own AI declaration. Nothing was deducted; review before deciding.">
-                                  Advisory flag
-                                </span>
-                              )}
                             </span>
                           </td>
                           {/* Verdict */}
@@ -639,21 +612,7 @@ export default function ResultsPage() {
                                   </div>
                                 </div>
                                 <div>
-                                  <div className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: MUTED }}>
-                                    Consistency — code · written · spoken
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                    <Triangle t={sig.consistency} size={92} />
-                                    <div className="text-xs space-y-1.5">
-                                      {([["Code", sig.consistency.code], ["Written", sig.consistency.written], ["Spoken", sig.consistency.spoken]] as const).map(([k, v]) => (
-                                        <div key={k} className="flex items-center gap-2" style={{ color: MUTED }}>
-                                          <span className="w-2 h-2 rounded-full" style={{ background: triColor(v) }} />
-                                          {k} — {v >= 1 ? "aligned" : v >= 0.5 ? "partial" : "diverges"}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div className="text-[11px] font-semibold uppercase tracking-wide mt-4 mb-2" style={{ color: MUTED }}>
+                                  <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: MUTED }}>
                                     Interview pack — probes {DIM_LABEL[(interview[c.id]?.dimension as DimKey) ?? sig.weakestDimension].toLowerCase()}
                                   </div>
                                   {interview[c.id]?.questions ? (
