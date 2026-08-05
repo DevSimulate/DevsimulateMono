@@ -1652,7 +1652,6 @@ function SubmitPageInner() {
               onPaste={handleAnswerPaste}
               placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
-              disabled={timeLeft === 0}
               error={pasteWarn}
               className="mb-2"
             />
@@ -1666,8 +1665,13 @@ function SubmitPageInner() {
               After you submit this answer, Q2 will be generated based on what you wrote.
             </div>
 
-            <Button variant="primary" size="lg" className="w-full" onClick={handleA1Submit} disabled={!answer1.trim() || timeLeft === 0}>
-              {timeLeft === 0 ? "Time expired" : "Submit answer → get Q2"}
+            {timeLeft === 0 && (
+              <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
+                You are past the suggested 15 minutes. Carry on and submit when you are ready — how long you took is recorded, but nothing is blocked.
+              </div>
+            )}
+            <Button variant="primary" size="lg" className="w-full" onClick={handleA1Submit} disabled={!answer1.trim()}>
+              Submit answer → get Q2
             </Button>
           </Card>
         )}
@@ -1698,7 +1702,6 @@ function SubmitPageInner() {
               onPaste={handleAnswerPaste}
               placeholder={proctoring.blockPaste ? "Type your answer — pasting is disabled…" : "Type your answer…"}
               rows={6}
-              disabled={timeLeft === 0}
               error={pasteWarn}
               className="mb-2"
             />
@@ -1729,8 +1732,13 @@ function SubmitPageInner() {
               <p className="text-xs text-muted mt-1">Your declaration never changes your score.</p>
             </div>
 
-            <Button variant="primary" size="lg" className="w-full" onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration || timeLeft === 0}>
-              {timeLeft === 0 ? "Time expired" : !declaration ? "Select how you answered to continue" : "Get my score →"}
+            {timeLeft === 0 && (
+              <div className="rounded border border-amber bg-amber-weak px-3 py-2 mb-3 text-xs font-medium text-amber">
+                You are past the suggested 15 minutes. Carry on and submit when you are ready — how long you took is recorded, but nothing is blocked.
+              </div>
+            )}
+            <Button variant="primary" size="lg" className="w-full" onClick={handleFinalSubmit} disabled={!answer2.trim() || !declaration}>
+              {!declaration ? "Select how you answered to continue" : "Get my score →"}
             </Button>
           </Card>
         )}
