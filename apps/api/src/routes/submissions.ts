@@ -18,6 +18,7 @@ import {
   hiringTicketIds,
 } from "../lib/evaluation-visibility";
 import { summarizeCadence } from "../services/cadence";
+import { verbalPenaltyFor } from "../services/verbal-penalty";
 import { FREE_MONTHLY_SUBMISSIONS } from "../config/limits";
 import { resolveResumeStage } from "../lib/resume";
 
@@ -1191,14 +1192,9 @@ async function applyDefenceScore(
     extraSubmissionData?: Record<string, unknown>;
   }
 ): Promise<{ status: number; body: object }> {
-  // No usable verdict from the judge means no penalty — the same rule the
-  // low-confidence audio path applies. Charging a candidate 20 points because
-  // the grader replied in prose is a score we could not defend to them.
-  let verbalPenalty = 0;
-  if (scored.unscorable) {
-    verbalPenalty = 0;
-  } else if (!scored.consistent || scored.score <= 3) verbalPenalty = 20;
-  else if (scored.score < 7) verbalPenalty = (7 - scored.score) * 4; // 4 / 8 / 12
+  // Single source of truth for the deduction — see services/verbal-penalty.ts
+  // for the band table and why it was rebanded after the pilot.
+  const verbalPenalty = verbalPenaltyFor(scored);
 
   const curDiag = sub.scoreDiagnosis ?? 0;
   const curDesign = sub.scoreDesign ?? 0;
